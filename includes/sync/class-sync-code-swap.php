@@ -1,8 +1,9 @@
 <?php
 /**
  * The swap of a unit of code on the production site (Z8b branch 5; plan E5,
- * E6, E9, 3.1 Z3 to Z23): the one mechanics that puts a staged plugin or
- * theme in the place of the one this site runs, and back.
+ * E6, E9, 3.1 Z3 to Z16, Z20a, as Variante b keeps them, 15.23): the one
+ * mechanics that puts a staged plugin or theme in the place of the one this
+ * site runs.
  *
  * WHAT RUNS (active_plugins(), theme(), runs(); plan E8, 3.1 Z24): whether
  * code of a unit runs on this site is read fresh from the rows of the
@@ -10,40 +11,53 @@
  * every filter, in the form of their rows of AB_MCP_Store_Inputs::TABLE
  * (site.active_plugins, site.theme). A row that cannot be read, or holds
  * another form, is not known: never «does not run» (a swap of running code
- * takes its release, AB_MCP_Sync_Code_Ops::run()), and never «still active»
- * (the comparison at the end of a swap).
+ * takes its release, AB_MCP_Sync_Code_Ops::run()).
  *
  * BEFORE THE FIRST MUTATION (prepare(); plan E5 1 to 5, 3.1 Z3, Z4, Z10 to
- * Z12, Z14; Z24 again under the locks): every check of a swap, in the order
+ * Z12, Z14; Z24 again under the lock): every check of a swap, in the order
  * of E5, in the one call of the swap and under its lock: the lock for
  * changes of the code (AB_MCP_Change_Lock); the release of its code
  * (AB_MCP_Sync_Code_Ops::released(), the one rule of Z24); the test
  * requests switched on and the time left; OPcache for a
  * PHP file of running code (invalidate()); the test requests before (home
- * page, MCP endpoint, admin-post.php reached); the time for the swap, its
- * test after it and a swap back with its test; then the live unit hashed
+ * page, MCP endpoint, admin-post.php reached); the time kept for the swap
+ * (twice the test requests before and a reserve, a margin kept as it was
+ * built, 15.23 «zu 5»); then the live unit hashed
  * whole against its base (or, for a unit made new, its place empty), the
  * stage against the signed manifest, the version (never down), AlphaBridge
  * itself (strictly, AB_MCP_Own_Files::own_state()), one device for the
  * stage and the place of the unit, and the row of the lock for changes.
  * prepare() swaps no file and writes over no file of the live unit; it
- * takes the locks, may take a PHP file out of OPcache and sends the test
- * requests. A refusal gives back every lock it took. What it answers holds
- * within this call and under these locks only; it says nothing of what the
- * site is afterwards. At this commit nothing of the run calls it (the swap
- * itself is the next part of branch 5).
+ * takes the lock, may take a PHP file out of OPcache and sends the test
+ * requests. A refusal gives the lock back. What it answers holds within
+ * this call and under this lock only; it says nothing of what the site is
+ * afterwards.
+ *
+ * THE SWAP (run(); plan E5 6 to 11 as Variante b keeps them): in the same
+ * call, under the same lock, after prepare(): the place of the old version
+ * in the backups of the run (backup_place()); rename_marked(), the one
+ * function that renames in the swap (Z15, Z16): the note of the replacement
+ * (AB_MCP_Update_Log::mark_replaced()), the journal of the step, the mark
+ * and its instruction, each read back, then the target into the backup (the
+ * whole old folder) and the stage into the target, each only to a place
+ * that is free; OPcache for each PHP file replaced (invalidate(), Z13); and
+ * close() (Z20a): the mark closes only on the new version proved at the
+ * target and the old one whole in the backup, then the file undo points of
+ * the unit go. The files of its pair take their new bases, the step is
+ * done. The swap sends no test request after it and swaps nothing back by
+ * itself (Variante b): its answer names the way back of the run, the target,
+ * the backup and the commands of the way by hand.
  *
  * OPCACHE (invalidate(), Z13): the one wrapper of
  * AB_MCP_Own_Files::invalidate_opcache() in the swap; only invalidated or
  * not_active let it go on, in the form of its row swap.opcache.
  *
  * THE CALLS TO THE OUTSIDE (plan 8.3, branch 5: rename(), the journal and
- * the mark of the swap, the option of the reservation, the note of the
- * replacement, OPcache, the probes before and after, the shutdown; the rows
- * of the options read; the locks, AlphaBridge's own files and the file
- * system for prepare()) go through AB_MCP_Sync_Code_Swap_Calls, held by the
- * seam of this class; only the tests put another object there. No filter
- * and no option reaches it.
+ * the mark of the swap, the note of the replacement, OPcache, the test
+ * requests before, the file undo points; the rows of the options read; the
+ * lock, AlphaBridge's own files and the file system for prepare()) go
+ * through AB_MCP_Sync_Code_Swap_Calls, held by the seam of this class; only
+ * the tests put another object there. No filter and no option reaches it.
  *
  * Messages are in gettext, in the language of the site; their translations
  * come with text/z8b. Codes stay as the tools name them.
@@ -67,6 +81,11 @@ require_once __DIR__ . '/class-sync-file-manifest.php';
 require_once __DIR__ . '/class-sync-pairs.php';
 require_once __DIR__ . '/class-sync-code-stage.php';
 require_once __DIR__ . '/class-sync-code-ops.php';
+require_once __DIR__ . '/class-sync-code-kind.php';
+require_once __DIR__ . '/class-sync-run.php';
+require_once __DIR__ . '/class-sync-backup.php';
+require_once __DIR__ . '/class-sync-resources.php';
+require_once dirname( __DIR__ ) . '/undo/class-undo.php';
 
 /**
  * The calls of the swap to the outside: the real ones.
@@ -133,7 +152,7 @@ final class AB_MCP_Sync_Code_Swap_Calls {
 
 	/**
 	 * The test requests to every target, each to its end (no stop at a
-	 * fatal error: the test after a swap compares with each of them).
+	 * fatal error: prepare() asks each target it needs).
 	 *
 	 * @param array $opts Options of AB_MCP_Php_Probe::run() (until).
 	 * @return mixed
@@ -193,6 +212,86 @@ final class AB_MCP_Sync_Code_Swap_Calls {
 	public function scandir( $dir ) {
 		return @scandir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a folder not read is answered.
 	}
+
+	/**
+	 * Rename a folder or file (the one call of the swap to rename(), only
+	 * through rename_marked()).
+	 *
+	 * @param string $from The path now.
+	 * @param string $to   The path after.
+	 * @return bool
+	 */
+	public function rename( $from, $to ) {
+		return @rename( $from, $to ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- a rename that fails is answered; a swap renames only on one device.
+	}
+
+	/**
+	 * The note of the replacement of the files of a folder (E5 6): a file
+	 * undo point recorded before $since holds a file of the previous version.
+	 *
+	 * @param string $type  plugin or theme.
+	 * @param string $slug  The folder.
+	 * @param int    $since When the swap began.
+	 */
+	public function replaced( $type, $slug, $since ) {
+		AB_MCP_Update_Log::mark_replaced( $type, $slug, $since );
+	}
+
+	/**
+	 * Write a step of the run (its state from the state read, its journal,
+	 * its result, its pair).
+	 *
+	 * @param int    $run_id Run.
+	 * @param int    $seq    Step.
+	 * @param array  $set    state, parts, result, pair_id.
+	 * @param string $from   The state read.
+	 * @return true|WP_Error
+	 */
+	public function journal( $run_id, $seq, array $set, $from ) {
+		return AB_MCP_Sync_Run::update_step( $run_id, $seq, $set, $from );
+	}
+
+	/**
+	 * A step of the run as it is stored now.
+	 *
+	 * @param int $run_id Run.
+	 * @param int $seq    Step.
+	 * @return array|null|WP_Error
+	 */
+	public function step( $run_id, $seq ) {
+		return AB_MCP_Sync_Run::step( $run_id, $seq );
+	}
+
+	/**
+	 * Write the mark of the swap and its instruction, each read back.
+	 *
+	 * @param array $mark See AB_MCP_Protected_Store::put_mark().
+	 * @return array|WP_Error
+	 */
+	public function put_mark( array $mark ) {
+		return AB_MCP_Protected_Store::put_mark( $mark );
+	}
+
+	/**
+	 * Close the mark of the swap.
+	 *
+	 * @param string $mid Mark.
+	 * @return true|WP_Error
+	 */
+	public function close_mark( $mid ) {
+		return AB_MCP_Protected_Store::close_mark( $mid );
+	}
+
+	/**
+	 * Discard the file undo points of a unit on this site.
+	 *
+	 * @param string $jail plugin or theme.
+	 * @param string $slug The folder.
+	 * @return string[] The points discarded.
+	 */
+	public function discard_files( $jail, $slug ) {
+		return AB_MCP_Undo::discard_files_of( $jail, $slug );
+	}
 }
 
 /**
@@ -202,9 +301,10 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * Seconds a swap keeps beyond twice its test requests before (E5 2): the
-	 * two renames, OPcache of each file replaced, the marks, a swap back. A
+	 * place of the backup, the note, the journal and the mark, the two
+	 * renames, OPcache of each file replaced and the readings of close(). A
 	 * named start value without a measurement; the measurement of branch 5
-	 * (point 9) sets the real one.
+	 * (part G of the rest) names the real durations.
 	 */
 	const RESERVE = 10;
 
@@ -382,7 +482,7 @@ final class AB_MCP_Sync_Code_Swap {
 		return $out;
 	}
 
-	/* ------------------------------------------------------- the locks */
+	/* -------------------------------------------------------- the lock */
 
 	/**
 	 * Whether the row of the lock for changes is there now, a time of its
@@ -402,7 +502,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * of $held only where its release answered true; one that is not given
 	 * back (an answer not true, or a Throwable) stays there and is named.
 	 *
-	 * @return string[] The locks that stay: change.
+	 * @return string[] The lock that stays: change, or none.
 	 */
 	public static function release() {
 		$kept = array();
@@ -416,19 +516,29 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * A refusal of prepare() with the locks it could not give back named.
+	 * A refusal of prepare() with the lock it could not give back named.
 	 *
 	 * @param WP_Error $refusal The refusal.
 	 * @param string[] $kept    release().
 	 * @return WP_Error
 	 */
 	private static function with_kept( WP_Error $refusal, array $kept ) {
-		$message = $refusal->get_error_message();
-		if ( in_array( 'change', $kept, true ) ) {
-			/* translators: %d: minutes */
-			$message .= ' ' . sprintf( __( 'AlphaBridge\'s lock for changes of the code, which this call took, could not be given back, so it stays: other changes through AlphaBridge can be refused until it is %d minutes old; from then on the next one takes it over.', 'alphabridge-mcp' ), intdiv( AB_MCP_Change_Lock::TIMEOUT, 60 ) );
+		return new WP_Error( $refusal->get_error_code(), $refusal->get_error_message() . self::kept_note( $kept ), array( 'kept' => $kept ) );
+	}
+
+	/**
+	 * The sentence on the lock release() could not give back, with a blank
+	 * before it; none where it was given back.
+	 *
+	 * @param string[] $kept release().
+	 * @return string
+	 */
+	private static function kept_note( array $kept ) {
+		if ( ! in_array( 'change', $kept, true ) ) {
+			return '';
 		}
-		return new WP_Error( $refusal->get_error_code(), $message, array( 'kept' => $kept ) );
+		/* translators: %d: minutes */
+		return ' ' . sprintf( __( 'AlphaBridge\'s lock for changes of the code, which this call took, could not be given back, so it stays: other changes through AlphaBridge can be refused until it is %d minutes old; from then on the next one takes it over.', 'alphabridge-mcp' ), intdiv( AB_MCP_Change_Lock::TIMEOUT, 60 ) );
 	}
 
 	/**
@@ -456,11 +566,11 @@ final class AB_MCP_Sync_Code_Swap {
 	/* ------------------------------------------- before the first mutation */
 
 	/**
-	 * Every check of a swap before its first mutation, under its locks, in
+	 * Every check of a swap before its first mutation, under its lock, in
 	 * the order of E5 (Z3, Z4, Z10 to Z12, Z14; Z13 through invalidate();
 	 * Z24 again through AB_MCP_Sync_Code_Ops::released()). Where it answers,
-	 * the locks stay held until release(); the answer holds within this
-	 * call and under these locks only. A refusal gives every lock back and
+	 * the lock stays held until release(); the answer holds within this
+	 * call and under this lock only. A refusal gives the lock back and
 	 * names the way; so does a Throwable on the way.
 	 *
 	 * @param mixed $swap What the swap is asked with, in the form of its row
@@ -474,7 +584,7 @@ final class AB_MCP_Sync_Code_Swap {
 	public static function prepare( $swap ) {
 		$in = AB_MCP_Store_Inputs::read( 'swap.prepare', $swap );
 		if ( null === $in || 'swap' !== $in['unit']['op'] || ( 'create' === $in['unit']['unit_op'] ) !== ( null === $in['unit']['pair_id'] ) || ( null === $in['unit']['pair_id'] ) !== ( null === $in['unit']['pair_hash'] ) ) {
-			return self::refusal( 'code:swap_args', __( 'The swap was asked with values not of its form (the run, the unit of its step, the packages of the environment, the stage and the time of the call), so nothing is taken and nothing is swapped. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+			return self::args_refusal();
 		}
 		$target = AB_MCP_Sync_Code_Stage::target( $in['unit']['kind'], $in['unit']['ref'] );
 		if ( null === $target ) {
@@ -483,7 +593,7 @@ final class AB_MCP_Sync_Code_Swap {
 		$prepared = null;
 		try {
 			$taken    = self::take();
-			$prepared = true === $taken ? self::under_locks( $in, $target ) : $taken;
+			$prepared = true === $taken ? self::under_lock( $in, $target ) : $taken;
 		} finally {
 			if ( ! is_array( $prepared ) ) {
 				$kept = self::release();
@@ -496,7 +606,14 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * E5 2 to 4 under the locks: the release of the code read again (Z24),
+	 * @return WP_Error The swap asked with values not of the form of swap.prepare.
+	 */
+	private static function args_refusal() {
+		return self::refusal( 'code:swap_args', __( 'The swap was asked with values not of its form (the run, the unit of its step, the packages of the environment, the stage and the time of the call), so nothing is taken and nothing is swapped. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * E5 2 to 4 under the lock: the release of the code read again (Z24),
 	 * the test requests switched on (for every swap) and the time left,
 	 * OPcache for running code, the test requests before, the time for the
 	 * rest of the swap; then the checks of E5 5 and before the mutation.
@@ -505,7 +622,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @param string $target The folder or file of the unit in the site.
 	 * @return array|WP_Error
 	 */
-	private static function under_locks( array $in, $target ) {
+	private static function under_lock( array $in, $target ) {
 		$kind = $in['unit']['kind'];
 		$ref  = $in['unit']['ref'];
 		$runs = AB_MCP_Sync_Code_Ops::released( $in['unit'] );
@@ -519,7 +636,7 @@ final class AB_MCP_Sync_Code_Swap {
 		// (OPcache) is for running code only.
 		if ( true !== self::calls()->probe_enabled() ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-			return self::refusal( 'code:probe_off', sprintf( __( 'The test requests of AlphaBridge are switched off on this site (the filter ab_mcp_php_probe_enabled), or not read as switched on, so the %1$s %2$s is not swapped: nothing would show whether the site works before the swap and still works after it. Switch the test requests on again, or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref ) );
+			return self::refusal( 'code:probe_off', sprintf( __( 'The test requests of AlphaBridge are switched off on this site (the filter ab_mcp_php_probe_enabled), or not read as switched on, so the %1$s %2$s is not swapped: nothing would show that the site works before the swap. Switch the test requests on again, or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref ) );
 		}
 		$left = self::time_left( $kind, $ref, $in['until'], self::RESERVE + 1, 0.0 );
 		if ( is_wp_error( $left ) ) {
@@ -603,8 +720,8 @@ final class AB_MCP_Sync_Code_Swap {
 			return self::lock_unknown();
 		}
 		// After every check before the mutation (A1 of the Codex round on
-		// 4881c0d): the time for the swap, its test after it and a swap back
-		// with its test, asked again.
+		// 4881c0d): the time kept for the swap (twice the test requests before
+		// it and the reserve, the margin as it was built), asked again.
 		$end = self::time_left( $kind, $ref, $in['until'], 2 * $probe['took'] + self::RESERVE, $probe['took'] );
 		if ( is_wp_error( $end ) ) {
 			return $end;
@@ -638,7 +755,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * store themselves. The last check of the time left before the mutation
 	 * (checked()) stays.
 	 *
-	 * @param array $in The arguments, with keep (under_locks()).
+	 * @param array $in The arguments, with keep (under_lock()).
 	 * @return AB_MCP_Sync_Deadline|WP_Error
 	 */
 	private static function read_deadline( array $in ) {
@@ -956,6 +1073,688 @@ final class AB_MCP_Sync_Code_Swap {
 		return $files;
 	}
 
+	/* ------------------------------------------------------------ the swap */
+
+	/**
+	 * When a swap asked now has to be over, on the clock of the swap (the
+	 * until of swap.prepare its caller gives, AB_MCP_Sync_Code_Ops): now and
+	 * the work of one call (AB_MCP_Sync_Resources::time_for_call(): half the
+	 * time limit of the request, at most WORK_MAX, as for every loop of a
+	 * call of the run); 0 where the clock gives no time, which prepare()
+	 * refuses (code:clock).
+	 *
+	 * @return float
+	 */
+	public static function until() {
+		$now = self::clock();
+		if ( null === $now ) {
+			return 0.0;
+		}
+		$time = AB_MCP_Sync_Resources::time_for_call();
+		return $now + (float) $time['budget'];
+	}
+
+	/**
+	 * The swap of a unit in one call (plan E5 6 to 11 as Variante b keeps
+	 * them, 15.23): prepare() under the lock for changes; then the place of
+	 * the old version in the backups of the run (plan_of()), the time once
+	 * more, rename_marked(), OPcache for each PHP file replaced, close() and
+	 * the new bases of the files of its pair; the step ends with its journal
+	 * and result. The lock prepare() took is given back in every way. A unit
+	 * made new is not swapped at this commit (part D3 of the rest).
+	 *
+	 * @param mixed $swap What the swap is asked with, in the form of its row swap.prepare.
+	 * @return array|WP_Error next, the answer of the step as it ended (done; failed where
+	 *                        nothing was moved; unclear with the way by hand); a refusal
+	 *                        where nothing of the site changed and the step stays planned.
+	 */
+	public static function run( $swap ) {
+		$in = AB_MCP_Store_Inputs::read( 'swap.prepare', $swap );
+		if ( null !== $in && 'create' === $in['unit']['unit_op'] ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+			return self::refusal( 'code:create_not_built', sprintf( __( 'The plan makes the %1$s %2$s new on this site, and the swap of a unit made new is not part of this version, so nothing is swapped and nothing of this site changed. Abort the run (wp_site_push action=abort) and install the unit by hand in wp-admin.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
+		}
+		$prepared = self::prepare( $swap );
+		if ( ! is_array( $prepared ) ) {
+			return $prepared;
+		}
+		try {
+			$answer = null === $in ? self::args_refusal() : self::swapped( $in, $prepared );
+		} finally {
+			$kept = self::release();
+		}
+		if ( array() === $kept ) {
+			return $answer;
+		}
+		return is_wp_error( $answer ) ? self::with_kept( $answer, $kept ) : array( 'next' => $answer['next'] . self::kept_note( $kept ) );
+	}
+
+	/**
+	 * The swap after prepare() answered, under its lock: what it moves, read
+	 * before anything is written (plan_of()); the time kept for the swap
+	 * asked once more right before the first write (the place of the backup
+	 * read the target whole); rename_marked(); and its end.
+	 *
+	 * @param array $in       The arguments, read in the form of the row swap.prepare.
+	 * @param array $prepared prepare().
+	 * @return array|WP_Error
+	 */
+	private static function swapped( array $in, array $prepared ) {
+		$plan = self::plan_of( $in, $prepared );
+		if ( is_wp_error( $plan ) ) {
+			return $plan;
+		}
+		$left = self::time_left( $in['unit']['kind'], $in['unit']['ref'], $in['until'], 2 * $prepared['took'] + self::RESERVE, $prepared['took'] );
+		if ( is_wp_error( $left ) ) {
+			return $left;
+		}
+		$moved = self::rename_marked( $in, $plan );
+		if ( 'done' !== $moved['at'] ) {
+			return self::not_swapped( $in, $plan, $moved );
+		}
+		return self::after_renames( $in, $prepared, $plan, $moved );
+	}
+
+	/**
+	 * What the swap moves, read before anything is written: the place of the
+	 * old version in the backups of the run (AB_MCP_Sync_Backup::group(),
+	 * AB_MCP_Protected_Store::put_tree() without a source: the rules of a
+	 * tree, read from the target, whose hash is the one prepare() read);
+	 * the identity of the target and of the stage (form, device, inode);
+	 * and the main files of a plugin active now, for its mark.
+	 *
+	 * @param array $in       The arguments.
+	 * @param array $prepared prepare().
+	 * @return array|WP_Error target, old and new (path, gid, name, hash, form, dev, ino), active.
+	 */
+	private static function plan_of( array $in, array $prepared ) {
+		$kind   = $in['unit']['kind'];
+		$ref    = $in['unit']['ref'];
+		$target = $prepared['target'];
+		$name   = basename( $target );
+		$gid    = AB_MCP_Sync_Backup::group( $in['run_id'] );
+		$place  = is_wp_error( $gid ) ? $gid : AB_MCP_Protected_Store::put_tree( 'backups', $gid, $name, $target );
+		if ( is_wp_error( $place ) ) {
+			/* translators: 1: why the stage or the signed manifest was not read (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+			return self::refusal( $place->get_error_code(), sprintf( __( '%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $place->get_error_message(), $kind, $ref ) );
+		}
+		if ( ! hash_equals( $prepared['live']['hash'], $place['hash'] ) ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+			return self::refusal( 'code:live_changed', sprintf( __( 'The files of the %1$s %2$s on this site are no longer the ones its pair is based on (code:live_changed), so it is not swapped, and the version of the staging site does not win over them. Where the plugin writes into its own folder while it runs, update it by hand in wp-admin; else make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $kind, $ref ) );
+		}
+		$old    = self::identity( $target );
+		$new    = self::identity( $prepared['tree']['path'] );
+		$active = 'plugin' === $kind ? self::active_mains( $ref ) : array();
+		if ( null === $old || null === $new || null === $active ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+			return self::refusal( 'code:identity', sprintf( __( 'The folder of the %1$s %2$s on this site, its stage in the protected store, or which of its main files run, could not be read now (device and inode of a folder, or the option active_plugins), so it is not swapped and nothing of it was moved. Call action=next again; where it keeps failing, update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref ) );
+		}
+		return array(
+			'target' => $target,
+			'old'    => array(
+				'path' => $place['path'],
+				'gid'  => $gid,
+				'name' => $name,
+				'hash' => $place['hash'],
+			) + $old,
+			'new'    => array(
+				'path' => $prepared['tree']['path'],
+				'gid'  => $in['stage']['gid'],
+				'name' => $in['stage']['name'],
+				'hash' => $prepared['tree']['hash'],
+			) + $new,
+			'active' => $active,
+		);
+	}
+
+	/**
+	 * A folder or file as it is now, a link as a link: its form, device and
+	 * inode (the identity a mark and the journal name); null where it is not
+	 * read so, or is neither a folder nor a plain file.
+	 *
+	 * @param string $path The path.
+	 * @return array{form:string,dev:int,ino:int}|null
+	 */
+	private static function identity( $path ) {
+		$stat = self::calls()->lstat( $path );
+		$form = self::is_mode( $stat, 0040000 ) ? 'folder' : ( self::is_mode( $stat, 0100000 ) ? 'file' : null );
+		if ( null === $form || ! isset( $stat['dev'], $stat['ino'] ) || ! is_int( $stat['dev'] ) || ! is_int( $stat['ino'] ) ) {
+			return null;
+		}
+		return array(
+			'form' => $form,
+			'dev'  => $stat['dev'],
+			'ino'  => $stat['ino'],
+		);
+	}
+
+	/**
+	 * The one function that renames in the swap (Z15, Z16; E5 6 and 7). First
+	 * the note of the replacement with the time the swap begins
+	 * (AB_MCP_Update_Log::mark_replaced(), for the file undo points of
+	 * before it), the journal of the step (begun) and the mark of the swap
+	 * with its instruction, each read back; then the target into the backup
+	 * (the whole old folder, never beside the target) and the stage into the
+	 * target, each only to a place that is free (move()). Where the second
+	 * rename fails, the old version goes back to the target, again only
+	 * where the target is free (F35).
+	 *
+	 * @param array $in   The arguments.
+	 * @param array $plan plan_of().
+	 * @return array{at:string,mid:string|null,why:WP_Error|null,journal:array|null,back:bool|null}
+	 *         at: note or journal (the step not begun, nothing moved), mark (the step begun,
+	 *         no mark), first (the mark open, nothing moved), second (the second rename
+	 *         failed; back: whether the old version went back to the target), done.
+	 */
+	private static function rename_marked( array $in, array $plan ) {
+		$out   = array(
+			'at'      => 'note',
+			'mid'     => null,
+			'why'     => null,
+			'journal' => null,
+			'back'    => null,
+		);
+		$unit  = $in['unit'];
+		$since = AB_MCP_Sync_Run::now();
+		$noted = null === $since ? AB_MCP_Sync_Run::clock_unknown() : self::noted( $unit['kind'], $unit['ref'], $since );
+		if ( true !== $noted ) {
+			return array( 'why' => $noted ) + $out;
+		}
+		$journal = array(
+			'unit'  => array(
+				'kind' => $unit['kind'],
+				'ref'  => $unit['ref'],
+				'op'   => 'swap',
+			),
+			'since' => $since,
+		) + $plan;
+		$begun   = self::begun( $in, $journal );
+		if ( true !== $begun ) {
+			return array(
+				'at'  => 'journal',
+				'why' => $begun,
+			) + $out;
+		}
+		$out['journal'] = $journal;
+		$mark           = self::calls()->put_mark( self::mark_of( $in, $plan ) );
+		if ( ! is_array( $mark ) || ! isset( $mark['mid'] ) || ! is_string( $mark['mid'] ) ) {
+			return array(
+				'at'  => 'mark',
+				'why' => is_wp_error( $mark ) ? $mark : self::refusal( 'code:mark', __( 'The mark of the swap gave no answer of its form.', 'alphabridge-mcp' ) ),
+			) + $out;
+		}
+		$out['mid'] = $mark['mid'];
+		if ( ! self::move( $plan['target'], $plan['old']['path'] ) ) {
+			return array( 'at' => 'first' ) + $out;
+		}
+		if ( ! self::move( $plan['new']['path'], $plan['target'] ) ) {
+			return array(
+				'at'   => 'second',
+				'back' => self::move( $plan['old']['path'], $plan['target'] ),
+			) + $out;
+		}
+		return array( 'at' => 'done' ) + $out;
+	}
+
+	/**
+	 * A rename only to a place that is free (Z16: exclusive): nothing is
+	 * there now (lstat()), then rename().
+	 *
+	 * @param string $from The path now.
+	 * @param string $to   The path after.
+	 * @return bool Whether it moved.
+	 */
+	private static function move( $from, $to ) {
+		return false === self::calls()->lstat( $to ) && true === self::calls()->rename( $from, $to );
+	}
+
+	/**
+	 * The note of the replacement (E5 6), written and read back: the row of
+	 * AB_MCP_Update_Log::REPLACED as it is stored now, past every cache,
+	 * unpacked without classes, holds the folder of the unit with this very
+	 * time.
+	 *
+	 * @param string $kind  plugin or theme.
+	 * @param string $ref   The unit.
+	 * @param int    $since When the swap began (AB_MCP_Sync_Run::now()).
+	 * @return true|WP_Error
+	 */
+	private static function noted( $kind, $ref, $since ) {
+		self::calls()->replaced( $kind, $ref, $since );
+		$row  = self::calls()->option( AB_MCP_Update_Log::REPLACED );
+		$read = is_array( $row ) && array_key_exists( 'value', $row ) && is_string( $row['value'] ) ? AB_MCP_Sync_Canon::unserialized( $row['value'] ) : null;
+		$key  = $kind . ':' . $ref;
+		if ( is_array( $read ) && true === $read['ok'] && is_array( $read['value'] ) && array_key_exists( $key, $read['value'] ) && $since === $read['value'][ $key ] ) {
+			return true;
+		}
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+		return self::refusal( 'code:note', sprintf( __( 'The note that the files of the %1$s %2$s are replaced (it tells a file undo point of before the swap from one of after it) did not read back as written, so it is not swapped and nothing of it was moved. Call action=next again; where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ), $kind, $ref ) );
+	}
+
+	/**
+	 * The journal of the step written with the state begun, from planned,
+	 * and read back (E5 7): the step as stored now is begun and holds this
+	 * very journal (its canonical form, AB_MCP_Sync_Canon::encode()).
+	 *
+	 * @param array $in      The arguments.
+	 * @param array $journal The journal.
+	 * @return true|WP_Error
+	 */
+	private static function begun( array $in, array $journal ) {
+		$saved = self::calls()->journal( $in['run_id'], $in['unit']['seq'], array( 'state' => 'begun', 'parts' => $journal ), 'planned' );
+		$step  = true === $saved ? self::calls()->step( $in['run_id'], $in['unit']['seq'] ) : null;
+		if ( is_array( $step ) && 'begun' === $step['state'] && ( ! isset( $step['unread'] ) || array() === $step['unread'] ) && AB_MCP_Sync_Canon::encode( $journal ) === AB_MCP_Sync_Canon::encode( $step['parts'] ) ) {
+			return true;
+		}
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the error of the database, or nothing. */
+		return self::refusal( 'code:journal', sprintf( __( 'The journal of the swap of the %1$s %2$s could not be written and read back before its first rename (%3$s), so nothing of it was moved. Ask for the status of the run (wp_site_push action=status) and go on from there; where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], is_wp_error( $saved ) ? $saved->get_error_message() : '-' ) );
+	}
+
+	/**
+	 * The mark of the swap as put_mark() takes it: the run and the step, the
+	 * unit, the target, the backup (the old version) and the stage (the new
+	 * one) with their identity and hash, the main files active now.
+	 *
+	 * @param array $in   The arguments.
+	 * @param array $plan plan_of().
+	 * @return array
+	 */
+	private static function mark_of( array $in, array $plan ) {
+		$trees = array();
+		foreach ( array( 'backup' => $plan['old'], 'stage' => $plan['new'] ) as $role => $tree ) {
+			$trees[] = array(
+				'role' => $role,
+				'path' => $tree['path'],
+				'form' => $tree['form'],
+				'dev'  => $tree['dev'],
+				'ino'  => $tree['ino'],
+				'hash' => $tree['hash'],
+			);
+		}
+		return array(
+			'run_id' => $in['run_id'],
+			'seq'    => $in['unit']['seq'],
+			'op'     => 'swap',
+			'unit'   => array(
+				'kind' => $in['unit']['kind'],
+				'ref'  => $in['unit']['ref'],
+			),
+			'target' => $plan['target'],
+			'trees'  => $trees,
+			'active' => $plan['active'],
+		);
+	}
+
+	/**
+	 * After the two renames: OPcache for each PHP file replaced, close(),
+	 * the new bases of the files of the pair (E5 11), the step done. A
+	 * failure on the way ends the step unclear, with the way by hand
+	 * (15.23 «zu 2»: the way back of the run puts the old version back).
+	 *
+	 * @param array $in       The arguments.
+	 * @param array $prepared prepare().
+	 * @param array $plan     plan_of().
+	 * @param array $moved    rename_marked().
+	 * @return array|WP_Error
+	 */
+	private static function after_renames( array $in, array $prepared, array $plan, array $moved ) {
+		$unit    = $in['unit'];
+		$opcache = self::invalidated( $plan, $in['until'] );
+		if ( is_wp_error( $opcache ) ) {
+			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $opcache->get_error_message() );
+		}
+		$closed = self::close( 'swap', $in, $plan, $moved['mid'] );
+		if ( is_wp_error( $closed ) ) {
+			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', $closed->get_error_message() );
+		}
+		$rebased = self::rebased( $in, $plan );
+		if ( is_wp_error( $rebased ) ) {
+			/* translators: %s: the error of the object pairs (one or more whole sentences). */
+			return self::unclear( $in, $plan, $moved['journal'], 'nach-den-umbenennungen', sprintf( __( 'The new version is at the target and the mark of the swap is closed, but the files of its pair did not take their new bases (%s).', 'alphabridge-mcp' ), $rebased->get_error_message() ) );
+		}
+		$by_hand = self::by_hand( $in, $plan, 'nach-den-umbenennungen' );
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: its version here before, 4: its version now, 5: the folder or file of the unit (absolute path), 6: the backup of the old version (absolute path), 7: run number. */
+		$message = sprintf( __( 'The %1$s %2$s of the staging site is swapped in (version %3$s here before, %4$s now): its new version lies at %5$s, the old one whole in the backup %6$s. Look at the site now (the home page and wp-admin): where something fails, the way back of this run puts the old version back (wp_site_revert action=plan with run_id %7$d). Where this site answers no request any more (the new version ends fatal on every call, so neither MCP nor wp-admin is reached), put the old version back by hand in a shell on the server, one command after the other:', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], (string) $prepared['version']['live'], (string) $prepared['version']['staging'], $plan['target'], $plan['old']['path'], $in['run_id'] );
+		$message .= "\n" . implode( "\n", $by_hand ) . "\n" . __( 'Call action=next for the next step.', 'alphabridge-mcp' );
+		return self::ended(
+			$in,
+			'done',
+			$moved['journal'],
+			array(
+				'message'   => $message,
+				'swapped'   => array(
+					'kind' => $unit['kind'],
+					'ref'  => $unit['ref'],
+				),
+				'version'   => $prepared['version'],
+				'target'    => $plan['target'],
+				'backup'    => $plan['old']['path'],
+				'mark'      => $moved['mid'],
+				'opcache'   => count( $opcache ),
+				'discarded' => $closed['discarded'],
+				'by_hand'   => $by_hand,
+			)
+		);
+	}
+
+	/**
+	 * OPcache for each PHP file replaced (E5 8, Z13): every PHP file of the
+	 * old version (now in the backup) and of the new one (now at the
+	 * target), each by its path at the target, through invalidate(). The
+	 * paths, sorted; the error where one is not invalidated or not_active,
+	 * or the files of a version could not be listed within the time of the
+	 * call.
+	 *
+	 * @param array $plan  plan_of().
+	 * @param float $until When the swap has to be over.
+	 * @return string[]|WP_Error
+	 */
+	private static function invalidated( array $plan, $until ) {
+		$paths = array();
+		foreach ( array( $plan['old']['path'], $plan['target'] ) as $root ) {
+			$found = self::php_paths( $root, $until );
+			if ( null === $found ) {
+				/* translators: %s: a folder (absolute path). */
+				return new WP_Error( 'code:opcache_files', sprintf( __( 'The PHP files in %s could not all be listed within the time of this call, so OPcache was not cleared for each file the swap replaced, and this site may still run old code.', 'alphabridge-mcp' ), $root ) );
+			}
+			foreach ( $found as $rel ) {
+				$paths[ '' === $rel ? $plan['target'] : $plan['target'] . '/' . $rel ] = true;
+			}
+		}
+		$paths = array_keys( $paths );
+		sort( $paths, SORT_STRING );
+		foreach ( $paths as $path ) {
+			$done = self::invalidate( $path );
+			if ( true !== $done ) {
+				/* translators: 1: a PHP file (absolute path), 2: the code of the answer (code:opcache, code:opcache_unknown). */
+				return new WP_Error( $done->get_error_code(), sprintf( __( 'OPcache could not be cleared for %1$s (%2$s), so this site may still run the old code of it.', 'alphabridge-mcp' ), $path, $done->get_error_code() ) );
+			}
+		}
+		return $paths;
+	}
+
+	/**
+	 * The PHP files below a folder (or the file itself), relative to it ('',
+	 * the file itself), folder by folder, links not followed; null where a
+	 * folder is not listed or the time of the call is over.
+	 *
+	 * @param string $root  A folder or file.
+	 * @param float  $until When the swap has to be over.
+	 * @return string[]|null
+	 */
+	private static function php_paths( $root, $until ) {
+		if ( self::is_mode( self::calls()->lstat( $root ), 0100000 ) ) {
+			return '.php' === strtolower( substr( $root, -4 ) ) ? array( '' ) : array();
+		}
+		$out  = array();
+		$dirs = array( '' );
+		while ( array() !== $dirs ) {
+			$rel   = array_shift( $dirs );
+			$now   = self::clock();
+			$names = self::calls()->scandir( '' === $rel ? $root : $root . '/' . $rel );
+			if ( null === $now || $now > $until || ! is_array( $names ) ) {
+				return null;
+			}
+			foreach ( $names as $name ) {
+				if ( ! is_string( $name ) || '.' === $name || '..' === $name ) {
+					continue;
+				}
+				$path = '' === $rel ? $name : $rel . '/' . $name;
+				$stat = self::calls()->lstat( $root . '/' . $path );
+				if ( self::is_mode( $stat, 0040000 ) ) {
+					$dirs[] = $path;
+				} elseif ( '.php' === strtolower( substr( $name, -4 ) ) && self::is_mode( $stat, 0100000 ) ) {
+					$out[] = $path;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The end of the mark of a swap (Z20a), one condition for each way it
+	 * ends: swap, the new version at the target with its identity proved
+	 * (form, device and inode of the stage, the hash of the unit read whole
+	 * there now that of the stage) and the old one whole in the backup
+	 * (form, device and inode of the old folder, its tree read back by the
+	 * store against its hash), then the file undo points of the unit go
+	 * (AB_MCP_Undo::discard_files_of(), as settle() of the Update Guard);
+	 * kept, nothing moved for good: the old version at the target with its
+	 * identity proved. No comparison of what is active (15.23). Anything
+	 * else leaves the mark open.
+	 *
+	 * @param string $op   swap or kept.
+	 * @param array  $in   The arguments.
+	 * @param array  $plan plan_of().
+	 * @param string $mid  The mark.
+	 * @return array{discarded:int}|WP_Error
+	 */
+	private static function close( $op, array $in, array $plan, $mid ) {
+		$swap   = 'swap' === $op;
+		$proved = self::at_target( $in, $plan, $swap ? $plan['new'] : $plan['old'] );
+		if ( true === $proved && $swap ) {
+			$proved = self::in_backup( $plan['old'] );
+		}
+		if ( true !== $proved ) {
+			return $proved;
+		}
+		$closed = self::calls()->close_mark( $mid );
+		if ( true !== $closed ) {
+			return is_wp_error( $closed ) ? $closed : self::refusal( 'code:mark', __( 'The mark of the swap gave no answer of its form.', 'alphabridge-mcp' ) );
+		}
+		$gone = $swap ? self::calls()->discard_files( 'theme' === $in['unit']['kind'] ? 'theme' : 'plugin', $in['unit']['ref'] ) : array();
+		return array( 'discarded' => is_array( $gone ) ? count( $gone ) : 0 );
+	}
+
+	/**
+	 * Whether the version a swap left at the target is there with its
+	 * identity proved: its form, device and inode, and the hash of the unit
+	 * read whole there now (AB_MCP_Sync_File_Manifest::unit(), within the
+	 * time of the call).
+	 *
+	 * @param array $in   The arguments.
+	 * @param array $plan plan_of().
+	 * @param array $want The tree of the version (old or new of plan_of()).
+	 * @return true|WP_Error
+	 */
+	private static function at_target( array $in, array $plan, array $want ) {
+		$at  = self::identity( $plan['target'] );
+		$now = self::clock();
+		if ( null !== $at && null !== $now && array( $want['form'], $want['dev'], $want['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ) {
+			$read = AB_MCP_Sync_File_Manifest::unit( dirname( $plan['target'] ), $in['unit']['ref'], 'live', min( $in['until'], $now + AB_MCP_Sync_Env::UNIT_BUDGET ), true, $in['unit']['kind'] );
+			if ( is_array( $read ) && true === $read['complete'] && is_string( $read['hash'] ) && hash_equals( $want['hash'], $read['hash'] ) ) {
+				return true;
+			}
+		}
+		/* translators: %s: the folder or file of the unit (absolute path). */
+		return new WP_Error( 'code:close_target', sprintf( __( 'The version at %s could not be proved as the one the swap left there (its device, inode or hash differ, or it could not be read whole within the time of this call).', 'alphabridge-mcp' ), $plan['target'] ) );
+	}
+
+	/**
+	 * Whether the old version lies whole in the backup: its form, device and
+	 * inode, and its tree read back by the store against its hash
+	 * (AB_MCP_Protected_Store::tree()).
+	 *
+	 * @param array $old The old version (plan_of()).
+	 * @return true|WP_Error
+	 */
+	private static function in_backup( array $old ) {
+		$at   = self::identity( $old['path'] );
+		$tree = null !== $at && array( $old['form'], $old['dev'], $old['ino'] ) === array( $at['form'], $at['dev'], $at['ino'] ) ? AB_MCP_Protected_Store::tree( 'backups', $old['gid'], $old['name'], $old['hash'] ) : null;
+		if ( is_array( $tree ) ) {
+			return true;
+		}
+		/* translators: %s: the backup of the old version (absolute path). */
+		return new WP_Error( 'code:close_backup', sprintf( __( 'The old version could not be proved whole in the backup %s (its device or inode differ, or its tree did not read back as its hash).', 'alphabridge-mcp' ), $old['path'] ) );
+	}
+
+	/**
+	 * The files of the pair of the unit take their new bases (E5 11, Z38):
+	 * live and staging the hash of the new version, from the kind code,
+	 * which writes and checks the part files; on the condition that the
+	 * pair is still the one the plan was made with.
+	 *
+	 * @param array $in   The arguments.
+	 * @param array $plan plan_of().
+	 * @return array|WP_Error
+	 */
+	private static function rebased( array $in, array $plan ) {
+		$engine = AB_MCP_Sync_Code_Kind::engine();
+		if ( is_wp_error( $engine ) ) {
+			return $engine;
+		}
+		return AB_MCP_Sync_Pairs::rebase(
+			$in['unit']['pair_id'],
+			array(
+				'canon'        => AB_MCP_Sync_Canon::VERSION,
+				'base_live'    => $plan['new']['hash'],
+				'base_staging' => $in['unit']['staging_hash'],
+				'base_origin'  => 'push',
+				'last_run'     => $in['run_id'],
+			),
+			$in['unit']['pair_hash'],
+			'files',
+			$engine
+		);
+	}
+
+	/**
+	 * A swap that moved nothing for good (rename_marked() stopped before both
+	 * renames held). Before the journal: its refusal, the step stays
+	 * planned. After it: the mark, where one was written, closed on the old
+	 * version proved at the target (close(), kept), and the step failed;
+	 * where the old version is not proved there, the step is unclear with
+	 * the way by hand.
+	 *
+	 * @param array $in    The arguments.
+	 * @param array $plan  plan_of().
+	 * @param array $moved rename_marked().
+	 * @return array|WP_Error
+	 */
+	private static function not_swapped( array $in, array $plan, array $moved ) {
+		if ( null === $moved['journal'] ) {
+			return $moved['why'];
+		}
+		if ( 'second' === $moved['at'] && true !== $moved['back'] ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
+			return self::unclear( $in, $plan, $moved['journal'], 'zwischen-den-umbenennungen', sprintf( __( 'The %1$s %2$s is not at its place: its old version was moved into the backup, the new one could not be put at the target, and the old one could not be put back.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'] ) );
+		}
+		$closed = null === $moved['mid'] ? true : self::close( 'kept', $in, $plan, $moved['mid'] );
+		if ( is_wp_error( $closed ) ) {
+			return self::unclear( $in, $plan, $moved['journal'], 'vor-den-umbenennungen', $closed->get_error_message() );
+		}
+		$why = array(
+			'mark'   => null === $moved['why'] ? '' : $moved['why']->get_error_message(),
+			'first'  => __( 'The old version could not be moved into the backup of the run (rename() failed, or the place was not free).', 'alphabridge-mcp' ),
+			'second' => __( 'The new version could not be put at the target (rename() failed, or the place was not free), so the old one went back to its place.', 'alphabridge-mcp' ),
+		);
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: why (one or more whole sentences). */
+		$message = sprintf( __( 'The %1$s %2$s is not swapped, and the old version is at its place: %3$s Its stage stays in the protected store. The run goes on with the next step (action=next); to swap the unit, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $why[ $moved['at'] ] );
+		return self::ended( $in, 'failed', $moved['journal'], array( 'message' => $message ) );
+	}
+
+	/**
+	 * The end of a swap that is not proved (15.23 «zu 2»): the step unclear,
+	 * the mark stays open; the answer names the way back of the run and the
+	 * commands of the way by hand for the point it stopped at.
+	 *
+	 * @param array  $in      The arguments.
+	 * @param array  $plan    plan_of().
+	 * @param array  $journal The journal of the step.
+	 * @param string $point   The section of the instruction (AB_MCP_Protected_Store::guide()).
+	 * @param string $why     What happened (one or more whole sentences).
+	 * @return array|WP_Error
+	 */
+	private static function unclear( array $in, array $plan, array $journal, $point, $why ) {
+		$by_hand = self::by_hand( $in, $plan, $point );
+		/* translators: 1: what happened (one or more whole sentences), 2: run number. */
+		$message = sprintf( __( '%1$s The step is unclear, and the mark of the swap stays open: the way back of this run puts the old version back (wp_site_revert action=plan with run_id %2$d). Where this site answers no request any more, put it back by hand in a shell on the server, one command after the other:', 'alphabridge-mcp' ), $why, $in['run_id'] );
+		$message .= "\n" . implode( "\n", $by_hand );
+		return self::ended(
+			$in,
+			'unclear',
+			$journal,
+			array(
+				'message' => $message,
+				'target'  => $plan['target'],
+				'backup'  => $plan['old']['path'],
+				'by_hand' => $by_hand,
+			)
+		);
+	}
+
+	/**
+	 * The step of the swap ended, from begun: its state, journal and result
+	 * in one write (the journal through the seam); where that write fails,
+	 * the step stays begun and the next call finds the run interrupted.
+	 *
+	 * @param array  $in      The arguments.
+	 * @param string $state   done, failed or unclear.
+	 * @param array  $journal The journal.
+	 * @param array  $result  The result, with its message.
+	 * @return array|WP_Error next.
+	 */
+	private static function ended( array $in, $state, array $journal, array $result ) {
+		$saved = self::calls()->journal(
+			$in['run_id'],
+			$in['unit']['seq'],
+			array(
+				'state'  => $state,
+				'parts'  => $journal,
+				'result' => $result,
+			),
+			'begun'
+		);
+		if ( true !== $saved ) {
+			/* translators: 1: what the step did (one or more whole sentences), 2: step number, 3: the error of the database, or nothing. */
+			return self::refusal( 'ab_mcp_sync_run_journal', sprintf( __( '%1$s The end of step %2$d could not be recorded (%3$s), so it stays begun and the next call finds the run interrupted: wp_site_revert action=plan with this run_id goes on from there, or a person closes it as checked on the page AlphaBridge → Staging.', 'alphabridge-mcp' ), $result['message'], $in['unit']['seq'], is_wp_error( $saved ) ? $saved->get_error_message() : '-' ) );
+		}
+		AB_MCP_Sync_Run::touch( $in['run_id'] );
+		return array( 'next' => $result['message'] );
+	}
+
+	/**
+	 * The commands of the way by hand for a point of the swap: the section
+	 * of the instruction of its mark (AB_MCP_Protected_Store::guide(), the
+	 * one place that writes them), made from the same trees, so that the
+	 * answer carries them after the mark is closed and its folder gone (a
+	 * day later, AB_MCP_Protected_Store::cleanup()).
+	 *
+	 * @param array  $in    The arguments.
+	 * @param array  $plan  plan_of().
+	 * @param string $point vor-den-umbenennungen, zwischen-den-umbenennungen or nach-den-umbenennungen.
+	 * @return string[] Its lines (what to check, then each command); none where the store is not decided.
+	 */
+	private static function by_hand( array $in, array $plan, $point ) {
+		$root = AB_MCP_Protected_Store::root();
+		if ( is_wp_error( $root ) ) {
+			return array();
+		}
+		$trees = array();
+		foreach ( self::mark_of( $in, $plan )['trees'] as $tree ) {
+			$tree['path'] = 0 === strpos( $tree['path'], $root . '/' ) ? substr( $tree['path'], strlen( $root ) + 1 ) : $tree['path'];
+			$trees[]      = $tree;
+		}
+		$lines = explode(
+			"\n",
+			AB_MCP_Protected_Store::guide(
+				array(
+					'store'  => $root,
+					'begun'  => 0,
+					'trees'  => $trees,
+					'active' => array(),
+				) + self::mark_of( $in, $plan )
+			)
+		);
+		$at    = array_search( '[' . $point . ']', $lines, true );
+		$end   = count( $lines );
+		$out   = array();
+		for ( $i = false === $at ? $end : $at + 1; $i < $end && '' !== $lines[ $i ]; $i++ ) {
+			$out[] = $lines[ $i ];
+		}
+		return $out;
+	}
+
 	/**
 	 * The device of a path now, a whole number; null where it is not read.
 	 *
@@ -986,7 +1785,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		if ( $until - $now < $need ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: seconds left, 4: seconds needed, 5: seconds the test requests before took. */
-			return self::refusal( 'code:means', sprintf( __( 'This call has %3$s seconds left, and the swap of the %1$s %2$s needs %4$s from here (twice the test requests before it, which took %5$s seconds, and a reserve for the swap and a swap back), so it is not swapped in this call. Call action=next again; where it keeps failing, ask the host for a longer time limit of PHP (max_execution_time), or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref, number_format( max( 0, $until - $now ), 1, '.', '' ), number_format( $need, 1, '.', '' ), number_format( $took, 1, '.', '' ) ) );
+			return self::refusal( 'code:means', sprintf( __( 'This call has %3$s seconds left, and the swap of the %1$s %2$s needs %4$s from here (a margin of twice the test requests before it, which took %5$s seconds, and a reserve, kept for the swap), so it is not swapped in this call. Call action=next again; where it keeps failing, ask the host for a longer time limit of PHP (max_execution_time), or update the unit by hand in wp-admin.', 'alphabridge-mcp' ), $kind, $ref, number_format( max( 0, $until - $now ), 1, '.', '' ), number_format( $need, 1, '.', '' ), number_format( $took, 1, '.', '' ) ) );
 		}
 		return $now;
 	}

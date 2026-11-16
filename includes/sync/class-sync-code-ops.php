@@ -16,9 +16,11 @@
  *   how far the check is stands in the state of the stage alone
  *   (AB_MCP_Store_Inputs: stage.state), in no second copy;
  * - swap («tauschen», E5): the staged unit put in the place of the one this
- *   site has (AB_MCP_Sync_Code_Swap). At this commit the entrance asks the
- *   release of its code (released(), Z24) and refuses the step: the swap
- *   mechanics are not connected to the run yet.
+ *   site has, in one call (AB_MCP_Sync_Code_Swap::run()), after the entrance
+ *   asked the release of its code (released(), Z24): with the stage the
+ *   journal of its stage step names and the time of the call
+ *   (AB_MCP_Sync_Code_Swap::until()). The swap writes its own journal and
+ *   end; a refusal leaves the step planned.
  *
  * WHAT A STEP READS (the pre-check of branch 5, V18 and V19): the unit of a
  * step comes from the plan of its run in the form of its row plan.code, by
@@ -106,17 +108,22 @@ final class AB_MCP_Sync_Code_Ops {
 	 * @return array|WP_Error next.
 	 */
 	public static function run( array $run, array $step, array $item ) {
+		// The run of a step in the form of runs.run_id, and a step with
+		// fields not read (unread) is not known: neither staged nor swapped,
+		// the step stays as it is (V19).
+		$run_id = AB_MCP_Store_Inputs::read( 'runs.run_id', $run['run_id'] );
+		if ( null === $run_id || ( isset( $step['unread'] ) && array() !== $step['unread'] ) ) {
+			return self::journal_unknown( $item['unit']['seq'] );
+		}
 		if ( 'stage' === $item['unit']['op'] ) {
-			return self::stage( $run, $step, $item );
+			return self::stage( $run_id, $step, $item );
 		}
 		// The swap runs code of the unit (Z24): released or not, read now.
 		$released = self::released( $item['unit'] );
 		if ( is_wp_error( $released ) ) {
 			return $released;
 		}
-		// The swap mechanics (AB_MCP_Sync_Code_Swap::prepare()) are not
-		// connected to the run at this commit: the step stays planned.
-		return new WP_Error( 'ab_mcp_sync_code_swap_not_built', __( 'The swap of a unit of code is not connected to the run at this commit. The step stays planned. Abort the run (wp_site_push action=abort).', 'alphabridge-mcp' ) );
+		return self::swap( $run_id, $step, $item );
 	}
 
 	/**
@@ -177,18 +184,14 @@ final class AB_MCP_Sync_Code_Ops {
 	 * is ready (done), refused (failed), or the unit is here already as the
 	 * staging site has it (done, nothing to swap).
 	 *
-	 * @param array $run  The run.
-	 * @param array $step The step.
-	 * @param array $item item().
+	 * @param int   $run_id The run (runs.run_id).
+	 * @param array $step   The step.
+	 * @param array $item   item().
 	 * @return array|WP_Error next.
 	 */
-	private static function stage( array $run, array $step, array $item ) {
-		$unit   = $item['unit'];
-		$run_id = AB_MCP_Store_Inputs::read( 'runs.run_id', $run['run_id'] );
-		$seq    = $unit['seq'];
-		if ( null === $run_id || ( isset( $step['unread'] ) && array() !== $step['unread'] ) ) {
-			return self::journal_unknown( $seq );
-		}
+	private static function stage( $run_id, array $step, array $item ) {
+		$unit = $item['unit'];
+		$seq  = $unit['seq'];
 		if ( null === $step['parts'] ) {
 			$staged = AB_MCP_Sync_Code_Stage::stage( $run_id, $item['env'], $unit['kind'], $unit['ref'], $item['packages'] );
 			if ( is_wp_error( $staged ) ) {
@@ -285,6 +288,40 @@ final class AB_MCP_Sync_Code_Ops {
 				'notes'   => $checked['notes'],
 			),
 			$message
+		);
+	}
+
+	/* ------------------------------------------------------------- swap */
+
+	/**
+	 * The step «tauschen» of a unit, one call (AB_MCP_Sync_Code_Swap::run()):
+	 * the stage the journal of its stage step names (done, in the form of
+	 * its row step.stage, of this unit), the unit and the packages of the
+	 * environment of the plan, the run, and when the swap has to be over
+	 * (AB_MCP_Sync_Code_Swap::until()). A swap step that holds a journal
+	 * already, or whose stage step does not read so, is not known: nothing
+	 * is swapped on it.
+	 *
+	 * @param int   $run_id The run (runs.run_id).
+	 * @param array $step   The step.
+	 * @param array $item   item().
+	 * @return array|WP_Error next.
+	 */
+	private static function swap( $run_id, array $step, array $item ) {
+		$unit  = $item['unit'];
+		$stage = null === $unit['stage_seq'] ? null : AB_MCP_Sync_Run::step( $run_id, $unit['stage_seq'] );
+		$read  = is_array( $stage ) && 'done' === $stage['state'] && ( ! isset( $stage['unread'] ) || array() === $stage['unread'] ) ? self::staged( $stage['parts'] ) : null;
+		if ( null !== ( $step['parts'] ?? null ) || null === $read || $read['unit']['kind'] !== $unit['kind'] || $read['unit']['ref'] !== $unit['ref'] ) {
+			return self::journal_unknown( $unit['seq'] );
+		}
+		return AB_MCP_Sync_Code_Swap::run(
+			array(
+				'run_id' => $run_id,
+				'unit'   => $unit,
+				'env'    => $item['env'],
+				'stage'  => $read['stage'],
+				'until'  => AB_MCP_Sync_Code_Swap::until(),
+			)
 		);
 	}
 
