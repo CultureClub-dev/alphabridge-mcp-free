@@ -501,7 +501,7 @@ final class SyncSafeCallsTest extends TestCase {
 		),
 		// The plan and the steps of a run of the code (Z8b branch 5).
 		'class-sync-code-ops.php' => array(
-			'__' => array( 14, 'the answers and refusals of a step of the code (staged, checked, ready, not staged, not checked this call, a journal or a plan not of its form; with the Behebung of Codex D4 the paths of a unit not staged whole and the new run, finding 5), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+			'__' => array( 15, 'the answers and refusals of a step of the code (staged, checked, ready, not staged, not checked this call, a journal or a plan not of its form; with the Behebung of Codex D4 the paths of a unit not staged whole and the new run, finding 5; with the Behebung of Codex D5 the same list cut to the first paths the result of a step holds, with how many it names and leaves out), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes: the bytes of the answer of F43 as it reads in that language count into the size of its result, which alone decides how many paths the list names (missing()).' ),
 		),
 		// The swap of a unit (Z8b branch 5, part 2a: prepare(), invalidate();
 		// part D1 of the rest: the swap in the run, F56).

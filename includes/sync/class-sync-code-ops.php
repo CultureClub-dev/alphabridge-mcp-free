@@ -378,7 +378,7 @@ final class AB_MCP_Sync_Code_Ops {
 	 * every file (code:stage_incomplete, F43) has the paths of the files
 	 * missing in its answer and its result, and the way: a new run with
 	 * every package, for action=next does not stage it again (Codex D4,
-	 * finding 5).
+	 * finding 5); as many of them as the result of a step holds (missing()).
 	 *
 	 * @param int    $run_id  Run.
 	 * @param int    $seq     Step.
@@ -391,14 +391,98 @@ final class AB_MCP_Sync_Code_Ops {
 	private static function not_staged( $run_id, $seq, array $unit, $code, $why, $data = null ) {
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the code of the refusal, as the tools name it (code:syntax, …), 4: the refusal (one or more whole sentences). */
 		$message = sprintf( __( 'The %1$s %2$s is not staged (%3$s), so it is not swapped; nothing of this site changed. %4$s', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $code, $why );
-		$result  = array( 'code' => $code );
+		$result  = array(
+			'message' => $message,
+			'code'    => $code,
+		);
 		$paths   = 'code:stage_incomplete' === $code && is_array( $data ) && isset( $data['paths'] ) && is_array( $data['paths'] ) ? array_values( array_filter( $data['paths'], 'is_string' ) ) : array();
 		if ( array() !== $paths ) {
-			/* translators: 1: the paths of the files missing, as a JSON list, 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
-			$message        .= ' ' . sprintf( __( 'The paths of the files missing here (the first 2000 where more are missing), for paths of wp_site_export: %1$s. This run does not stage the %2$s %3$s again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with these files as well; where this run is still open, abort it first (wp_site_push action=abort).', 'alphabridge-mcp' ), (string) wp_json_encode( $paths, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), $unit['kind'], $unit['ref'] );
-			$result['paths'] = $paths;
+			$result = self::missing( $result, $paths, $unit );
 		}
-		return self::ended( $run_id, $seq, 'failed', array( 'message' => $message ) + $result, $message . ' ' . __( 'The run goes on with the next step (action=next).', 'alphabridge-mcp' ) );
+		return self::ended( $run_id, $seq, 'failed', $result, $result['message'] . ' ' . __( 'The run goes on with the next step (action=next).', 'alphabridge-mcp' ) );
+	}
+
+	/**
+	 * The result of a unit not staged with the paths of the files missing
+	 * (F43): all of them where the result is then one a step holds
+	 * (holds()), as an answer of F43 read before. Where it is not (Codex D5:
+	 * a path stands in the message and in paths, and a quotation mark of it
+	 * takes six bytes as stored, so 2000 long paths are more than a result
+	 * holds; the step then stayed planned with ab_mcp_sync_run_too_large
+	 * instead of this answer), the most of the first ones that fit, found
+	 * by halving between a number that fits and one that does not: one path
+	 * beside the message fits (the path of a file is a few thousand bytes at
+	 * most), all of them do not, and each path more makes the result larger.
+	 * Were one path too much already, the run refuses the result as before
+	 * and the step stays planned.
+	 *
+	 * @param array    $result The result so far: message, code.
+	 * @param string[] $paths  The paths of the files missing, at least one.
+	 * @param array    $unit   The unit of the plan.
+	 * @return array The result: message, code, paths.
+	 */
+	private static function missing( array $result, array $paths, array $unit ) {
+		$whole = self::named( $result, $paths, count( $paths ), $unit );
+		if ( self::holds( $whole ) ) {
+			return $whole;
+		}
+		unset( $whole );
+		$fits = 1;
+		$over = count( $paths );
+		while ( $over - $fits > 1 ) {
+			$half = intdiv( $fits + $over, 2 );
+			if ( self::holds( self::named( $result, $paths, $half, $unit ) ) ) {
+				$fits = $half;
+			} else {
+				$over = $half;
+			}
+		}
+		return self::named( $result, $paths, $fits, $unit );
+	}
+
+	/**
+	 * Whether a result is one a step holds as stored: in the JSON the run
+	 * stores it in (AB_MCP_Sync_Canon::encode(), as update_step() writes
+	 * it) at most AB_MCP_Sync_Run::MAX_PARTS bytes.
+	 *
+	 * @param array $result A result of a step.
+	 * @return bool
+	 */
+	private static function holds( array $result ) {
+		return strlen( AB_MCP_Sync_Canon::encode( $result ) ) <= AB_MCP_Sync_Run::MAX_PARTS;
+	}
+
+	/**
+	 * The result of a unit not staged with the first $n of the paths of the
+	 * files missing, in its message and in paths, and the way: a new run
+	 * with every package. Where paths are left out, the message says how
+	 * many it names and how many not, and that the new run names the next
+	 * ones: its stage misses only what neither a package of it nor the live
+	 * unit holds, so each run of this way names files no run before it
+	 * named, until none is missing (AB_MCP_Sync_Code_Stage::
+	 * from_packages()).
+	 *
+	 * @param array    $result The result so far: message, code.
+	 * @param string[] $paths  The paths of the files missing.
+	 * @param int      $n      How many of them are named, from the first.
+	 * @param array    $unit   The unit of the plan.
+	 * @return array The result: message, code, paths.
+	 */
+	private static function named( array $result, array $paths, $n, array $unit ) {
+		$first = array_slice( $paths, 0, $n );
+		$list  = (string) wp_json_encode( $first, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$left  = count( $paths ) - $n;
+		if ( 0 === $left ) {
+			/* translators: 1: the paths of the files missing, as a JSON list, 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+			$way = sprintf( __( 'The paths of the files missing here (the first 2000 where more are missing), for paths of wp_site_export: %1$s. This run does not stage the %2$s %3$s again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with these files as well; where this run is still open, abort it first (wp_site_push action=abort).', 'alphabridge-mcp' ), $list, $unit['kind'], $unit['ref'] );
+		} else {
+			/* translators: 1: how many paths the list names, 2: the paths of the first files missing, as a JSON list, 3: the most bytes the result of a step holds, 4: how many paths the list leaves out, 5: kind of the unit, as the tools name it (plugin, theme), 6: its name. */
+			$way = sprintf( __( 'The paths of the files missing here, the first %1$d of them, for paths of wp_site_export: %2$s. The result of a step holds at most %3$d bytes as stored, so this list leaves out %4$d of the paths it takes (the first 2000 where more are missing). This run does not stage the %5$s %6$s again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with the files named here as well; where this run is still open, abort it first (wp_site_push action=abort). Where files are still missing then, the new run names the next ones in the same way: export those as well and plan again, until the unit is staged.', 'alphabridge-mcp' ), $n, $list, AB_MCP_Sync_Run::MAX_PARTS, $left, $unit['kind'], $unit['ref'] );
+		}
+		// One text made of the three (megabytes where the paths are long).
+		$result['message'] = $result['message'] . ' ' . $way;
+		$result['paths']   = $first;
+		return $result;
 	}
 
 	/**

@@ -397,6 +397,23 @@ e('d2b-place-live', 'plan_of(): a target read by put_tree() other than prepare()
 e('d2b-swap-journal-unit', 'swap() of the ops: the stage is taken only from the journal of its step of the stage for this very unit; a journal of another unit refuses (G-5-4, D2b 5)', CO,
   ' || $read[\'unit\'][\'kind\'] !== $unit[\'kind\'] || $read[\'unit\'][\'ref\'] !== $unit[\'ref\'] ) {\n\t\t\treturn self::journal_unknown( $unit[\'seq\'] );\n\t\t}\n\t\treturn AB_MCP_Sync_Code_Swap::run(', ' || $read[\'unit\'][\'kind\'] !== $unit[\'kind\'] ) {\n\t\t\treturn self::journal_unknown( $unit[\'seq\'] );\n\t\t}\n\t\treturn AB_MCP_Sync_Code_Swap::run(', 'coderun', 'testTheSwapTakesOnlyTheStageTheJournalOfItsStepNames')
 
+# ------------------------------------------- Codex D5: the paths of F43 bounded by the bytes the result of a step holds
+F43 = 'testAUnitWithFilesMissingNamesAsManyOfTheirPathsAsTheResultOfItsStepHolds'
+e('d5-f43-cut', 'missing(): where the result with every path of the files missing is more than a step holds, the list is cut; uncut, the run refuses it as too large and the step stays planned (Codex D5)', CO,
+  '\t\tif ( self::holds( $whole ) ) {', '\t\tif ( true ) {', 'ops', F43)
+e('d5-f43-limit-reached', 'holds(): a result of exactly the bytes a step holds is one it holds, and every path is named (Codex D5)', CO,
+  '\t\treturn strlen( AB_MCP_Sync_Canon::encode( $result ) ) <= AB_MCP_Sync_Run::MAX_PARTS;', '\t\treturn strlen( AB_MCP_Sync_Canon::encode( $result ) ) < AB_MCP_Sync_Run::MAX_PARTS;', 'ops', F43)
+e('d5-f43-limit-passed', 'holds(): a result of one byte more than a step holds is none it holds, and the list is cut (Codex D5)', CO,
+  '\t\treturn strlen( AB_MCP_Sync_Canon::encode( $result ) ) <= AB_MCP_Sync_Run::MAX_PARTS;', '\t\treturn strlen( AB_MCP_Sync_Canon::encode( $result ) ) <= AB_MCP_Sync_Run::MAX_PARTS + 1;', 'ops', F43)
+e('d5-f43-most', 'missing(): the list holds as many of the first paths as fit, not fewer (Codex D5)', CO,
+  '\t\t\t\t$fits = $half;', '\t\t\t\t$over = $half;', 'ops', F43)
+e('d5-f43-not-more', 'missing(): the list holds no path more than fits (Codex D5)', CO,
+  '\t\treturn self::named( $result, $paths, $fits, $unit );', '\t\treturn self::named( $result, $paths, $over, $unit );', 'ops', F43)
+e('d5-f43-says-cut', 'named(): a list that leaves paths out says how many it names and leaves out and that the new run names the next ones (Codex D5)', CO,
+  '\t\tif ( 0 === $left ) {', '\t\tif ( true ) {', 'ops', F43)
+e('d5-f43-result-paths', 'named(): the result holds the paths the message names, no other ones (Codex D5)', CO,
+  "\t\t$result['paths']   = $first;", "\t\t$result['paths']   = $paths;", 'ops', F43)
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

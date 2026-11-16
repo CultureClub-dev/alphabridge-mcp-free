@@ -2502,6 +2502,96 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: F43, the way of an answer that does not name every file
+	 * missing (Codex D5: a list cut to the first paths the result of a step
+	 * holds says that the new run names the next ones). Here the packages
+	 * of a run hold only a part of the files it named as missing, which
+	 * leaves files missing as a cut list does: the new run with every
+	 * package so far does not swap the unit either, its step of the stage
+	 * ends failed again and names exactly the files still missing, in their
+	 * order and none a package holds by now; nothing of this site changed.
+	 * With those exported as well, the run after it swaps the whole unit.
+	 * Sonst: the way of a cut list would end nowhere: the new run would
+	 * name the same files again or none, and the unit would never be staged
+	 * whole.
+	 */
+	public function testAUnitWhoseFilesMissingComeInSeveralExportsIsNamedTheNextOnesByEachNewRunUntilItIsSwappedWhole(): void {
+		$b                         = null;
+		list( $args, , , , $report ) = self::changed(
+			'ab-it-inaktiv',
+			'1.1.0',
+			array(),
+			static function ( string $put ) use ( &$b ): void {
+				$b = $put;
+				self::assertTrue( mkdir( $b . '/neu', 0755 ) );
+				foreach ( array( 'a', 'b', 'c', 'd', 'e' ) as $name ) {
+					file_put_contents( $b . '/neu/' . $name . '.txt', $name );
+				}
+			}
+		);
+		$target = AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-inaktiv' );
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		self::wporg( array() );
+		$ref = array(
+			'kind' => 'plugin',
+			'ref'  => 'ab-it-inaktiv',
+		);
+		// The packages of a run, made anew for it: one per list of paths.
+		$packages = static function ( array $lists ) use ( $report, $ref ): array {
+			self::clear_b();
+			$ids = array();
+			foreach ( $lists as $paths ) {
+				list( $ids[] ) = self::relayed(
+					array(
+						'purpose'     => 'code',
+						'report_hash' => $report['report_hash'],
+						'refs'        => array( $ref + array( 'paths' => $paths ) ),
+					)
+				);
+			}
+			return $ids;
+		};
+		// A run with these packages that does not stage the unit: the paths
+		// its answer names as missing; its swap skipped, nothing changed,
+		// the run aborted as the answer says.
+		$named = static function ( array $ids ) use ( $args, $before ): array {
+			list( , $run ) = self::begun( $args + array( 'packages' => $ids ) );
+			$run_id        = (int) $run['run_id'];
+			$trail         = self::steps_until_swap( $run_id );
+			self::assertSame( array( array( 1, 'done' ), array( 2, 'failed' ), array( null, null ) ), array_map( static fn( $t ) => array( $t[0], $t[1] ), $trail ), (string) json_encode( $trail ) );
+			$says = $trail[1][2];
+			self::assertStringContainsString( 'The plugin ab-it-inaktiv is not staged (code:stage_incomplete), so it is not swapped; nothing of this site changed.', $says );
+			self::assertSame( 1, preg_match( '/for paths of wp_site_export: (\[.*?\])\. This run does not stage/s', $says, $m ), $says );
+			$paths = json_decode( $m[1], true );
+			self::assertIsArray( $paths );
+			self::assertSame( $paths, self::step( $run_id, 2 )['result']['paths'], 'The result of the step holds the same paths.' );
+			self::assertSame( 'skipped', self::step( $run_id, 3 )['state'] );
+			self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the live unit changed.' );
+			$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
+			self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
+			return $paths;
+		};
+		// The first run has the main file only: every other file of the unit
+		// that this site does not have is missing.
+		$first   = array( 'ab-it-inaktiv.php' );
+		$missing = $named( $packages( array( $first ) ) );
+		self::assertSame( array(), array_values( array_diff( array( 'neu/a.txt', 'neu/b.txt', 'neu/c.txt', 'neu/d.txt', 'neu/e.txt' ), $missing ) ), (string) json_encode( $missing ) );
+		// The second run has the first three of them as well, as after a
+		// list that named only those: it names the next ones, and only them.
+		$part = array_slice( $missing, 0, 3 );
+		$rest = array_slice( $missing, 3 );
+		self::assertNotSame( array(), $rest );
+		self::assertSame( $rest, $named( $packages( array( $first, $part ) ) ), 'The new run names the files still missing, in their order, and none a package holds by now.' );
+		// The third run has every package of the unit: it is swapped whole.
+		list( , $run ) = self::begun( $args + array( 'packages' => $packages( array( $first, $part, $rest ) ) ) );
+		$trail         = self::steps_until_swap( (int) $run['run_id'] );
+		self::assertSame( array( 3, 'done' ), array_slice( (array) end( $trail ), 0, 2 ), (string) json_encode( $trail ) );
+		self::assertStringContainsString( 'from packages', $trail[1][2] );
+		clearstatcache();
+		self::assertSame( self::digest( $b ), self::digest( $target ), 'The whole unit of the staging site at the target.' );
+	}
+
+	/**
 	 * Prüft: G-5-4: the swap takes only the stage the journal of its step of
 	 * the stage names (AB_MCP_Sync_Code_Ops::swap(), staged()). A group of
 	 * the stage of the same unit left without a journal (a stage whose

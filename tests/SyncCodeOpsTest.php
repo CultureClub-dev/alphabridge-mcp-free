@@ -25,10 +25,14 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_MCP_Shape;
+use AB_MCP_Sync_Canon;
 use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Plan;
 use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Sync_Code_Swap;
+use AB_MCP_Sync_Run;
+use AB_MCP_Sync_Schema;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
@@ -465,6 +469,202 @@ final class SyncCodeOpsTest extends TestCase {
 		);
 		foreach ( $wrong as $what => $state ) {
 			self::assertNull( $checked->invoke( null, $state ), $what );
+		}
+	}
+
+	/** The refusal of a stage whose packages do not hold every file, as AB_MCP_Sync_Code_Stage::from_packages() words it. */
+	private const F43_WHY = 'The packages of code and the live unit do not hold 2000 files of the unit as the staging site has them, so it is not staged. Export them on the staging site (wp_site_export with purpose=code, this unit and the paths named here), take the package over here, then stage again with every package of it.';
+
+	/** The result of a step of F43 that names every path (message, code, paths), as it read before the list was bounded. */
+	private static function f43_whole( string $why, array $paths ): array {
+		return array(
+			'message' => 'The plugin shop is not staged (code:stage_incomplete), so it is not swapped; nothing of this site changed. ' . $why . ' The paths of the files missing here (the first 2000 where more are missing), for paths of wp_site_export: ' . json_encode( $paths, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '. This run does not stage the plugin shop again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with these files as well; where this run is still open, abort it first (wp_site_push action=abort).',
+			'code'    => 'code:stage_incomplete',
+			'paths'   => $paths,
+		);
+	}
+
+	/** The result of a step of F43 that names the first $n paths only: how many it names, how many it leaves out, and the way to those. */
+	private static function f43_cut( string $why, array $paths, int $n ): array {
+		$first = array_slice( $paths, 0, $n );
+		return array(
+			'message' => 'The plugin shop is not staged (code:stage_incomplete), so it is not swapped; nothing of this site changed. ' . $why . ' The paths of the files missing here, the first ' . $n . ' of them, for paths of wp_site_export: ' . json_encode( $first, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '. The result of a step holds at most 8388608 bytes as stored, so this list leaves out ' . ( count( $paths ) - $n ) . ' of the paths it takes (the first 2000 where more are missing). This run does not stage the plugin shop again: plan a new run (wp_site_push action=plan) with every package of the unit, the one with the files named here as well; where this run is still open, abort it first (wp_site_push action=abort). Where files are still missing then, the new run names the next ones in the same way: export those as well and plan again, until the unit is staged.',
+			'code'    => 'code:stage_incomplete',
+			'paths'   => $first,
+		);
+	}
+
+	/** The bytes a result of a step takes as the run stores it. */
+	private static function stored( array $result ): int {
+		return strlen( AB_MCP_Sync_Canon::encode( $result ) );
+	}
+
+	/**
+	 * The refusal and 1999 paths whose answer with every path named takes,
+	 * as stored, $over bytes more than a step holds. The paths are mostly
+	 * quotation marks (six bytes each as stored, so the texts stay small);
+	 * the bytes are met with letters at the end of the paths, two bytes of
+	 * the result each (one in the message, one in paths), and an odd rest
+	 * with one byte of the refusal.
+	 *
+	 * @return array{0:string,1:string[]}
+	 */
+	private static function f43_at( int $over ): array {
+		$paths = array();
+		for ( $i = 0; $i < 1999; $i++ ) {
+			$paths[] = sprintf( '%04d/', $i ) . str_repeat( str_repeat( '"', 170 ) . '/', 4 ) . str_repeat( 'a', 20 );
+		}
+		$gap = AB_MCP_Sync_Run::MAX_PARTS + $over - self::stored( self::f43_whole( self::F43_WHY, $paths ) );
+		self::assertGreaterThan( 0, $gap );
+		$why     = self::F43_WHY . ( 1 === $gap % 2 ? '!' : '' );
+		$letters = intdiv( $gap, 2 );
+		foreach ( $paths as $i => $path ) {
+			$paths[ $i ] = $path . str_repeat( 'a', intdiv( $letters, 1999 ) + ( $i < $letters % 1999 ? 1 : 0 ) );
+		}
+		return array( $why, $paths );
+	}
+
+	/** The cases of F43 by name: the refusal, the paths of the files missing, and whether the list is cut. */
+	private static function f43_case( string $case ): array {
+		switch ( $case ) {
+			case 'three paths':
+				return array( self::F43_WHY, array( 'viele/f1.txt', 'ein "Name"/mit \\ und ä.php', 'a/b/c.css' ), false );
+			case '2000 paths of a usual length':
+				return array( self::F43_WHY, array_map( static fn( int $i ): string => sprintf( 'includes/modules/module-%04d/class-module-%04d-controller.php', $i, $i ), range( 0, 1999 ) ), false );
+			case 'a result of exactly the bytes a step holds':
+				return array_merge( self::f43_at( 0 ), array( false ) );
+			case 'a result of one byte more than a step holds':
+				return array_merge( self::f43_at( 1 ), array( true ) );
+			case '2000 paths of 813 bytes with many quotation marks':
+				// Codex D5: a quotation mark takes six bytes of the result (two in
+				// paths, four in the message, whose list is JSON within JSON).
+				return array( self::F43_WHY, array_map( static fn( int $i ): string => sprintf( '%04d/', $i ) . str_repeat( str_repeat( '"', 200 ) . '/', 4 ) . 'f.js', range( 0, 1999 ) ), true );
+		}
+		throw new \LogicException( $case );
+	}
+
+	/** The names of the cases of F43. */
+	public static function f43_cases(): array {
+		return array(
+			'three paths'                                       => array( 'three paths' ),
+			'2000 paths of a usual length'                      => array( '2000 paths of a usual length' ),
+			'a result of exactly the bytes a step holds'        => array( 'a result of exactly the bytes a step holds' ),
+			'a result of one byte more than a step holds'       => array( 'a result of one byte more than a step holds' ),
+			'2000 paths of 813 bytes with many quotation marks' => array( '2000 paths of 813 bytes with many quotation marks' ),
+		);
+	}
+
+	/**
+	 * not_staged() of step 2 of run 31 with files missing, on a $wpdb that
+	 * takes the statements of a step that ends (AB_MCP_Sync_Run::
+	 * update_step() with its own check of the size, touch()): the answer,
+	 * and what each prepare() was given, by its statement.
+	 *
+	 * @return array{0:mixed,1:array<string,array[]>}
+	 */
+	private static function f43( string $why, array $paths ): array {
+		$db = new class() {
+			/** @var string */
+			public $prefix = 'wp_';
+			/** @var string */
+			public $last_error = '';
+			/** @var array[] */
+			public $prepared = array();
+			public function prepare( $query, ...$args ) {
+				$this->prepared[] = array( $query, $args );
+				return $query;
+			}
+			public function query( $sql ) {
+				unset( $sql );
+				return 1;
+			}
+		};
+		$before = $GLOBALS['wpdb'] ?? null;
+		$status = new \ReflectionProperty( AB_MCP_Sync_Schema::class, 'status' );
+		if ( PHP_VERSION_ID < 80100 ) {
+			$status->setAccessible( true );
+		}
+		$GLOBALS['wpdb'] = $db;
+		$status->setValue( null, array( 'available' => true, 'reason' => null ) );
+		try {
+			$answer = ( new \ReflectionMethod( AB_MCP_Sync_Code_Ops::class, 'not_staged' ) )->invoke( null, 31, 2, self::unit(), 'code:stage_incomplete', $why, array( 'paths' => $paths ) );
+		} finally {
+			$GLOBALS['wpdb'] = $before;
+			$status->setValue( null, null );
+		}
+		$set = array();
+		foreach ( $db->prepared as $one ) {
+			$set[ $one[0] ][] = $one[1];
+		}
+		return array( $answer, $set );
+	}
+
+	/**
+	 * Prüft: F43 (Codex D5): the answer of a unit not staged for files
+	 * missing names every path where the result of its step is then at most
+	 * what a step holds as the run stores it (8388608 bytes), to the byte,
+	 * and reads as it did before (a few paths, 2000 of a usual length, a
+	 * result of exactly those bytes). Where it would be more (one byte more;
+	 * 2000 paths of 813 bytes with many quotation marks, each six bytes as
+	 * stored), the step still ends failed from planned with its answer: the
+	 * list holds the first paths, as many as fit (one more would not), the
+	 * result holds the same ones within the bytes of a step, and the answer
+	 * says how many it names, how many it leaves out and that the new run
+	 * names the next ones.
+	 * Sonst: the run would refuse the result as too large
+	 * (ab_mcp_sync_run_too_large), the step would stay planned, and the
+	 * customer would get no path and no way instead of the answer of F43; or
+	 * a list cut without a word would leave files missing for good.
+	 */
+	#[DataProvider( 'f43_cases' )]
+	public function testAUnitWithFilesMissingNamesAsManyOfTheirPathsAsTheResultOfItsStepHolds( string $case ): void {
+		list( $why, $paths, $cut ) = self::f43_case( $case );
+		$most                      = AB_MCP_Sync_Run::MAX_PARTS;
+		self::assertSame( 8388608, $most );
+		// What the result would take with every path named. (The texts are
+		// megabytes: each is dropped where it is no longer read, and none is
+		// handed to an assertion that would print it.)
+		$whole = self::stored( self::f43_whole( $why, $paths ) );
+		if ( 'a result of exactly the bytes a step holds' === $case ) {
+			self::assertSame( $most, $whole );
+		}
+		if ( 'a result of one byte more than a step holds' === $case ) {
+			self::assertSame( $most + 1, $whole );
+		}
+		self::assertSame( $cut, $whole > $most, 'With every path named the result takes ' . $whole . ' bytes.' );
+
+		list( $answer, $set ) = self::f43( $why, $paths );
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		self::assertSame( array( 'next' ), array_keys( $answer ) );
+		$says = $answer['next'];
+		unset( $answer );
+		// The step ended: failed, from planned, its result written once and
+		// within the bytes a step holds.
+		self::assertSame( array( array( 'failed' ) ), $set['state = %s'] ?? null );
+		self::assertSame( array( array( 'planned' ) ), $set[' AND state = %s'] ?? null );
+		self::assertSame( array( array( 31, 2 ) ), $set[' WHERE run_id = %d AND seq = %d'] ?? null );
+		self::assertCount( 1, $set['result = %s'] ?? array() );
+		$size   = strlen( $set['result = %s'][0][0] );
+		$stored = hash( 'sha256', $set['result = %s'][0][0] );
+		unset( $set );
+		self::assertLessThanOrEqual( $most, $size, 'The result as stored is one a step holds.' );
+		// How many paths the answer names: all of them, or the number it says.
+		$head = 'The plugin shop is not staged (code:stage_incomplete), so it is not swapped; nothing of this site changed. ' . $why . ' The paths of the files missing here';
+		self::assertSame( $head, substr( $says, 0, strlen( $head ) ) );
+		$n = count( $paths );
+		if ( $cut ) {
+			self::assertSame( 1, preg_match( '/^, the first ([1-9][0-9]*) of them, for paths of wp_site_export: \[/', substr( $says, strlen( $head ), 80 ), $m ), substr( $says, strlen( $head ), 80 ) );
+			$n = (int) $m[1];
+			self::assertLessThan( count( $paths ), $n, 'The list is cut.' );
+		}
+		$want = $cut ? self::f43_cut( $why, $paths, $n ) : self::f43_whole( $why, $paths );
+		self::assertCount( $n, $want['paths'] );
+		self::assertTrue( str_starts_with( $says, $want['message'] ) && ' The run goes on with the next step (action=next).' === substr( $says, strlen( $want['message'] ) ), 'The answer names the first ' . $n . ' of ' . count( $paths ) . ' paths with the way, then the next step; it ends: ' . substr( $says, -760 ) );
+		unset( $says );
+		self::assertSame( hash( 'sha256', AB_MCP_Sync_Canon::encode( $want ) ), $stored, 'The result as stored (' . $size . ' bytes): the message of the answer, the code, and the same ' . $n . ' paths.' );
+		unset( $want );
+		if ( $cut ) {
+			self::assertGreaterThan( $most, self::stored( self::f43_cut( $why, $paths, $n + 1 ) ), 'One path more would not have fitted: ' . $n . ' of ' . count( $paths ) . ' named.' );
 		}
 	}
 
