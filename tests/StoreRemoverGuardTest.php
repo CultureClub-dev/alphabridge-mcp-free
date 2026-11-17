@@ -98,15 +98,15 @@ final class StoreRemoverGuardTest extends TestCase {
 	 * Every call of a file whose name is written as a name (the head of this
 	 * file): kind (function, method, static, new), name in lower case, of
 	 * (the class of a static call; as written where it is a value), the class
-	 * and the named function it stands in, its first and second argument as
-	 * written and its line, in the order of the file; the lines of every
+	 * and the named function it stands in, its first argument as written, the
+	 * string keys of the top level of its second where that is an array literal (keys; none otherwise) and its line, in the order of the file; the lines of every
 	 * string of the file (a part of one with variables, HTML outside PHP) by
 	 * its text in lower case without a leading \ (V1); every name the file
 	 * writes, in lower case, as PHP resolves it; and every write of a static
 	 * property (Class::$name, or an element of it: its first key) with the
 	 * value as written. Each file is parsed once per process.
 	 *
-	 * @return array{calls:list<array{kind:string,name:string,of:string,class:?string,function:?string,args:string,second:string,line:int}>,strings:array<string,list<int>>,names:array<string,true>,sets:list<array{of:string,name:string,key:string,value:string,class:?string,function:?string}>}
+	 * @return array{calls:list<array{kind:string,name:string,of:string,class:?string,function:?string,args:string,keys:list<string>,line:int}>,strings:array<string,list<int>>,names:array<string,true>,sets:list<array{of:string,name:string,key:string,value:string,class:?string,function:?string}>}
 	 */
 	private static function walk( string $file ): array {
 		static $walked = array();
@@ -177,7 +177,7 @@ final class StoreRemoverGuardTest extends TestCase {
 					'class'    => $class,
 					'function' => $function,
 					'args'     => isset( $args[0] ) ? $this->text( $args[0] ) : '',
-					'second'   => isset( $args[1] ) ? $this->text( $args[1] ) : '',
+					'keys'     => isset( $args[1] ) && $args[1] instanceof Node\Arg && $args[1]->value instanceof Node\Expr\Array_ ? array_values( array_filter( array_map( static fn( $item ): ?string => null !== $item && $item->key instanceof Node\Scalar\String_ ? $item->key->value : null, $args[1]->value->items ), 'is_string' ) ) : array(),
 					'line'     => $name->getStartLine(),
 				);
 			}
@@ -482,9 +482,9 @@ final class StoreRemoverGuardTest extends TestCase {
 	 * Every call of AB_MCP_Protected_Store::open() in shipped code as the walk
 	 * reads it (walk()), and the calls of the proposal through its seam
 	 * (->open() in its file, as the retention reads ->remove()): file, area
-	 * and the meta as written.
+	 * and the string keys of the top level of the meta (none where it is no array literal).
 	 *
-	 * @return array<int,array{file:string,area:string,meta:string}>
+	 * @return array<int,array{file:string,area:string,keys:list<string>}>
 	 */
 	private static function opens(): array {
 		$out = array();
@@ -494,7 +494,7 @@ final class StoreRemoverGuardTest extends TestCase {
 					$out[] = array(
 						'file' => $file,
 						'area' => trim( $call['args'] ),
-						'meta' => trim( $call['second'] ),
+						'keys' => $call['keys'],
 					);
 				}
 			}
@@ -521,7 +521,7 @@ final class StoreRemoverGuardTest extends TestCase {
 			$area = trim( $call['area'], '\'"' );
 			$seen[ $call['file'] . ' ' . $call['area'] ] = true;
 			if ( in_array( $area, $runs_only, true ) ) {
-				self::assertStringContainsString( "'run_id'", $call['meta'], $call['file'] . ': a writer of ' . $area . ' gives the run.' );
+				self::assertContains( 'run_id', $call['keys'], $call['file'] . ': a writer of ' . $area . ' gives the run, as a key of the array literal it passes.' );
 			}
 		}
 		ksort( $seen );

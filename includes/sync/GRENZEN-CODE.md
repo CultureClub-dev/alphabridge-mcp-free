@@ -740,7 +740,7 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     nicht aktiv (ohne `accept`). Die zwei Sätze des Tauschs sagen darum «active» (Bauzettel G, V4).
   - `prepare()` ermittelt nur, ob die Einheit aktiv ist (ja, nein), nicht welche Hauptdateien; eine weitere Hauptdatei
     eines schon aktiven Plugins ändert den Wert nicht, ebenso ein Wechsel zwischen Stylesheet und Template desselben
-    Themes (G-21).
+    Themes.
   - Die Grenze gilt für jede Antwort des Tauschs: für den gelungenen Tausch, die Enden nach einem Fehler (`failed`,
     `unclear`, das nicht geschriebene Ende in `ended()`) und die Ablehnungen. Den Satz dazu trägt nur die Antwort des
     gelungenen Tauschs, erst nachdem sein Ende geschrieben ist (nicht das gespeicherte Ergebnis des Schritts); die
@@ -811,7 +811,7 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Was:**
   - Wieder eingeschaltet werden nur Plugins, deren Hauptdatei beim Beginn des Tauschs lief (Journal `active`, wie die
     Marke sie nennt). Ein Wechsel des Themes durch den Kern (`validate_current_theme()`, wo der Ordner fehlte) wird
-    nicht zurückgestellt (G-24); das Journal hält für ein Theme kein `active`. Seit Teil F, Abschnitt 2 nennt die
+    nicht zurückgestellt (G-5-18); das Journal hält für ein Theme kein `active`. Seit Teil F, Abschnitt 2 nennt die
     Antwort des Rückweg-Schritts ein Theme, das dieser Aufruf als nicht aktiv liest (weder Theme der Site noch sein
     Eltern-Theme, Wortlaut wie V4), mit dem Weg (wp-admin), ohne einen Wechsel zu behaupten und auch für ein Theme, das
     nie aktiv war («where it, or a child theme of it, was active before the swap»; Skeptiker Leser, C2: der Weg führt
@@ -973,7 +973,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     Tausch ist ein Name nur bei der Uhr (`call_user_func( self::$clock )`) und den eigenen Closures in
     `given_rights()` ein Wert.
   - Kein Wächter dieses Tests liest den Quelltext als Text (Skeptiker F2+G, B1; Skeptiker Leser, B1: der Text
-    `::delete_path(` übersah `::delete_path (`). Alle lesen über `walk()`: die Aufrufe (`callers()`, `opens()`, auch
+    `::delete_path(` übersah `::delete_path (`; Codex H1, F8: `opens()` las die Meta als Text). Alle lesen über
+    `walk()`: die Aufrufe (`callers()`; `opens()` mit dem Bereich und den String-Schlüsseln der obersten Ebene der
+    Meta, die dafür ein Array-Literal sein muss: eine Meta in einer Variablen oder aus einem Aufruf gilt als ohne
+    Schlüssel, und die Prüfung, dass ein Schreiber von `backups` oder `stage` den Lauf gibt, wird rot; auch
     `delete_path()`, `temp_file()` und `remove()` mit einem Bereich als Variable), die Namen und die Werte der Strings
     einer Datei (`naming()`: die Naht `AB_MCP_Protected_Store_Calls`, der Ordner `ab-mcp-store`) und das Schreiben
     einer statischen Eigenschaft (die Marke `$building`). Ungesehen bleiben, wie oben, ein Name als Wert zur Laufzeit,

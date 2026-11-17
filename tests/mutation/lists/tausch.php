@@ -1523,7 +1523,7 @@ return array(
 	),
 	array(
 		'id'      => 'tausch/e-marke-weg',
-		'clause'  => 'restored(): a mark that is gone (no mark of the swap found) leaves the proof at the target alone (G-27; Teil E)',
+		'clause'  => 'restored(): a mark that is gone (no mark of the swap found) leaves the proof at the target alone (G-5-14; Teil E)',
 		'file'    => $cs,
 		'search'  => 'if ( is_wp_error( $closed ) && \'ab_mcp_store_no_mark\' !== $closed->get_error_code() ) {',
 		'replace' => 'if ( is_wp_error( $closed ) ) {',

@@ -2107,7 +2107,7 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
-	 * Prüft: G-27, the mark gone: the folder of the mark of a swap done goes
+	 * Prüft: G-5-14, the mark gone: the folder of the mark of a swap done goes
 	 * a day after the mark closed (AB_MCP_Protected_Store::cleanup(); here
 	 * moved aside under a name that is no mark). Its way back then finds no
 	 * mark in the list and closes none, and the proof of the old version at

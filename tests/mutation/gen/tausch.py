@@ -515,7 +515,7 @@ e('e-opcache', 'restored(): OPcache not cleared for a file put back or moved awa
 e('e-z20b', 'restored(): the step of the way back is done only where close() with kept proves the old version at the target (Z20b; Teil E)', CS,
   "$closed = isset( $moved['fault'] ) ? true : self::close( 'kept', $in, $journal, self::mark_id( $swap ) );",
   '$closed = true;', 'coderun', 'testTheWayBackIsDoneOnlyWhereTheOldVersionIsProvedAtTheTargetAfterItsRenames')
-e('e-marke-weg', 'restored(): a mark that is gone (no mark of the swap found) leaves the proof at the target alone (G-27; Teil E)', CS,
+e('e-marke-weg', 'restored(): a mark that is gone (no mark of the swap found) leaves the proof at the target alone (G-5-14; Teil E)', CS,
   "if ( is_wp_error( $closed ) && 'ab_mcp_store_no_mark' !== $closed->get_error_code() ) {",
   'if ( is_wp_error( $closed ) ) {', 'coderun', 'testTheWayBackOfASwapWhoseMarkIsGoneIsDoneOnTheProofAtTheTargetAlone')
 e('e-paar', 'restored(): the pair of the unit becomes unclear after the way back (question 3 A of Teil E)', CS,
