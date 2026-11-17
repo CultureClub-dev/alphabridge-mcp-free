@@ -320,7 +320,8 @@ final class AB_MCP_Sync_Run {
 	 * (null where there is none: missing is not unread, the caller decides);
 	 * without $whole nothing is read from the database. What does not read
 	 * back (records()), a plan that is none, a run of the way back that names
-	 * no run (or, read as the run that wrote, is one of the way back itself),
+	 * no run (reverts[0] no whole number of 1 or more, as the clean-up reads
+	 * its plan; or, read as the run that wrote, is one of the way back itself),
 	 * an entry that names no step or another run: refused, never read as
 	 * empty, as not taken back or as a run of the contents (fail closed, as
 	 * AB_MCP_Sync_Engine::fresh()), a run with ab_mcp_sync_run_unread, a step
@@ -333,7 +334,8 @@ final class AB_MCP_Sync_Run {
 	 * @return array{run:int,seq:int|null,record:array|null}|WP_Error
 	 */
 	public static function wrote( array $run, $step = null, $whole = true ) {
-		$id   = 'revert' === $run['type'] && isset( $run['plan']['reverts'][0] ) ? (int) $run['plan']['reverts'][0] : (int) $run['run_id'];
+		$back = 'revert' === $run['type'] ? ( $run['plan']['reverts'][0] ?? null ) : null;
+		$id   = is_int( $back ) && $back > 0 ? $back : (int) $run['run_id'];
 		$runs = array( $run );
 		if ( $whole && null === $step && $id !== (int) $run['run_id'] ) {
 			$runs[] = self::get( $id );
@@ -381,7 +383,7 @@ final class AB_MCP_Sync_Run {
 	 */
 	private static function step_unread( $seq, $run_id, array $fields ) {
 		/* translators: 1: step number, 2: run number, 3: the fields of its record that do not read back, as the tools name them (parts, result, …), separated by commas. */
-		return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( __( 'The record of step %1$d of run %2$d (%3$s) does not read back as it was written, so which step it takes back, or what it wrote, is not known: no way back that rests on it is planned, put back or closed as checked. Ask the host to check the table of the steps, and check its object by hand in wp-admin.', 'alphabridge-mcp' ), $seq, $run_id, implode( ', ', $fields ) ) );
+		return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( __( 'The record of step %1$d of run %2$d (%3$s) does not read back as it was written, so nothing is decided on it: no way back that rests on it is planned or put back. Ask the host to check the table of the steps, and check its object by hand in wp-admin.', 'alphabridge-mcp' ), $seq, $run_id, implode( ', ', $fields ) ) );
 	}
 
 	/* ------------------------------------------------------------- write */

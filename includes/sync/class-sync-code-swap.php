@@ -2264,7 +2264,7 @@ final class AB_MCP_Sync_Code_Swap {
 			// part F, question 2 A; the word active as V4, skeptic F2+G, C2).
 			if ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {
 				/* translators: %s: the name of the theme (its folder). */
-				$message .= ' ' . sprintf( __( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it was active before the swap, switch back to it in wp-admin (Appearance → Themes).', 'alphabridge-mcp' ), $unit['ref'] );
+				$message .= ' ' . sprintf( __( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it, or a child theme of it, was active before the swap, switch back to that theme in wp-admin (Appearance → Themes).', 'alphabridge-mcp' ), $unit['ref'] );
 			}
 		}
 		return self::ended(

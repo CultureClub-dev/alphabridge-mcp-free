@@ -2523,7 +2523,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( $at[3], self::fits( $guide, $places, $shown ), 'The first lines send this state to the section of its point.' );
 		clearstatcache();
 		self::assertSame( array( 'P1' => $old, 'P2' => array(), 'P3' => $new )[ $point ], file_exists( $target ) ? self::bytes_of( $target ) : array(), 'The version at the target, byte for byte, or none.' );
-		$sentence = sprintf( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it was active before the swap, switch back to it in wp-admin (Appearance → Themes).', $unit['ref'] );
+		$sentence = sprintf( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it, or a child theme of it, was active before the swap, switch back to that theme in wp-admin (Appearance → Themes).', $unit['ref'] );
 		if ( 'by hand' === $way ) {
 			self::assertTrue( 'theme' !== $kind || self::theme_let_go(), 'WordPress lets go of the theme whose folder it misses.' );
 			AB_MCP_Sync_Revert::admit( null );

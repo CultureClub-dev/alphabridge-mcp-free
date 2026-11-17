@@ -1864,12 +1864,18 @@ final class SyncRunTest extends TestCase {
 	 * entry, or the journal of the step it takes back, does not read fails
 	 * with the sentence of the reader, nothing put back, and the run goes on
 	 * (S6, F2 B); way (a) refuses before anything is written, the pair
-	 * active (S7). The close of that way back names the failed step and no
-	 * pair as unclear; its pair stays active (G2, closed_note()).
+	 * active (S7); where only a step still planned does not read back, way
+	 * (a) closes the run as checked, that step stays planned, and the way
+	 * back of the run that wrote refuses after it (S3; G-5-23, skeptic over
+	 * the reader, C3). The close of that way back names the failed step and
+	 * no pair as unclear; its pair stays active (G2, closed_note()).
 	 * Sonst: a step could go back a second time, a step of the way back
 	 * would end with a wrong reason or be read as empty, way (a) would close
-	 * a run with a pair left active, and the close would call the pair of a
-	 * failed step unclear.
+	 * a run with a pair left active, or keep a run open (and with it every
+	 * new run of the site) on a step that put nothing back, or end that step
+	 * as if it went back, the way back of the run that wrote would read its
+	 * record as none, and the close would call the pair of a failed step
+	 * unclear.
 	 */
 	#[DataProvider( 'way_back_unread' )]
 	public function testAWayBackOnRecordsThatDoNotReadBackIsRefusedAndNoStepGoesBackTwice( string $case ): void {
@@ -1938,12 +1944,20 @@ final class SyncRunTest extends TestCase {
 			self::assertSame( 'active', $pair(), 'The pair of the failed step stays as it was.' );
 			return;
 		}
-		if ( 'entry, continue' === $case || 'entry, way (a)' === $case ) {
+		if ( in_array( $case, array( 'entry, continue', 'entry, way (a)', 'planned entry, way (a)' ), true ) ) {
 			// The first step of the way back begun by a call that ended
 			// without its end: the run of the way back is interrupted on it.
 			self::assertTrue( AB_MCP_Sync_Run::update_step( $r2, $s1, array( 'state' => 'begun' ), 'planned' ) );
 			self::assertSame( 'interrupted', self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => $r2 ) )['state'] );
-			$spoil( $steps, array( 'run_id' => $r2, 'seq' => 'entry, continue' === $case ? $s2 : $s1 ), 'parts', $float );
+			$spoil( $steps, array( 'run_id' => $r2, 'seq' => 'entry, way (a)' === $case ? $s1 : $s2 ), 'parts', $float );
+			if ( 'planned entry, way (a)' === $case ) {
+				$closed = AB_MCP_Sync_Run::close_checked( $r2, self::admin(), true );
+				self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_code() . ': ' . $closed->get_error_message() : '' );
+				self::assertSame( 'closed_checked', $closed['state'], 'Way (a) reads the steps left begun only: it closes the run.' );
+				self::assertSame( 'planned', AB_MCP_Sync_Run::step( $r2, $s2 )['state'], 'The planned step stays planned in the closed run.' );
+				self::assertStringStartsWith( sprintf( 'The record of step %1$d of run %2$d (parts) does not read back', $s2, $r2 ), self::refused( $plan( $r1 ), 'ab_mcp_sync_revert_unread' ), 'S3: the way back of the run that wrote refuses after it.' );
+				return;
+			}
 			$before = self::untouched( $r2, $pages );
 			unset( $before['run'] );
 			$answer = 'entry, continue' === $case ? $plan( $r2 ) : AB_MCP_Sync_Run::close_checked( $r2, self::admin(), true );
@@ -1976,7 +1990,7 @@ final class SyncRunTest extends TestCase {
 
 	/** The cases of the records that do not read back, one way back each. */
 	public static function way_back_unread(): array {
-		$cases = array( 'budget, plan', 'budget, next', 'plan of the way back', 'entry, plan again', 'the way back of the same run', 'entry, continue', 'entry, next', 'journal of the step it takes back, next', 'entry, way (a)' );
+		$cases = array( 'budget, plan', 'budget, next', 'plan of the way back', 'entry, plan again', 'the way back of the same run', 'entry, continue', 'entry, next', 'journal of the step it takes back, next', 'entry, way (a)', 'planned entry, way (a)' );
 		return array_combine( $cases, array_map( static fn( string $c ): array => array( $c ), $cases ) );
 	}
 

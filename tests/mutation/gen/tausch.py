@@ -597,8 +597,8 @@ e('f-t1-marken', 'Revert::code(): the refusal without the entrance names the fol
 # ------------------------------------------- the rest of B4: a step of the way back whose entry does not read back (decision of the lead)
 E_EU = 'testAStepOfTheWayBackWhoseEntryDoesNotReadBackStillGoesThroughTheOneEntrance'
 e('f-b4-rueckweg-lauf', 'Run::wrote() for Revert::code(): for a run of the way back of its own the run that wrote is the one its plan names (reverts), never what a step of it names or the run itself, so a step whose entry does not read back still goes through the one entrance (N12, fail closed; rest of B4)', RU,
-  "\t\t$id   = 'revert' === $run['type'] && isset( $run['plan']['reverts'][0] ) ? (int) $run['plan']['reverts'][0] : (int) $run['run_id'];",
-  "\t\t$id   = is_array( $step ) && is_array( $step['parts'] ) && isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run['run_id'];", 'coderun', E_EU)
+  "\t\t$back = 'revert' === $run['type'] ? ( $run['plan']['reverts'][0] ?? null ) : null;",
+  "\t\t$back = is_array( $step ) && is_array( $step['parts'] ) && isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : null;", 'coderun', E_EU)
 e('f-b4-ohne-reverts', 'Run::wrote() for Revert::code(): a run of the way back whose plan names no run it takes back is not known and refused, never taken for a run of the contents (fail closed; rest of B4)', RU,
   " && ( $i > 0 || $id === (int) $of['run_id'] ) ) ) {", " && $i > 0 ) ) {", 'coderun', E_EU)
 e('f-b4-satz-schritt', 'Tausch::back(): a step of the way back whose entry does not read back is named itself in the sentence of the entrance, never as a step 0 (rest of B4)', CS,
@@ -627,6 +627,10 @@ e('l-eintrag-ohne-schritt', 'Run::wrote(): an entry of a step of the way back th
   " || $seq < 1 || ", ' || ', 'run', L_RD)
 e('l-fremder-lauf', 'Run::wrote(): an entry that names another run than the run that wrote is refused, never left out (the reader)', RU,
   " || (int) ( $what['forward_run'] ?? $id ) !== $id ) {", ' ) {', 'run', L_RD)
+e('lb-reverts-zahl', 'Run::wrote(): a run of the way back whose plan names its run as a text (reverts[0]) is refused, never read as that run (skeptic over the reader, C4)', RU,
+  "is_int( $back ) && ", '', 'run', L_RD)
+e('lb-reverts-ab-eins', 'Run::wrote(): a run of the way back whose plan names run 0 or less (reverts[0]) is refused, never read as that run (skeptic over the reader, C4)', RU,
+  " && $back > 0 ? $back : ", ' ? $back : ', 'run', L_RD)
 
 # ------------------------------------------- the reader of the way back (review before H, section 2) and C3 of the skeptic F2+G
 e('l-art-rueckweg', 'Run::wrote() for Revert::code(): a run that wrote which is itself of the way back is not known and refused, never read as the run of the code (the reader, S1)', RU,

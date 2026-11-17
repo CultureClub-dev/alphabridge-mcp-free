@@ -469,10 +469,10 @@ return array(
 	// includes/sync/class-sync-code-swap.php and includes/sync/class-sync-revert.php (Z8b branch 5, the Behebung after the skeptic E1 of part E: the way of the other steps only where a plan takes steps (B3), and a run of the code whose record does not read back, fail closed at the one entrance (B4)).
 	'To plan the way back of the other steps that wrote, pass steps without %d.',
 	// includes/sync/class-sync-code-swap.php (Z8b branch 5, part F of the rest, section 2: the theme read as not active after its way back, F58; the word as V4 since the reader).
-	'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it was active before the swap, switch back to it in wp-admin (Appearance → Themes).',
+	'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it, or a child theme of it, was active before the swap, switch back to that theme in wp-admin (Appearance → Themes).',
 	// includes/sync/class-sync-run.php (Z8b branch 5, the reader of the way back in the review before H: a run and a step whose record does not read back, refused at the one reader AB_MCP_Sync_Run::wrote(); the run replaces the text of B4 one for one, the step the translated text of a journal of a write step that does not read back, which left the language files).
 	'The record of run %1$d (%2$s) does not read back as it was written, so nothing is decided on it: no way back that rests on it is planned, put back or closed as checked. Ask the host to check the table of the runs; where it swapped a plugin or theme, put the old version back by hand in wp-admin with the version of before.',
-	'The record of step %1$d of run %2$d (%3$s) does not read back as it was written, so which step it takes back, or what it wrote, is not known: no way back that rests on it is planned, put back or closed as checked. Ask the host to check the table of the steps, and check its object by hand in wp-admin.',
+	'The record of step %1$d of run %2$d (%3$s) does not read back as it was written, so nothing is decided on it: no way back that rests on it is planned or put back. Ask the host to check the table of the steps, and check its object by hand in wp-admin.',
 	// includes/sync/class-sync-engine.php (Z8b branch 5, the reader of the way back in the review before H, G2: the close of a way back names no pair as unclear).
 	'Check those objects in wp-admin (each part left names its value before); remove a rest by hand where it should go.',
 );

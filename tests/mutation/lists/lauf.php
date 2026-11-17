@@ -2384,6 +2384,15 @@ return array(
 		'expect'  => '/testAWayBackOnRecordsThatDoNotReadBackIsRefusedAndNoStepGoesBackTwice/',
 	),
 	array(
+		'id'      => 'lauf/lb-weg-a-geplant',
+		'clause'  => 'close_checked_on(): way (a) reads the pair of a step left begun only, so a step still planned whose entry does not read back closes with the run, and stays planned (G-5-23; skeptic over the reader, C3)',
+		'file'    => $ru,
+		'search'  => "\$pair = 'begun' !== \$step['state'] || null !== \$step['pair_id'] ?",
+		'replace' => "\$pair = ( 'begun' !== \$step['state'] && 'revert' !== \$step['op'] ) || null !== \$step['pair_id'] ?",
+		'run'     => $it( 'SyncRunTest', 'testAWayBackOnRecordsThatDoNotReadBackIsRefusedAndNoStepGoesBackTwice' ),
+		'expect'  => '/testAWayBackOnRecordsThatDoNotReadBackIsRefusedAndNoStepGoesBackTwice/',
+	),
+	array(
 		'id'      => 'lauf/engine-save-ahead',
 		'clause'  => 'boundary(): nothing is written without the journal ahead of the first part; the step failed with its reason (P2)',
 		'file'    => $en,

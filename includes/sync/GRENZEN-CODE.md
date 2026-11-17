@@ -825,8 +825,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     nicht zurückgestellt (G-24); das Journal hält für ein Theme kein `active`. Seit Teil F, Abschnitt 2 nennt die
     Antwort des Rückweg-Schritts ein Theme, das dieser Aufruf als nicht aktiv liest (weder Theme der Site noch sein
     Eltern-Theme, Wortlaut wie V4), mit dem Weg (wp-admin), ohne einen Wechsel zu behaupten und auch für ein Theme, das
-    nie aktiv war («where it was active before the swap»); wo das nicht gelesen wird (`runs()` null), sagt sie nichts
-    dazu (Option B).
+    nie aktiv war («where it, or a child theme of it, was active before the swap»; Skeptiker Leser, C2: der Weg führt
+    zum Theme, das lief); wo das nicht gelesen wird (`runs()` null), sagt sie nichts dazu (Option B).
   - `accept` wirkt nur für einen Schritt, dessen Rückweg geplant wird. Eine Nummer, die kein Schreibschritt des Laufs
     ist, nicht in `steps` steht, schon zurückgenommen wurde, oder `accept` für einen Lauf der Inhalte bleibt ohne
     Wirkung und wird nicht abgelehnt (wie `steps`). Bei der Fortsetzung eines unterbrochenen Rückwegs gilt der Eintrag
@@ -963,10 +963,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-22 Reichweite der Wächter
 
-- **Fundstelle:** Kopf von `tests/StoreRemoverGuardTest.php` (`:32`–`:57`), `walk()` (`:109`, `nikic/php-parser`),
-  `callers()` (`:231`), `holding()` (`:250`), `testNoShippedFileNamesARemoverAsAValue()` (`:318`), die Wächter von
-  `root()` (`:354`), `uninstall()` (`:437`) und `opens()` (`:449`); `tests/SyncSaidScanTest.php` `UNSEEN` (`:113`,
-  `:114`). Zeilen am Stand des Abschnitts «ein Leser», Commit 0.
+- **Fundstelle:** Kopf von `tests/StoreRemoverGuardTest.php` (`:32`–`:56`), `walk()` (`:111`, `nikic/php-parser`),
+  `callers()` (`:267`), `naming()` (`:286`), `testNoShippedFileNamesARemoverAsAValue()` (`:351`), die Wächter von
+  `root()` (`:387`), `$building` (`:409`), `remove()` (`:443`), `uninstall()` (`:477`), `opens()` (`:489`);
+  `tests/SyncSaidScanTest.php` `UNSEEN` (`:113`, `:114`). Zeilen am Stand der Behebung nach dem Skeptiker Leser.
 - **Quelle:** Notiz G-20 (D3b-2c, Skeptiker C) und G-14 (D3b-1); Bauzettel G, V1 bis V3, gebaut in Teil G,
   Abschnitt 1 (echter Parser, Entscheid der Steuerung 16.11. 18:31).
 - **Was:**
@@ -979,12 +979,13 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     als String hält, prüft `testNoShippedFileNamesARemoverAsAValue()`; ein zusammengesetzter bleibt ungesehen. Im
     Tausch ist ein Name nur bei der Uhr (`call_user_func( self::$clock )`) und den eigenen Closures in
     `given_rights()` ein Wert.
-  - Die Wächter von `root()`, `uninstall()` und der Schreiber eines Bereichs (`open()`) lesen über `walk()` (Skeptiker
-    F2+G, B1: als Text folgten sie keinem Import). Text lesen nur noch Wächter, deren Name kein Import umbenennen kann:
-    `holding()` für die Naht der Ablage (`AB_MCP_Protected_Store_Calls`) und den Ordner `ab-mcp-store` (ein Import
-    nennt den Namen selbst), für `::delete_path(` und `::temp_file(` (Name der Methode); dazu die Marke `$building`
-    eines Baums und der eine Aufruf von `remove()` mit einem Bereich als Variable. Der Aufruf über die Naht des
-    Vorschlags (`->open(`, `->remove(`) zählt nur in dessen Datei. `named_by_swap()`
+  - Kein Wächter dieses Tests liest den Quelltext als Text (Skeptiker F2+G, B1; Skeptiker Leser, B1: der Text
+    `::delete_path(` übersah `::delete_path (`). Alle lesen über `walk()`: die Aufrufe (`callers()`, `opens()`, auch
+    `delete_path()`, `temp_file()` und `remove()` mit einem Bereich als Variable), die Namen und die Werte der Strings
+    einer Datei (`naming()`: die Naht `AB_MCP_Protected_Store_Calls`, der Ordner `ab-mcp-store`) und das Schreiben
+    einer statischen Eigenschaft (die Marke `$building`). Ungesehen bleiben, wie oben, ein Name als Wert zur Laufzeit,
+    ein zusammengesetzter String und eine Marke über eine Referenz. Der Aufruf über die Naht des Vorschlags
+    (`->open(`, `->remove(`) zählt nur in dessen Datei. `named_by_swap()`
     (`includes/class-protected-store.php:3001`) gibt dem Tausch den Ordner der Marken, einen Pfad in der Ablage, und
     zählt nicht als `root()`. Zwei Stellen des Tauschs stehen mit Begründung in `UNSEEN` des Scans der Sätze.
   - Sechs weitere Token-Scanner vergleichen Klassennamen wörtlich (`tests/SourceScan.php`, `SyncSafeCallsTest.php`,
@@ -1014,9 +1015,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - S2 (mit F4 B): Ein Rückweglauf, dessen Datensatz nicht zurückliest, sperrt den Rückweg jedes älteren Laufs der Site
     (welchen Lauf er zurücknimmt, ist dann nicht bekannt), bis der Host den Datensatz prüft; den Rückweg eines jüngeren
     Laufs sperrt er nicht.
-  - S5 mit S7: Ein unterbrochener Rückweg, dessen offener Schritt nicht zurückliest, wird weder fortgesetzt noch über
-    Weg (a) geschlossen; der Lauf bleibt `interrupted` und offen, bis der Host den Datensatz prüft (beim Code seit dem
-    Rest von B4 ebenso).
+  - S5 mit S7: Ein unterbrochener Rückweg, dessen offener Schritt nicht zurückliest, wird nicht fortgesetzt. Weg (a)
+    liest nur begonnene Schritte: liest einer nicht, lehnt er ab, und der Lauf bleibt `interrupted`, bis der Host den
+    Datensatz prüft (beim Code seit dem Rest von B4 ebenso). Liest nur ein geplanter nicht, schliesst Weg (a) den Lauf;
+    der Schritt bleibt `planned` im geschlossenen Lauf, und der Rückweg des Laufs, der schrieb, lehnt danach an S3 ab
+    (Skeptiker Leser, C3).
   - Folge von C3 für Inhalte: Liest ein Feld des Laufs, der schrieb, nicht zurück, das der Rückweg der Inhalte nicht
     braucht (sein `budget`), lehnt der Leser trotzdem ab (Planen, Schritt, Fortsetzen, Weg (a)); der Schritt bleibt
     `planned`, ein unterbrochener Rückweg offen wie bei S5.

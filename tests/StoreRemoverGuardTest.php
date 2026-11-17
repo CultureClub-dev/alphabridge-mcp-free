@@ -47,14 +47,13 @@
  * unlink, rmdir, rename, mkdir and wp_delete_file no shipped file holds
  * the name as a string (testNoShippedFileNamesARemoverAsAValue); a name put
  * together ('un' . 'link') stays unseen. Its own test reads the spellings
- * in tests/fixtures/t7-walker/. The guards of root(), uninstall() and of
- * the writers of an area (open()) read the walk (the skeptic over F2 and
- * G, B1); the text of the code, comments left out, is read only where no
- * import can rename what is sought (holding(): the calls of the store and
- * the folders of the store by name, an import of them holds the name too;
- * ::delete_path( and ::temp_file(, the name of the method), and for the
- * mark of a tree being built and the one call of remove() with an area
- * named by a variable.
+ * in tests/fixtures/t7-walker/. Every guard here reads the walk, none the
+ * text of the code (the skeptic over F2 and G, B1; the skeptic over the
+ * reader, B1: a text missed ::delete_path ( with a space): besides the
+ * calls, the names a file writes (a class named anywhere in its code), its
+ * strings (with the parts of a string that holds variables, and HTML
+ * outside PHP) and the writes of a static property (the mark of a tree
+ * being built).
  *
  * What the code does at run time is tests/integration/StoreRemoverTest.php
  * and StoreTreesTest.php.
@@ -100,11 +99,14 @@ final class StoreRemoverGuardTest extends TestCase {
 	 * file): kind (function, method, static, new), name in lower case, of
 	 * (the class of a static call; as written where it is a value), the class
 	 * and the named function it stands in, its first and second argument as
-	 * written and its line, in the order of the file; and the lines of every
-	 * string of the file by its text in lower case without a leading \ (V1).
-	 * Each file is parsed once per process.
+	 * written and its line, in the order of the file; the lines of every
+	 * string of the file (a part of one with variables, HTML outside PHP) by
+	 * its text in lower case without a leading \ (V1); every name the file
+	 * writes, in lower case, as PHP resolves it; and every write of a static
+	 * property (Class::$name, or an element of it: its first key) with the
+	 * value as written. Each file is parsed once per process.
 	 *
-	 * @return array{calls:list<array{kind:string,name:string,of:string,class:?string,function:?string,args:string,second:string,line:int}>,strings:array<string,list<int>>}
+	 * @return array{calls:list<array{kind:string,name:string,of:string,class:?string,function:?string,args:string,second:string,line:int}>,strings:array<string,list<int>>,names:array<string,true>,sets:list<array{of:string,name:string,key:string,value:string,class:?string,function:?string}>}
 	 */
 	private static function walk( string $file ): array {
 		static $walked = array();
@@ -125,6 +127,10 @@ final class StoreRemoverGuardTest extends TestCase {
 			public array $calls = array();
 			/** @var array<string,list<int>> */
 			public array $strings = array();
+			/** @var array<string,true> */
+			public array $names = array();
+			/** @var list<array<string,mixed>> */
+			public array $sets = array();
 			/** @var list<array{0:Node,1:string}> The classes, traits and named functions the walk is in, with their names. */
 			private array $in = array();
 
@@ -135,8 +141,12 @@ final class StoreRemoverGuardTest extends TestCase {
 					$this->in[] = array( $node, $node->namespacedName?->toString() ?? 'class@anonymous' );
 				} elseif ( $node instanceof Node\Stmt\Function_ || $node instanceof Node\Stmt\ClassMethod ) {
 					$this->in[] = array( $node, $node->name->toString() );
-				} elseif ( $node instanceof Node\Scalar\String_ ) {
+				} elseif ( $node instanceof Node\Scalar\String_ || $node instanceof Node\InterpolatedStringPart || $node instanceof Node\Stmt\InlineHTML ) {
 					$this->strings[ strtolower( ltrim( $node->value, '\\' ) ) ][] = $node->getStartLine();
+				} elseif ( $node instanceof Node\Name ) {
+					$this->names[ strtolower( $node->toString() ) ] = true;
+				} elseif ( $node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef || $node instanceof Node\Expr\AssignOp ) {
+					$this->set( $node->var, $node->expr );
 				} elseif ( $node instanceof Node\Expr\FuncCall || $node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall ) {
 					$this->add( $node instanceof Node\Expr\FuncCall ? 'function' : 'method', $node->name, '', $node->args );
 				} elseif ( $node instanceof Node\Expr\StaticCall ) {
@@ -159,15 +169,7 @@ final class StoreRemoverGuardTest extends TestCase {
 				if ( $name instanceof Node\Expr ) {
 					return;
 				}
-				$class    = null;
-				$function = null;
-				foreach ( $this->in as [ $in, $named ] ) {
-					if ( $in instanceof Node\Stmt\ClassLike ) {
-						$class = $named;
-					} else {
-						$function = $named;
-					}
-				}
+				[ $class, $function ] = $this->place();
 				$this->calls[ $name->getStartFilePos() ] = array(
 					'kind'     => $kind,
 					'name'     => strtolower( 'new' === $kind ? $this->class_of( $name ) : $name->toString() ),
@@ -178,6 +180,35 @@ final class StoreRemoverGuardTest extends TestCase {
 					'second'   => isset( $args[1] ) ? $this->text( $args[1] ) : '',
 					'line'     => $name->getStartLine(),
 				);
+			}
+
+			/** A write of a static property, or of an element of it; any other target is none. */
+			private function set( Node\Expr $var, Node\Expr $value ): void {
+				$key = '';
+				while ( $var instanceof Node\Expr\ArrayDimFetch ) {
+					$key = null === $var->dim ? '' : $this->text( $var->dim );
+					$var = $var->var;
+				}
+				if ( $var instanceof Node\Expr\StaticPropertyFetch && $var->name instanceof Node\VarLikeIdentifier ) {
+					[ $class, $function ] = $this->place();
+					$this->sets[]         = array(
+						'of'       => $this->class_of( $var->class ),
+						'name'     => strtolower( $var->name->toString() ),
+						'key'      => $key,
+						'value'    => $this->text( $value ),
+						'class'    => $class,
+						'function' => $function,
+					);
+				}
+			}
+
+			/** The class and the named function the walk is in. */
+			private function place(): array {
+				$out = array( null, null );
+				foreach ( $this->in as [ $in, $named ] ) {
+					$out[ $in instanceof Node\Stmt\ClassLike ? 0 : 1 ] = $named;
+				}
+				return $out;
 			}
 
 			/** The class of a static call or of new: self and static the class they stand in, parent its extends. */
@@ -210,7 +241,12 @@ final class StoreRemoverGuardTest extends TestCase {
 		ksort( $walker->calls );
 		// Kept as one string a file: the arrays of all shipped files would
 		// not fit beside PHPUnit under a memory_limit of 128 MB.
-		$out             = array( 'calls' => array_values( $walker->calls ), 'strings' => $walker->strings );
+		$out             = array(
+			'calls'   => array_values( $walker->calls ),
+			'strings' => $walker->strings,
+			'names'   => $walker->names,
+			'sets'    => $walker->sets,
+		);
 		$walked[ $file ] = serialize( $out );
 		return $out;
 	}
@@ -246,21 +282,18 @@ final class StoreRemoverGuardTest extends TestCase {
 		return $files;
 	}
 
-	/** The files whose code (comments left out) holds a text. */
-	private static function holding( string $text ): array {
-		$found = array();
-		foreach ( self::shipped() as $file ) {
-			$code = '';
-			foreach ( token_get_all( (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) ) as $t ) {
-				if ( ! ( is_array( $t ) && in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) ) {
-					$code .= is_array( $t ) ? $t[1] : $t;
+	/** The shipped files (or those given) whose walk names a name, or holds a string with it, in any case. */
+	private static function naming( string $text, ?array $files = null ): array {
+		$text = strtolower( $text );
+		return array_values(
+			array_filter(
+				$files ?? self::shipped(),
+				static function ( string $file ) use ( $text ): bool {
+					$walk = self::walk( $file );
+					return isset( $walk['names'][ $text ] ) || array() !== array_filter( array_keys( $walk['strings'] ), static fn( $s ): bool => str_contains( (string) $s, $text ) );
 				}
-			}
-			if ( false !== stripos( $code, $text ) ) {
-				$found[] = $file;
-			}
-		}
-		return $found;
+			)
+		);
 	}
 
 	public function testTheWalkSeesTheCallsOfTheStore(): void {
@@ -350,10 +383,10 @@ final class StoreRemoverGuardTest extends TestCase {
 				}
 			}
 		}
-		self::assertSame( array( 'includes/class-protected-store.php' ), self::holding( 'AB_MCP_Protected_Store_Calls' ), 'No other shipped file names the calls of the store.' );
+		self::assertSame( array( 'includes/class-protected-store.php' ), self::naming( 'AB_MCP_Protected_Store_Calls' ), 'No other shipped file names the calls of the store.' );
 		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::callers( 'static', 'root', 'AB_MCP_Protected_Store' ), 'Only the budget and the measurement get the folder of the store (and the store itself).' );
-		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( '::delete_path(' ), 'delete_path() where a file of the store goes.' );
-		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( '::temp_file(' ) );
+		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::callers( 'static', 'delete_path', 'AB_MCP_Protected_Store' ), 'delete_path() where a file of the store goes.' );
+		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::callers( 'static', 'temp_file', 'AB_MCP_Protected_Store' ) );
 	}
 
 	public function testNothingOfTheStoreIsWrittenThroughThePayloadFileButTheControlFileBesideIt(): void {
@@ -375,8 +408,13 @@ final class StoreRemoverGuardTest extends TestCase {
 
 	public function testATreeIsCopiedOnlyByPutTreeAndTheStoreRenamesOnlyWhereItMay(): void {
 		$store = self::FILES[0];
-		$code  = (string) file_get_contents( dirname( __DIR__ ) . '/' . $store );
-		self::assertSame( 1, preg_match_all( '/self::\$building\[\s*\$place\s*\]\s*=\s*true;/', $code ), 'A tree is marked as built in one place.' );
+		$marks = array();
+		foreach ( self::walk( $store )['sets'] as $set ) {
+			if ( 'building' === $set['name'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $set['of'] ) ) {
+				$marks[] = $set['class'] . '::' . $set['function'] . ' [' . $set['key'] . '] = ' . $set['value'];
+			}
+		}
+		self::assertSame( array( 'AB_MCP_Protected_Store::put_tree [$place] = true' ), $marks, 'A tree is marked as built in one place.' );
 		self::assertSame( array( 'AB_MCP_Protected_Store::put_tree' ), self::places( $store, 'static', 'copy_tree', 'AB_MCP_Protected_Store' ), 'A tree is copied by put_tree() only.' );
 		self::assertSame(
 			array( 'AB_MCP_Protected_Store::ensure', 'AB_MCP_Protected_Store::put_back', 'AB_MCP_Protected_Store::put_back', 'AB_MCP_Protected_Store::put_back', 'AB_MCP_Protected_Store::write_file' ),
@@ -411,18 +449,20 @@ final class StoreRemoverGuardTest extends TestCase {
 		// shipped code removes a group of backups or stage by it (a backup
 		// goes by its retention only, Z8).
 		$areas = array();
+		$seam  = array();
 		foreach ( self::shipped() as $file ) {
 			foreach ( self::calls( $file ) as $call ) {
-				if ( 'remove' === $call['name'] && ( ( 'static' === $call['kind'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $call['of'] ) ) || ( 'method' === $call['kind'] && 'includes/sync/class-sync-proposal.php' === $file ) ) ) {
-					$areas[ trim( $call['args'] ) ] = true;
+				if ( 'remove' === $call['name'] && 'static' === $call['kind'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $call['of'] ) ) {
+					$areas[ trim( $call['args'] ) ][] = $call['class'] . '::' . $call['function'];
+				} elseif ( 'remove' === $call['name'] && 'method' === $call['kind'] && 'includes/sync/class-sync-proposal.php' === $file ) {
+					$seam[ trim( $call['args'] ) ] = true;
 				}
 			}
 		}
 		ksort( $areas );
 		self::assertSame( array( '$area', "'in'", "'out'", "'reports'" ), array_keys( $areas ), 'The areas remove() is called with.' );
-		$proposal = (string) file_get_contents( dirname( __DIR__ ) . '/includes/sync/class-sync-proposal.php' );
-		self::assertSame( 1, substr_count( $proposal, 'return AB_MCP_Protected_Store::remove( $area, $gid );' ), 'The one call with an area named by a variable: the calls of the proposal, which pass reports.' );
-		self::assertSame( 0, preg_match( "/->remove\\(\\s*'(?!reports')/", $proposal ) );
+		self::assertSame( array( 'AB_MCP_Sync_Proposal_Calls::remove' ), $areas['$area'], 'The one call with an area named by a variable: the calls of the proposal,' );
+		self::assertSame( array( "'reports'" ), array_keys( $seam ), 'which pass reports.' );
 	}
 
 	public function testTheUninstallReachesTheStoreOnlyThroughItsOneFunction(): void {
@@ -435,7 +475,7 @@ final class StoreRemoverGuardTest extends TestCase {
 		}
 		self::assertSame( array(), $others, 'And nothing else of the store.' );
 		self::assertSame( array( 'uninstall.php' ), self::callers( 'static', 'uninstall', 'AB_MCP_Protected_Store' ), 'No shipped code but uninstall.php calls it (Pro calls it from its own uninstall).' );
-		self::assertNotContains( 'uninstall.php', self::holding( 'ab-mcp-store' ), 'uninstall.php names no folder of the store.' );
+		self::assertSame( array(), self::naming( 'ab-mcp-store', array( 'uninstall.php' ) ), 'uninstall.php names no folder of the store.' );
 	}
 
 	/**

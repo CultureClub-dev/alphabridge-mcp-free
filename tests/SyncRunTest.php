@@ -1795,8 +1795,9 @@ final class SyncRunTest extends TestCase {
 	 * Prüft: the one reader of the way back (AB_MCP_Sync_Run::wrote(), here
 	 * without $whole, so without the database) refuses a record of a run
 	 * that does not read back (its budget, its plan), a plan that is none, a
-	 * run of the way back that names no run or whose plan does not read
-	 * back, an entry of a step of the way back that does not read back,
+	 * run of the way back that names no run (none, or reverts[0] no whole
+	 * number of 1 or more, as the clean-up reads it: skeptic over the reader,
+	 * C4) or whose plan does not read back, an entry of a step of the way back that does not read back,
 	 * names no step or another run, and a write step whose result does not
 	 * read back, each with its code, the run or step and the fields; where
 	 * all reads, it gives the run that wrote and the step as the way back
@@ -1836,7 +1837,9 @@ final class SyncRunTest extends TestCase {
 			'plan null'                      => array( $run( 'push', 'null' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run7, 'plan' ) ) ),
 			'way back without reverts'       => array( $run( 'revert', '{"items":[]}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run9, 'plan' ) ) ),
 			'way back, plan does not read'   => array( $run( 'revert', '{"reverts":' . $f . '}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run9, 'plan' ) ) ),
-			'entry'                          => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":' . $f . '}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 9 (parts) does not read back as it was written, so which step it takes back' ) ),
+			'way back, reverts[0] is 0'      => array( $run( 'revert', '{"reverts":[0]}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run9, 'plan' ) ) ),
+			'way back, reverts[0] is a text' => array( $run( 'revert', '{"reverts":["7"]}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run9, 'plan' ) ) ),
+			'entry'                          => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":' . $f . '}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 9 (parts) does not read back as it was written, so nothing is decided on it: no way back that rests on it is planned or put back.' ) ),
 			'entry without forward_seq'      => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":7}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 9 (parts)' ) ),
 			'entry of another run'           => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":8,"forward_seq":3}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 9 (parts)' ) ),
 			'write step, result'             => array( $run( 'push', '{"objects":[]}' ), $step( 'write', '{"object":{"kind":"post"}}', '{"a":' . $f . '}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 7 (result)' ) ),

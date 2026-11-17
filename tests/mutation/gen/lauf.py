@@ -748,6 +748,8 @@ e('l-weg-a-paar', 'close_checked_on(): the refusal of the reader for the pair of
   "\t\t\tif ( is_wp_error( $code ) || is_wp_error( $pair ) ) {", "\t\t\t$pair = is_wp_error( $pair ) ? null : $pair;\n\t\t\tif ( is_wp_error( $code ) ) {", 'it', WB)
 e('l-schluss-paar', 'closed_note(): the close of a way back names no pair as unclear; a failed step leaves its pair as it was (G2, the steering 16.11. 23:26)', EN,
   "'Check those objects in wp-admin (each part left names its value before); remove a rest by hand where it should go.'", "'Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go.'", 'it', WB)
+e('lb-weg-a-geplant', 'close_checked_on(): way (a) reads the pair of a step left begun only, so a step still planned whose entry does not read back closes with the run, and stays planned (G-5-23; skeptic over the reader, C3)', RU,
+  "$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ?", "$pair = ( 'begun' !== $step['state'] && 'revert' !== $step['op'] ) || null !== $step['pair_id'] ?", 'it', WB)
 
 # ------------------------------- GitHub Codex round 9 on free#137 (one P2)
 # Every checkpoint of the journal is checked; the boundary stops before any
