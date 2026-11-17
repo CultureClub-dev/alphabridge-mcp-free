@@ -9550,10 +9550,6 @@ msgid "steps is a list of the seqs of the write steps of the run to take back; w
 msgstr "steps ist eine Liste der seqs der Schreibschritte des Laufs, die zurückgenommen werden sollen; ohne sie jeder Schritt, der geschrieben hat. action=status verwenden, um sie aufzulisten."
 
 #, php-format
-msgid "The journal of step %1$d of run %2$d does not read back as it was written (a marker of its bytes that does not hold), so no way back is planned on it and nothing is taken back. Pass steps without %1$d to plan the way back of the other steps that wrote, and check its object by hand in wp-admin; its backup in the protected store holds the object as it was before the step."
-msgstr "Das Journal von Schritt %1$d aus Lauf %2$d liest sich nicht so zurück, wie es geschrieben wurde (eine Prüfmarke seiner Bytes stimmt nicht); darum wird darauf kein Rückweg geplant und nichts zurückgenommen. steps ohne %1$d übergeben, um den Rückweg der anderen Schritte zu planen, die geschrieben haben, und sein Objekt von Hand in wp-admin prüfen; seine Sicherung in der geschützten Ablage enthält das Objekt, wie es vor dem Schritt war."
-
-#, php-format
 msgid "Step %1$d is %2$s and wrote nothing: there is nothing to take back for it. Choose a step that wrote (action=status lists them)."
 msgstr "Schritt %1$d ist %2$s und hat nichts geschrieben: Für ihn gibt es nichts zurückzunehmen. Einen Schritt wählen, der geschrieben hat (action=status listet sie)."
 

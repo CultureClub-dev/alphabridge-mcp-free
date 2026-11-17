@@ -1829,7 +1829,8 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'parts' ), AB_MCP_Sync_Run::step( $run_id, $w1 )['unread'] );
 		self::assertSame( array( 'parts' ), self::step( self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) ), $w1 )['unread'], 'The status names it.' );
 		$text = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) ), 'ab_mcp_sync_revert_unread' );
-		self::assertStringContainsString( sprintf( 'Pass steps without %d', $w1 ), $text, 'The way.' );
+		self::assertStringStartsWith( sprintf( 'The record of step %1$d of run %2$d (parts) does not read back as it was written', $w1, $run_id ), $text, 'The one reader names the step.' );
+		self::assertStringEndsWith( sprintf( 'pass steps without %d.', $w1 ), $text, 'The way.' );
 		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'steps' => array( $w2 ) ) );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
 		self::assertSame( array( $w2 ), array_column( $preview['preview']['steps'], 'seq' ), 'The other step that wrote is planned.' );

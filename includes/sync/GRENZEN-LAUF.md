@@ -949,13 +949,16 @@ Ablehnung entsteht, nennt sie den Weg.
   gilt als nicht vorhanden und steht in `unread` (auch in `status`): kein
   verändernder Aufruf entscheidet auf einem Lauf mit nicht lesbarem Plan oder
   nicht lesbarer Reservierung (`ab_mcp_sync_run_unread`, nichts geändert),
-  und der Plan des Rückwegs lehnt einen Schritt mit nicht lesbarem Journal ab
-  (`ab_mcp_sync_revert_unread`, Weg: `steps` ohne ihn, das Objekt von Hand
-  prüfen; die Sicherung hält den Stand davor). Eine Antwort zeigt einen
+  und der Rückweg liest Lauf und Schritte über den einen Leser
+  (`AB_MCP_Sync_Run::wrote()`): ein Datensatz, der nicht zurückliest, wird
+  abgelehnt (`ab_mcp_sync_run_unread`, `ab_mcp_sync_revert_unread`; Weg: den
+  Host die Tabelle prüfen lassen, das Objekt von Hand prüfen, beim Planen
+  `steps` ohne den Schreibschritt), nie als leer gelesen. Eine Antwort zeigt einen
   Teilnamen ausserhalb von UTF-8 so, wie `wp_json_encode()` ihn für JSON
   umwandelt; das Journal hält die Bytes. Prüffälle
   `testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack`,
-  `testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed` (Unit),
+  `testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed`,
+  `testTheReaderOfTheWayBackRefusesWhatDoesNotReadBackAndNeverReadsItAsEmpty` (Unit),
   `testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall` (Integration).
 
 ## Lauf und Plan (Entscheide 15, 16, 32)

@@ -540,9 +540,9 @@ e('e-platz', 'restored(): the place of the new version not given (open() or put_
 # ------------------------------------------- the Behebung after the skeptic E1 (B3, B4, C2)
 e('e-plan-schritte', 'Tausch::back(): the way of the other steps (steps without the swap) only in a plan, never where the step of the way back, its continuation or way (a) take the same refusal again (skeptic E1, B3)', CS,
   "\t\t\tif ( 'plan' === $at ) {", "\t\t\tif ( true ) {", 'coderun', 'testAJournalThatNoLongerReadsAsASwapFailsItsStepOfTheWayBackWithNothingMoved')
-e('e-plan-ungelesen', 'Revert::code(): a record of the run that wrote that does not read back, or a plan that is none, is refused, never taken for a run of the contents past the one entrance (N12, fail closed; skeptic E1, B4)', RV,
-  "\t\tif ( isset( $forward['unread'] ) || ! is_array( $forward['plan'] ) || 'revert' === $forward['type'] ) {\n",
-  "\t\tif ( ! is_array( $forward['plan'] ) ) {\n\t\t\treturn null;\n\t\t}\n\t\tif ( 'revert' === $forward['type'] ) {\n", 'coderun', 'testARunOfTheCodeWhosePlanDoesNotReadBackIsNeitherPlannedBackNorRunBackNorLedOn')
+e('e-plan-ungelesen', 'Revert::code(): a record of the run that wrote that does not read back, or a plan that is none, is refused, never taken for a run of the contents past the one entrance (N12, fail closed; skeptic E1, B4; through the one reader since the review before H)', RV,
+  "\t\t\treturn is_wp_error( $took ) ? $took : null;\n",
+  "\t\t\treturn is_wp_error( $took ) && 'ab_mcp_sync_run_unread' !== $took->get_error_code() ? $took : null;\n", 'coderun', 'testARunOfTheCodeWhosePlanDoesNotReadBackIsNeitherPlannedBackNorRunBackNorLedOn')
 e('e-fremde-engine', 'restore(): a WP_Error of engine() (another engine under the name code) is the answer of the way back as it is, never a refusal of the rights (skeptic E1, C2)', CS,
   "\t\tif ( ! $engine instanceof AB_MCP_Sync_Code_Kind ) {\n\t\t\treturn $engine;\n\t\t}\n\t\t$rights = $engine->rights(",
   "\t\t$rights = is_wp_error( $engine ) ? $engine : $engine->rights(", 'coderun', 'testTheWayBackAsksTheRightsBeforeItsFirstWriteAndStaysPlannedWithoutThem')
@@ -596,11 +596,11 @@ e('f-t1-marken', 'Revert::code(): the refusal without the entrance names the fol
 
 # ------------------------------------------- the rest of B4: a step of the way back whose entry does not read back (decision of the lead)
 E_EU = 'testAStepOfTheWayBackWhoseEntryDoesNotReadBackStillGoesThroughTheOneEntrance'
-e('f-b4-rueckweg-lauf', 'Revert::code(): for a run of the way back of its own the run that wrote is the one its plan names (reverts), never what a step of it names, so a step whose entry does not read back still goes through the one entrance (N12, fail closed; rest of B4)', RV,
-  "\t\t$id      = 'revert' === $run['type'] && isset( $run['plan']['reverts'][0] ) ? (int) $run['plan']['reverts'][0] : (int) $run['run_id'];",
-  "\t\t$id      = 'plan' !== $at && is_array( $step['parts'] ) && isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run['run_id'];", 'coderun', E_EU)
-e('f-b4-ohne-reverts', 'Revert::code(): a run of the way back whose plan names no run it takes back is not known and refused, never taken for a run of the contents (fail closed; rest of B4)', RV,
-  " || ! is_array( $forward['plan'] ) || 'revert' === $forward['type'] ) {", " || ! is_array( $forward['plan'] ) ) {", 'coderun', E_EU)
+e('f-b4-rueckweg-lauf', 'Run::wrote() for Revert::code(): for a run of the way back of its own the run that wrote is the one its plan names (reverts), never what a step of it names or the run itself, so a step whose entry does not read back still goes through the one entrance (N12, fail closed; rest of B4)', RU,
+  "\t\t$id   = 'revert' === $run['type'] && isset( $run['plan']['reverts'][0] ) ? (int) $run['plan']['reverts'][0] : (int) $run['run_id'];",
+  "\t\t$id   = is_array( $step ) && is_array( $step['parts'] ) && isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run['run_id'];", 'coderun', E_EU)
+e('f-b4-ohne-reverts', 'Run::wrote() for Revert::code(): a run of the way back whose plan names no run it takes back is not known and refused, never taken for a run of the contents (fail closed; rest of B4)', RU,
+  " && ( $i > 0 || $id === (int) $of['run_id'] ) ) ) {", " && $i > 0 ) ) {", 'coderun', E_EU)
 e('f-b4-satz-schritt', 'Tausch::back(): a step of the way back whose entry does not read back is named itself in the sentence of the entrance, never as a step 0 (rest of B4)', CS,
   "(int) ( $what['forward_seq'] ?? $step['seq'] ),", "(int) ( $what['forward_seq'] ?? 0 ),", 'coderun', E_EU)
 
@@ -614,6 +614,19 @@ e('f-thema-satz', 'restored(): a theme is named as not running after its way bac
   "\t\t\tif ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {", "\t\t\tif ( 'theme' === $unit['kind'] ) {", 'coderun', E_F58)
 e('f-thema-satz-null', 'restored(): where whether the theme runs is not read (runs() null), the way back says nothing of it (option B; Teil F, section 2)', CS,
   "\t\t\tif ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {", "\t\t\tif ( 'theme' === $unit['kind'] && true !== self::runs( 'theme', $unit['ref'] ) ) {", 'coderun', E_F58)
+
+# ------------------------------------------- the reader of the way back (review before H, section 1): AB_MCP_Sync_Run::wrote()
+L_RD = 'testTheReaderOfTheWayBackRefusesWhatDoesNotReadBackAndNeverReadsItAsEmpty'
+e('l-lauf-ungelesen', 'Run::wrote(): a record of a run that does not read back (its budget) is refused, never read as it is (the reader, skeptic E1b, B1; C3)', RU,
+  "isset( $of['unread'] ) || ", '', 'run', L_RD)
+e('l-plan-kein-array', 'Run::wrote(): a plan that is none is refused, never read as a run of the contents (the reader)', RU,
+  "! is_array( $of['plan'] ) || ", '', 'run', L_RD)
+e('l-eintrag-ungelesen', 'Run::wrote(): a record of a step that does not read back (the result of a write step) is refused (the reader; F3 A)', RU,
+  "\t\tif ( isset( $step['unread'] ) || $seq < 1", "\t\tif ( $seq < 1", 'run', L_RD)
+e('l-eintrag-ohne-schritt', 'Run::wrote(): an entry of a step of the way back that names no step it takes back is refused, never read as step 0 (the reader)', RU,
+  " || $seq < 1 || ", ' || ', 'run', L_RD)
+e('l-fremder-lauf', 'Run::wrote(): an entry that names another run than the run that wrote is refused, never left out (the reader)', RU,
+  " || (int) ( $what['forward_run'] ?? $id ) !== $id ) {", ' ) {', 'run', L_RD)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

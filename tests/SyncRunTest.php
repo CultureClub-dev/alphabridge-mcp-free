@@ -56,6 +56,7 @@ use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use WP_Error;
@@ -1788,6 +1789,62 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( array( 'plan' ), $run['unread'] );
 		self::assertSame( array( 'bytes' => 5 ), $run['budget'] );
 		self::assertArrayNotHasKey( 'unread', AB_MCP_Sync_Run::decode( array( 'run_id' => '4', 'budget' => null, 'plan' => '{"objects":[]}' ) ) );
+	}
+
+	/**
+	 * Prüft: the one reader of the way back (AB_MCP_Sync_Run::wrote(), here
+	 * without $whole, so without the database) refuses a record of a run
+	 * that does not read back (its budget, its plan), a plan that is none, a
+	 * run of the way back that names no run or whose plan does not read
+	 * back, an entry of a step of the way back that does not read back,
+	 * names no step or another run, and a write step whose result does not
+	 * read back, each with its code, the run or step and the fields; where
+	 * all reads, it gives the run that wrote and the step as the way back
+	 * read them before (the run itself or reverts[0], forward_seq or the
+	 * seq).
+	 * Sonst: a way back would read a record that does not read back as
+	 * empty: a step not taken back, a step planned a second time, a run of
+	 * the code taken for one of the contents (skeptic E1b, B1).
+	 *
+	 * @param array      $run  The row of the run.
+	 * @param array|null $step The row of the step, or null.
+	 * @param mixed      $want The code and the words of the refusal, or what the reader gives.
+	 */
+	#[DataProvider( 'reader_rows' )]
+	public function testTheReaderOfTheWayBackRefusesWhatDoesNotReadBackAndNeverReadsItAsEmpty( array $run, ?array $step, $want ): void {
+		$took = AB_MCP_Sync_Run::wrote( AB_MCP_Sync_Run::decode( $run ), null === $step ? null : AB_MCP_Sync_Run::decode_step( $step ), false );
+		if ( is_string( $want[0] ) ) {
+			self::assertInstanceOf( WP_Error::class, $took );
+			self::assertSame( $want[0], $took->get_error_code() );
+			self::assertStringStartsWith( $want[1], $took->get_error_message() );
+			return;
+		}
+		self::assertSame( array( 'run' => $want[0], 'seq' => $want[1], 'record' => null ), $took );
+	}
+
+	/** The rows of the reader: a run of 7 (push) or 9 (its way back, reverts [7]), a step 2. */
+	public static function reader_rows(): array {
+		$run  = static fn( string $type, ?string $plan, ?string $budget = null ): array => array( 'run_id' => 'revert' === $type ? '9' : '7', 'type' => $type, 'budget' => $budget, 'plan' => $plan );
+		$step = static fn( string $op, ?string $parts, ?string $result = null ): array => array( 'run_id' => '7', 'seq' => '2', 'pair_id' => null, 'op' => $op, 'phase' => '0', 'depends' => '[]', 'state' => 'done', 'parts' => $parts, 'pair_before' => null, 'result' => $result, 'time' => '0' );
+		$f    = '{"~f":"000000000000f03f"}';
+		$run7 = 'The record of run 7 (%s) does not read back as it was written, so nothing is decided on it';
+		$run9 = 'The record of run 9 (%s) does not read back as it was written, so nothing is decided on it';
+		$back = '{"reverts":[7],"items":[]}';
+		return array(
+			'budget'                         => array( $run( 'push', '{"objects":[]}', '{"bytes":' . $f . '}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run7, 'budget' ) ) ),
+			'plan'                           => array( $run( 'push', '{"objects":' . $f . '}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run7, 'plan' ) ) ),
+			'plan null'                      => array( $run( 'push', 'null' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run7, 'plan' ) ) ),
+			'way back without reverts'       => array( $run( 'revert', '{"items":[]}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run9, 'plan' ) ) ),
+			'way back, plan does not read'   => array( $run( 'revert', '{"reverts":' . $f . '}' ), null, array( 'ab_mcp_sync_run_unread', sprintf( $run9, 'plan' ) ) ),
+			'entry'                          => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":' . $f . '}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 9 (parts) does not read back as it was written, so which step it takes back' ) ),
+			'entry without forward_seq'      => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":7}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 9 (parts)' ) ),
+			'entry of another run'           => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":8,"forward_seq":3}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 9 (parts)' ) ),
+			'write step, result'             => array( $run( 'push', '{"objects":[]}' ), $step( 'write', '{"object":{"kind":"post"}}', '{"a":' . $f . '}' ), array( 'ab_mcp_sync_revert_unread', 'The record of step 2 of run 7 (result)' ) ),
+			'read: the run itself'           => array( $run( 'push', '{"objects":[]}' ), null, array( 7, null ) ),
+			'read: a write step'             => array( $run( 'push', '{"objects":[]}' ), $step( 'write', '{"object":{"kind":"post"}}' ), array( 7, 2 ) ),
+			'read: the way back, reverts[0]' => array( $run( 'revert', $back ), $step( 'revert', '{"forward_run":7,"forward_seq":3}' ), array( 7, 3 ) ),
+			'read: an entry without its run' => array( $run( 'revert', $back ), $step( 'revert', '{"forward_seq":3}' ), array( 7, 3 ) ),
+		);
 	}
 
 	public function testThePackageOfObjectsCarriesTheContentOfTheReadingItsHashCameFrom(): void {

@@ -1636,7 +1636,7 @@ final class SyncCodeRunTest extends TestCase {
 			self::assertSame( 1, $wpdb->update( $runs, array( 'plan' => $plan ), array( 'run_id' => $run_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		$says = self::refused( $answer, 'ab_mcp_sync_run_unread' );
-		self::assertStringStartsWith( sprintf( 'Nothing of run %d is planned back, put back or closed as checked: its record (plan) does not read back as it was written, so whether it swapped plugins or themes is not known.', $run_id ), $says );
+		self::assertStringStartsWith( sprintf( 'The record of run %d (plan) does not read back as it was written, so nothing is decided on it: no way back that rests on it is planned, put back or closed as checked.', $run_id ), $says );
 		self::assertStringContainsString( 'put the old version back by hand', $says );
 		self::assertSame( $before, $state(), 'The run, its steps and the target stay as they were.' );
 		$again = self::gated( 'wp_site_revert', $args );
@@ -1701,7 +1701,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringNotContainsString( 'names no written step with a journal', is_wp_error( $answer ) ? $answer->get_error_message() : (string) json_encode( $answer ), 'Never the sentence of the contents.' );
 		if ( 'plan' === $unread ) {
 			$says = self::refused( $answer, 'ab_mcp_sync_run_unread' );
-			self::assertStringStartsWith( sprintf( 'Nothing of run %d is planned back, put back or closed as checked: its record (plan) does not read back as it was written', $back ), $says );
+			self::assertStringStartsWith( sprintf( 'The record of run %d (plan) does not read back as it was written', $back ), $says );
 		} elseif ( ! $entrance ) {
 			$says = self::refused( $answer, 'ab_mcp_sync_revert_code' );
 			self::assertStringStartsWith( sprintf( 'Run %d is a run of plugins or themes, and this installation of AlphaBridge has no way back for code', $run_id ), $says, 'The run that wrote, from the plan of the way back.' );

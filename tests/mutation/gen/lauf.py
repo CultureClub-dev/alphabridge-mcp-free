@@ -457,8 +457,8 @@ e('plan-report-live', 'plan(): a target that changed since the report is not wri
 e('writer-delete-right', 'meta_ops(): a key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
   "\t\tif ( array() !== $from ) {\n\t\t\t$ops[] = 'delete';", "\t\tif ( false ) {\n\t\t\t$ops[] = 'delete';", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
 e('revert-once-across-runs', 'plan(): a step goes back at most once, also across the runs of the way back made for the closed run (P2)', RV,
-  "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );",
-  "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
+  "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[] = array( $other, AB_MCP_Sync_Run::steps( (int) $other['run_id'] ) );",
+  "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[] = array( $other, AB_MCP_Sync_Run::steps( (int) $other['run_id'] ) );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
 SLASH = 'testAMetaKeyWithABackslashIsStoredAndRemovedUnderItsOwnName'
 e('writer-slash-key-update', 'write_meta(): the key slashed for update_metadata(), which unslashes it (P2)', PW,
   "\t\t\t$done = update_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );", "\t\t\t$done = update_metadata( $type, $id, $key, wp_slash( $values[0] ) );", 'unit', SLASH)
@@ -723,8 +723,8 @@ e('engine-put-back-unknown', 'put_back(): a part of a name the engine does not k
   "\t\t\tif ( ! in_array( $i, $order, true ) ) {", "\t\t\tif ( false ) {", 'unit', BYTES_JOURNAL)
 e('engine-fresh-unread', 'fresh(): a run whose plan or booking does not read back is not changed', EN,
   "\t\tif ( isset( $now['unread'] ) ) {", "\t\tif ( false ) {", 'it', UNREAD_IT)
-e('revert-plan-unread', 'way_back(): no way back is planned on a journal that does not read back, with the way', RV,
-  "\t\t\tif ( isset( $step['unread'] ) && in_array( 'parts', $step['unread'], true ) ) {", "\t\t\tif ( false ) {", 'it', UNREAD_IT)
+e('revert-plan-unread', 'way_back(): no way back is planned on a journal that does not read back (through the one reader), with the way', RV,
+  "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step, false );\n\t\t\tif ( is_wp_error( $took ) ) {", "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step, false );\n\t\t\tif ( false ) {", 'it', UNREAD_IT)
 
 # ------------------------------- GitHub Codex round 9 on free#137 (one P2)
 # Every checkpoint of the journal is checked; the boundary stops before any

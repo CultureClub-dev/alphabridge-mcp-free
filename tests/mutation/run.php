@@ -148,13 +148,17 @@ final class AB_Mutation_Run {
 	}
 
 	/**
-	 * Run a command from the repo root.
+	 * Run a command from the repo root. PHPUnit runs with the memory_limit
+	 * of the CI, where setup-php writes memory_limit=-1 into php.ini (its
+	 * src/configs/ini/php.ini): locally the default of 128 MB was too
+	 * tight for one test of StoreRemoverGuardTest under --filter.
 	 *
 	 * @param string[] $command Command.
 	 * @param int      $timeout Seconds.
 	 * @return array{0:int|null,1:string,2:float} Exit code (null on timeout), output, seconds.
 	 */
 	private function exec( array $command, $timeout ) {
+		$command = 'vendor/bin/phpunit' === $command[0] ? array_merge( array( PHP_BINARY, '-d', 'memory_limit=-1' ), $command ) : $command;
 		$started = microtime( true );
 		$log     = tempnam( sys_get_temp_dir(), 'ab-mutation-' );
 		$process = proc_open( $command, array( 0 => array( 'file', '/dev/null', 'r' ), 1 => array( 'file', $log, 'w' ), 2 => array( 'redirect', 1 ) ), $pipes, $this->root );
