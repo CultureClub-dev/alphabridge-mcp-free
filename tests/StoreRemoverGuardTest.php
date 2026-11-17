@@ -47,13 +47,13 @@
  * unlink, rmdir, rename, mkdir and wp_delete_file no shipped file holds
  * the name as a string (testNoShippedFileNamesARemoverAsAValue); a name put
  * together ('un' . 'link') stays unseen. Its own test reads the spellings
- * in tests/fixtures/t7-walker/. Every guard here reads the walk, none the
- * text of the code (the skeptic over F2 and G, B1; the skeptic over the
- * reader, B1: a text missed ::delete_path ( with a space): besides the
- * calls, the names a file writes (a class named anywhere in its code), its
- * strings (with the parts of a string that holds variables, and HTML
- * outside PHP) and the writes of a static property (the mark of a tree
- * being built).
+ * in tests/fixtures/t7-walker/. A class as a value ($c::m( … ); new $c and X::$m( … ) are not walked at all) stays unseen too.
+ * Every guard here reads the walk and searches no text of a file (the skeptic over F2 and G, B1; the skeptic over the reader,
+ * B1: a text missed ::delete_path ( with a space): besides the calls, the names a file writes (a class named anywhere in its
+ * code), its strings (with the parts of a string that holds variables, and HTML outside PHP) and the writes of a static property
+ * (the mark of a tree being built). Four fields hold the source of one node as written (text()): args, the first argument, and
+ * key and value of a write of a static property are compared as written with fixed lists (another spelling of the same fails,
+ * none passes); of, the class where it is a value, is read as a filter only, so such a call is unseen. GRENZEN-CODE.md, G-5-22.
  *
  * What the code does at run time is tests/integration/StoreRemoverTest.php
  * and StoreTreesTest.php.

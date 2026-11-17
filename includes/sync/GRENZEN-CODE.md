@@ -972,7 +972,16 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     als String hält, prüft `testNoShippedFileNamesARemoverAsAValue()`; ein zusammengesetzter bleibt ungesehen. Im
     Tausch ist ein Name nur bei der Uhr (`call_user_func( self::$clock )`) und den eigenen Closures in
     `given_rights()` ein Wert.
-  - Kein Wächter dieses Tests liest den Quelltext als Text (Skeptiker F2+G, B1; Skeptiker Leser, B1: der Text
+  - Ebenso eine Klasse als Wert: Ein statischer Aufruf über eine Klasse in einer Variablen (`$c::delete_path( … )`) zählt
+    nicht als Aufruf des Speichers (die Klasse steht dann als Quelltext in `of` und fällt durch jeden Filter, siehe
+    unten); `new $c` und ein Methodenname als Wert (`X::$m( … )`) kommen gar nicht in die Aufrufe (`:154`, `:169`).
+    Gezählt am Kopf `8a7d710` (Lead, 17.11.2026, ohne Commit, mit `nikic/php-parser` über die 195 Dateien von
+    `shipped()`): 84 statische Aufrufe und 3 `new` mit der Klasse als Wert, 1 statischer Aufruf mit dem Methodennamen
+    als Wert, 0 statische Eigenschaften über eine Klasse als Wert. Keiner ruft den Speicher: Die Klassen kommen aus
+    `AB_MCP_Sync_Engine::WRITERS`, aus `AB_MCP_Sync_Db_Kinds`, aus den Formen von `AB_MCP_Shape` (nur Klassen mit
+    `decode()` und `encode()`, die der Speicher nicht hat), aus `object_kinds()` von Undo, aus den Unterklassen von
+    `AB_MCP_Builder_Writer`; der Methodenname ist `find_live` oder `find_staging` von `AB_MCP_Sync_Pairs`.
+  - Kein Wächter dieses Tests sucht im Text einer Datei (Skeptiker F2+G, B1; Skeptiker Leser, B1: der Text
     `::delete_path(` übersah `::delete_path (`; Codex H1, F8: `opens()` las die Meta als Text). Alle lesen über
     `walk()`: die Aufrufe (`callers()`; `opens()` mit dem Bereich und den String-Schlüsseln der obersten Ebene der
     Meta, die dafür ein Array-Literal sein muss: eine Meta in einer Variablen oder aus einem Aufruf gilt als ohne
@@ -984,6 +993,16 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     (`->open(`, `->remove(`) zählt nur in dessen Datei. `named_by_swap()`
     (`includes/class-protected-store.php:3001`) gibt dem Tausch den Ordner der Marken, einen Pfad in der Ablage, und
     zählt nicht als `root()`. Zwei Stellen des Tauschs stehen mit Begründung in `UNSEEN` des Scans der Sätze.
+  - Vier Felder von `walk()` halten den Quelltext eines einzelnen Knotens, wie er geschrieben steht (`text()`, `:236`;
+    Codex nach der Behebung, Q2): `args`, das erste Argument eines Aufrufs (`:179`); `key` und `value` einer Zuweisung
+    an eine statische Eigenschaft (`:189`, `:198`); `of`, die Klasse eines statischen Aufrufs oder einer statischen
+    Eigenschaft, wo sie ein Wert ist (`class_of()`, `:217`, gerufen an `:153` und `:195`). `args`, `key` und `value`
+    werden wörtlich mit festen Listen verglichen (`:401`, `:417`, `:463`, `:465`, `:528`; der Filter `:521`–`:523`
+    liest den Bereich ohne Anführungszeichen, `:528` fängt jede andere Schreibweise): Eine andere Schreibweise gleicher
+    Bedeutung macht rot (etwa `TRUE` statt `true` an `:417`), durch kommt nichts. `of` wird als Filter mit
+    `strcasecmp` gelesen (`:258`, `:396`, `:413`, `:455`, `:472`, `:493`) und nur im Test der Schreibweisen über die
+    Fixtures (`:325`) wörtlich mit einer festen Liste: Eine Klasse als Wert fällt durch jeden Filter, der Aufruf bleibt
+    ungesehen (Grenze oben).
   - Sechs weitere Token-Scanner vergleichen Klassennamen wörtlich (`tests/SourceScan.php`, `SyncSafeCallsTest.php`,
     `WellKnownGuardTest.php`, `integration/support/class-test-seam-guard.php`, `support/class-said-scan.php`,
     `AnswerWayTest.php`); sie folgen nach H.
