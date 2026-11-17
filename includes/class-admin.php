@@ -679,8 +679,8 @@ class AB_MCP_Admin {
 	 * assistants read; an add-on whose tools read more there adds one
 	 * sentence of its own (filter ab_mcp_read_mode_reads_also). The one for
 	 * «on» names what the tools of this site write: the core's alone, or with
-	 * a licensed Pro add-on (ab_mcp_site_edition) the code, files and database
-	 * too, so it never promises what the site cannot do.
+	 * a licensed Pro add-on or one on trial (ab_mcp_site_edition) the code,
+	 * files and database too, so it never promises what the site cannot do.
 	 *
 	 * @return string HTML, escaped.
 	 */
@@ -750,10 +750,12 @@ class AB_MCP_Admin {
 		// Since 4.17.0 the sentence of Pro also names the two protected kinds
 		// of settings its tools write (stage 2): who may register with which
 		// role (wp_update_option) and the address (wp_change_site_address),
-		// each only with the confirmation of a preview and an undo point. The
-		// sentence of the free edition names no tool of Pro.
-		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
-		$writes  = in_array( $edition, array( 'pro', 'agency' ), true )
+		// each only with the confirmation of a preview and an undo point. A
+		// trial of Pro ('trial') runs the tools of Pro, so it reads the
+		// sentence of Pro too. The sentence of the free edition, also for a
+		// value that is not a string, names no tool of Pro.
+		$edition = apply_filters( 'ab_mcp_site_edition', 'free' );
+		$writes  = is_string( $edition ) && in_array( $edition, array( 'pro', 'agency', 'trial' ), true )
 			? __( 'AI assistants read and write: posts, pages, plugins, themes, code and the database; the registration settings and the site address only with a confirmation from the preview and with an undo point.', 'alphabridge-mcp' )
 			: __( 'AI assistants read and write: posts, pages, media, terms, comments, menus, widgets, users, site settings, the shop and SEO fields.', 'alphabridge-mcp' );
 
@@ -3746,16 +3748,17 @@ class AB_MCP_Admin {
 	 * The list names what the Pro edition adds. Site Deploy belongs to the Agency
 	 * edition and is left out, so the Pro prices buy everything listed.
 	 *
-	 * A site whose add-on reports a Pro or Agency licence through
-	 * `ab_mcp_site_edition` is not offered what it already has. Every other value,
-	 * an expired licence included, reads as the free edition, as it does in the
+	 * A site whose add-on reports a Pro or Agency licence or a trial of Pro
+	 * through `ab_mcp_site_edition` is not offered what it already has or
+	 * tries right now. Every other value, an expired licence and one that is
+	 * not a string included, reads as the free edition, as it does in the
 	 * site's self-description.
 	 *
 	 * @return string
 	 */
 	private function pro_box_html() {
-		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
-		if ( in_array( $edition, array( 'pro', 'agency' ), true ) ) {
+		$edition = apply_filters( 'ab_mcp_site_edition', 'free' );
+		if ( is_string( $edition ) && in_array( $edition, array( 'pro', 'agency', 'trial' ), true ) ) {
 			return '';
 		}
 

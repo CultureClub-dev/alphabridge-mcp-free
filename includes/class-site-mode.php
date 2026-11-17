@@ -338,7 +338,9 @@ class AB_MCP_Site_Mode {
 	 * 'pro' or 'agency' only while its licence is active and not expired.
 	 * Such a customer agreed to the terms when buying; a new version of them
 	 * must not lock a paid feature (terms 12.2 and 12.5), so the box is
-	 * offered there, not required.
+	 * offered there, not required. A trial of Pro without an active licence
+	 * ('trial') bought nothing, so for it, as for every other value, the box
+	 * is required.
 	 *
 	 * @return bool
 	 */

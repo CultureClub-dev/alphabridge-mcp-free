@@ -1112,20 +1112,24 @@ class AB_MCP_Option_Guard {
 	 * Does the edition of this site have this tool of AlphaBridge MCP Pro?
 	 *
 	 * The edition as Pro reports it (ab_mcp_site_edition; 'pro' or 'agency'
-	 * only while its licence is active), read fail closed: anything unknown
-	 * is the free edition. A tool of the Agency plan takes 'agency'
-	 * (AB_MCP_Guidance::AGENCY_TOOLS); every other tool asked about here is
-	 * one of Pro's.
+	 * only while its licence is active, 'trial' during a trial of Pro, which
+	 * runs the tools of Pro), read fail closed: anything unknown, and a value
+	 * that is not a string, is the free edition. A tool of the Agency plan
+	 * takes 'agency' (AB_MCP_Guidance::AGENCY_TOOLS); every other tool asked
+	 * about here is one of Pro's and takes 'pro', 'agency' or 'trial'.
 	 *
 	 * @param string $tool Tool name.
 	 * @return bool
 	 */
 	private static function edition_has( $tool ) {
-		$edition = function_exists( 'apply_filters' ) ? (string) apply_filters( 'ab_mcp_site_edition', 'free' ) : 'free';
+		$edition = function_exists( 'apply_filters' ) ? apply_filters( 'ab_mcp_site_edition', 'free' ) : 'free';
+		if ( ! is_string( $edition ) ) {
+			$edition = 'free';
+		}
 		if ( class_exists( 'AB_MCP_Guidance' ) && 'agency' === AB_MCP_Guidance::edition_of( $tool ) ) {
 			return 'agency' === $edition;
 		}
-		return in_array( $edition, array( 'pro', 'agency' ), true );
+		return in_array( $edition, array( 'pro', 'agency', 'trial' ), true );
 	}
 
 	/**

@@ -285,7 +285,7 @@ e('may-published', 'may_show(): not before its feature is published', MO,
 e('may-once', 'may_show(): not a second time', MO,
   "\t\t\t&& ! isset( $state['shown'][ $moment ] );", "\t\t\t;", 'u', U_RULES)
 e('possible-edition', 'possible(): not in an edition that has the features', MO,
-  "\t\treturn ! in_array( $edition, array( 'pro', 'agency' ), true ) && ", "\t\treturn ", 'u', U_RULES)
+  "\t\treturn ! ( is_string( $edition ) && in_array( $edition, array( 'pro', 'agency', 'trial' ), true ) ) && ", "\t\treturn ", 'u', U_RULES)
 e('possible-published', 'possible(): only with a feature published', MO,
   " && array() !== array_intersect( self::FEATURES, self::published() );", ";", 'u', U_UNPUB)
 e('report-seen-first', 'report_seen(): the first report stays the first', MO,
