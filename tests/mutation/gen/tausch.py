@@ -280,25 +280,23 @@ e('k1b-here-read', 'need(): the paths here are those of the live unit as read no
 CHK = 'testAStageStillCheckingNotBoundToThisStepIsNeverWrittenAndTheStepFails'
 ENT = 'testTheEntryOfTheGroupOfAStageNotReadLeavesTheStepPlannedNeverFailed'
 NORM = 'testAnInactivePluginUpdatedOnStagingIsPlannedAloneStagedOverCallsAndReadyWithoutAChangeOfTheSite'
-FOREIGN = "if ( $want['run_id'] !== $group['run_id'] || $want['kind'] !== $state['unit']['kind'] || $want['ref'] !== $state['unit']['ref'] || ! hash_equals( $want['signed'], $state['signed'] ) ) {"
+FOREIGN = "if ( $bound['run_id'] !== $entry['run_id'] || $bound['kind'] !== $state['unit']['kind'] || $bound['ref'] !== $state['unit']['ref'] || ! hash_equals( $bound['signed'], $state['signed'] ) ) {"
 e('k2-permanent-foreign', 'PERMANENT: the stage not bound to the step (A2, K2)', ST,
   "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned', 'code:stage_foreign' );", "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned' );", 'coderun', CHK)
 e('k2-complete-foreign', 'complete(): a stage not bound to the step is refused before anything is written (A2, K2)', ST,
   "\t\t$foreign = self::foreign( $gid, $state, $bound );\n\t\tif ( null !== $foreign ) {", "\t\t$foreign = self::foreign( $gid, $state, $bound );\n\t\tif ( false ) {", 'coderun', CHK)
 e('k2-ready-foreign', 'ready(): ready only for the step the stage is bound to (A2, K2)', ST,
   "\t\treturn null === $foreign ? $state : null;", "\t\treturn $state;", 'coderun', NORM)
-e('k2-bound-form', 'foreign(): a binding not of its form is not known, never taken (K2)', ST,
-  "\t\tif ( null === $want ) {", "\t\tif ( false ) {", 'coderun', CHK)
 e('k2-entry-unread', 'foreign(): the entry of the group not read is not known, never foreign (A2, K2)', ST,
   "\t\tif ( is_wp_error( $entry ) ) {\n\t\t\treturn $entry;", "\t\tif ( false ) {\n\t\t\treturn $entry;", 'coderun', ENT)
 e('k2-foreign-run', 'foreign(): the group bound to another run is not bound to the step (A2, K2)', ST,
-  FOREIGN, FOREIGN.replace("$want['run_id'] !== $group['run_id'] || ", ''), 'coderun', CHK)
+  FOREIGN, FOREIGN.replace("$bound['run_id'] !== $entry['run_id'] || ", ''), 'coderun', CHK)
 e('k2-foreign-kind', 'foreign(): the stage of another kind of unit is not bound to the step (A2, K2)', ST,
-  FOREIGN, FOREIGN.replace("$want['kind'] !== $state['unit']['kind'] || ", ''), 'coderun', CHK)
+  FOREIGN, FOREIGN.replace("$bound['kind'] !== $state['unit']['kind'] || ", ''), 'coderun', CHK)
 e('k2-foreign-ref', 'foreign(): the stage of another unit is not bound to the step (A2, K2)', ST,
-  FOREIGN, FOREIGN.replace("$want['ref'] !== $state['unit']['ref'] || ", ''), 'coderun', CHK)
+  FOREIGN, FOREIGN.replace("$bound['ref'] !== $state['unit']['ref'] || ", ''), 'coderun', CHK)
 e('k2-foreign-signed', 'foreign(): the stage of another version of the staging site is not bound to the step (A2, K2)', ST,
-  FOREIGN, FOREIGN.replace(" || ! hash_equals( $want['signed'], $state['signed'] )", ''), 'coderun', CHK)
+  FOREIGN, FOREIGN.replace(" || ! hash_equals( $bound['signed'], $state['signed'] )", ''), 'coderun', CHK)
 e('k2-ops-bound-run', 'stage(): the step expects its stage bound to its own run (A2, K2)', CO,
   "\t\t\t'run_id' => $run_id,\n\t\t\t'kind'   => $unit['kind'],", "\t\t\t'run_id' => $run_id + 1,\n\t\t\t'kind'   => $unit['kind'],", 'coderun', NORM)
 SIDE = "\t\tif ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {"

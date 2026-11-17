@@ -35,13 +35,12 @@
  * - AB_MCP_Sync_Code_Stage::ready() over a stage built here (its group bound
  *   to a run, its tree put in, a state checking and a state ready): its
  *   files, the last state read and read in its form (the codec stops
- *   without encoding again), then foreign() with the binding and the
- *   sidecar of its group, each gate by itself as above; a stage not ready
- *   for the values asked (another hash, another run) is «not ready» (null)
- *   in time and the stop when late, never null. state() and foreign() are
- *   also read directly (they are private: through reflection), where the
- *   translations of state() (never unknown) and of foreign() (never a
- *   binding or an entry not of its form) and of entry() would speak.
+ *   without encoding again), then foreign() with the sidecar of its
+ *   group, each gate by itself as above; a stage not ready for the values
+ *   asked (another hash, another run) is «not ready» (null) in time and
+ *   the stop when late, never null. state() and foreign() are also read
+ *   directly (they are private: through reflection), where the
+ *   translations of state() (never unknown) and of entry() would speak.
  * - AB_MCP_Sync_Code_Swap::prepare() of a unit made new (its test requests
  *   answered through the seam of the swap): a store this request has not
  *   decided is decided before the deadline until − keep is made (the time
@@ -415,7 +414,7 @@ final class ReadDeadlineTest extends TestCase {
 			'AB_MCP_Sync_Canon::prepared#3'        => 22,
 			'AB_MCP_Sync_Canon::prepared#2'        => 2,
 			'AB_MCP_Sync_Canon::encode#1'          => 1,
-			'AB_MCP_Shape::fields#1'               => 28,
+			'AB_MCP_Shape::fields#1'               => 22,
 			'AB_MCP_Shape::items#1'                => 2,
 			'AB_MCP_Sync_Code_Stage::state#2'      => 1,
 			'AB_MCP_Protected_Store::entry#1'      => 1,
@@ -454,7 +453,6 @@ final class ReadDeadlineTest extends TestCase {
 			'AB_MCP_Sync_Code_Stage::state#2'      => 1,
 		),
 		'foreign' => array(
-			'AB_MCP_Shape::fields#1'               => 6,
 			'AB_MCP_Protected_Store::entry#1'      => 1,
 			'AB_MCP_Protected_Store::way#1'        => 1,
 			'AB_MCP_Protected_Store::way#2'        => 1,
@@ -475,9 +473,9 @@ final class ReadDeadlineTest extends TestCase {
 		'taken'  => 'ce7acf5e3672b9cd18d6fb843211a8d4e0af7dad606ab6f19d9612a119566731',
 		'groups' => 'e0f0109592d06cdd4cf8f6be496cd246435ccd52dec4dee9d88dda8cde640fcb',
 		'get'    => 'f3fed0a80e9d7d5de73da6a2048d4e6ccdcc27b67913442a039c88f0dba84632',
-		'ready'   => '043a471d047d5c1132d5532b2e928febb575c09dff0c53ddc3da1adc2dc2d2f9',
+		'ready'   => 'f0a738e5e984c9f3cc7503653509ed2c3a2f724ff78c708efbf8f4f2c255d58d',
 		'state'   => 'a3ce36a95785b7c21528f590b321eaa59edaec96a8967658cd29094523a463e1',
-		'foreign' => '4723b10b82b3d32c90be1e0fdd38304e8b0a012017c8716891984e262e25fc35',
+		'foreign' => 'e964828e02169f9d5521a78a7d938fbc790705b8d6c51c2bc6002fad93c582ca',
 	);
 
 	/** The name of the large tree (R12 part 2). */
@@ -1616,8 +1614,7 @@ final class ReadDeadlineTest extends TestCase {
 	 * finding 4: each translation reached by itself): the reading the
 	 * translation belongs to, the gate and which time it is asked (in
 	 * taken() the first file read is the record of the package in find(),
-	 * the second its mark; in foreign() the binding is read in its form
-	 * first, the entry of the group last).
+	 * the second its mark).
 	 *
 	 * @return array<string,array{string,string,int}>
 	 */
@@ -1633,8 +1630,6 @@ final class ReadDeadlineTest extends TestCase {
 			'ready(): the state read, never not ready'               => array( 'ready', 'AB_MCP_Sync_Code_Stage::state#2', 0 ),
 			'ready(): the binding read, its stop passed on'          => array( 'ready', 'AB_MCP_Protected_Store::entry#1', 0 ),
 			'state(): the state read, never unknown'                 => array( 'state', 'AB_MCP_Payload_File::read#6', 0 ),
-			'foreign(): the binding read, never not of its form'     => array( 'foreign', 'AB_MCP_Shape::fields#1', 0 ),
-			'foreign(): the entry read in its form, never not of its form' => array( 'foreign', 'AB_MCP_Shape::fields#1', 5 ),
 			'entry(): the sidecar read, never not read whole'        => array( 'foreign', 'AB_MCP_Shape::decoded#2', 0 ),
 		);
 	}

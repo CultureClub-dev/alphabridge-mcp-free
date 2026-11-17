@@ -320,11 +320,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     einen neuen Lauf. Die Meldung sagt das nicht (Befund K4e Nr. 2, nach dem Code gelesen, ohne eigenen Test;
     Folgeposten der Fehlerweg-Prüfung des Teils).
   - Ebenso nach einer Ablehnung von `AB_MCP_Sync_Code_Stage::stage()` selbst (Fable-Prüfstelle 2, C3; Entscheid der
-    Lead vom 13.11.2026 18:51): `code:org_unzip` (`class-sync-code-stage.php:850`) und `code:org_fetch` (`:890`,
-    `:905`) raten «Try again later, or send the unit as a package of code (wp_site_export with purpose=code)», das
-    dritte `code:org_fetch` (`:895`, wordpress.org gibt das Paket dieser Version nicht) rät nur «Send the unit as a
-    package of code (wp_site_export with purpose=code)»;
-    `not_staged()` (`class-sync-code-ops.php:386`–`:390`) beendet den Schritt mit `failed` und hängt «The run goes on
+    Lead vom 13.11.2026 18:51): `code:org_unzip` und zwei der drei `code:org_fetch` raten «Try again later, or send the
+    unit as a package of code (wp_site_export with purpose=code)», das dritte `code:org_fetch` (wordpress.org gibt das
+    Paket dieser Version nicht) rät nur «Send the unit as a package of code (wp_site_export with purpose=code)»;
+    `not_staged()` (`class-sync-code-ops.php`) beendet den Schritt mit `failed` und hängt «The run goes on
     with the next step (action=next).» an. Ein neuer Versuch für diese Einheit geht auch hier nur über einen neuen
     Lauf. Folgeposten für Teil 2: `run_verify()` hängt beim Schliessen eines Laufs «The way back for its pairs is
     wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2823`), auch bei einem Code-Lauf, von
@@ -343,14 +342,19 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   `bind()` prüft `whole()` vorher); nötig ist ein Schaden auf der Platte oder ein fremder Schreiber nach dem
   Bereitstellen. Der Weg bleibt fail-closed: kein Tausch ohne als bereit gelesene Stufe.
 
-### G-5-2 Meldungen der Ablage auf dem Weg des Tauschs, die ausserhalb des Normalfalls nicht in jedem Fall stimmen
+### G-5-2 Meldungen der Ablage und des Transports, die nicht in jedem Fall stimmen: eigener Zweig
 
-- **Quelle:** Codex-Bestätigung und gesammelte Prüfung über K4f (`7d9fcc2..6f693f1`, 13.11.2026, B1 bis B7), Entscheid
-  der Steuerung in Thomas' Auftrag vom 13.11.2026 17:25 (Punkt 1: die B auf dem Pfad von Zweig 5 als Grenze). Die
-  Zuordnung «erreichbar über `wp_site_push` oder die Stufe» ist in Teil K4g je Eintrag am Code gelesen (Zeilen am
-  Stand von K4g), keiner der Fälle ist nachgestellt. In jedem Fall lehnt die Ablage ab (fail-closed); betroffen ist
-  nur, was die Meldung als Grund oder Weg nennt. Keine Kernzusage ist berührt (Codex: überall nein).
-- **Einträge** (alle in `includes/class-protected-store.php`):
+- **Quelle:** Codex-Bestätigung und gesammelte Prüfung über K4f (`7d9fcc2..6f693f1`, 13.11.2026: B1 bis B7, A3 bis A10,
+  B8; Wortlaut: `uebergaben/anhang/2026-11-11-z8b/codex-zweig-5-code-6f693f1.md` im knowledge-Repo) und Befund des
+  Teils K4h; Entscheid der Steuerung in Thomas' Auftrag vom 13.11.2026 17:25 (Punkt 1: die B auf dem Pfad von Zweig 5
+  als Grenze; Punkt 2: eigener Zweig «Meldungen der Ablage und des Transports» nach Zweig 5 und vor `text/z8b`, der
+  alle Meldungen seines Bereichs in einem Durchgang prüft und behebt; bis dahin benannte Grenze). Teil K4g hat für B1
+  bis B7 je Eintrag am Code gelesen, ob er über `wp_site_push` oder die Stufe erreichbar ist (Zeilen am Stand von
+  K4g), für A3 bis A10 und B8 nur, dass Code und Wortlaut an der genannten Zeile stehen; keiner der Fälle ist
+  nachgestellt.
+- **Auf dem Weg des Tauschs** (B1 bis B7, alle in `includes/class-protected-store.php`): In jedem Fall lehnt die Ablage
+  ab (fail-closed); betroffen ist nur, was die Meldung als Grund oder Weg nennt. Keine Kernzusage ist berührt (Codex:
+  überall nein). **Trifft Normalfall:** nein, je Eintrag begründet.
   - **`put()`, `ab_mcp_store_write` (`:1039`), «so it was taken out again».** Fall: die Datei ist geschrieben, der
     Sidecar lässt sich danach nicht schreiben (`write_entry()`), und auch `delete_path()` (`:1038`) entfernt die Datei
     nicht; sein Ergebnis wird nicht geprüft. Dann liegt die Datei noch da, die Meldung sagt das Gegenteil. Erreichbar
@@ -388,17 +392,9 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     entfernter Bereich, `group()` `:4307`–`:4310`); dann gibt es keinen Link, und «remove the link» nennt ein
     Hindernis, das nicht besteht. Erreichbar über jeden Zugriff auf eine Gruppe (`group()`, `entry()`).
     **Trifft Normalfall:** nein (braucht einen Ordner der Ablage, der fehlt oder sich nicht ansehen lässt).
-- **Trifft Normalfall:** nein, je Eintrag begründet. Die Texte werden im Zweig «Meldungen der Ablage und des
-  Transports» (G-5-3) mitgeprüft; bis dahin gilt dieser Vermerk.
-
-### G-5-3 Meldungen der Ablage und des Transports mit Aussagen über Fristen und Bestand: eigener Zweig
-
-- **Quelle:** dieselbe Codex-Prüfung (A3 bis A10, B8); Entscheid der Steuerung in Thomas' Auftrag vom 13.11.2026
-  17:25, Punkt 2: eigener Zweig «Meldungen der Ablage und des Transports» nach Zweig 5 und vor `text/z8b`, der alle
-  Meldungen seines Bereichs in einem Durchgang prüft und behebt; bis dahin benannte Grenze. Die Befunde sind die der
-  Codex-Prüfung (Wortlaut: `uebergaben/anhang/2026-11-11-z8b/codex-zweig-5-code-6f693f1.md` im knowledge-Repo); Teil
-  K4g hat nur gelesen, dass Code und Wortlaut an der genannten Zeile stehen, die Fälle nicht nachgeprüft.
-- **Einträge:**
+- **Fristen und Bestand** (A3 bis A10, B8, K4h). **Trifft Normalfall:** A3 bis A10 nach Codex ja (gewöhnliche
+  Bedienfolgen), Kernzusage nein: sie werden in dem genannten Zweig behoben und sind bis dahin als Grenze geführt,
+  nicht als hingenommen. B8: nein.
   - A3, `ab_mcp_store_quota` (Exporte), `includes/class-store-budget.php:159`: «An export counts until it is removed, a
     day after it was made, or later while a run that is not closed uses it» nennt einen festen Termin; nach Codex
     entfernt erst ein Aufräumen nach Alter, und eine neu bestätigte Paarung entfernt Exporte früher.
@@ -419,8 +415,7 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     a new one of the same connection replaces it»; nach Codex wie A9, und zwei gleichzeitige Aufrufe können zwei
     Berichte hinterlassen.
   - B8, `close_mark()`, `ab_mcp_store_mark_read`, `includes/class-protected-store.php:2561`: «so it stays open»; nach
-    Codex kann die Marke auf der Platte schon `closed` sein. Am Stand von K4g ruft unter `includes/` nichts
-    `close_mark()` (`git grep`), der Fall liegt nicht auf dem Weg von Zweig 5.
+    Codex kann die Marke auf der Platte schon `closed` sein.
   - Befund des Teils K4h (Entscheid der Lead: in diesen Zweig), `ab_mcp_store_tree_exists`,
     `includes/class-protected-store.php:1939`: «Use another name for it», ebenso G-3-4 («einen anderen Namen oder eine
     neue Gruppe»); für einen Baum aus einer Datei geht ein anderer Name nicht, `put_tree()` lehnt ihn mit
@@ -428,8 +423,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     einzige Aufrufer im Produkt, `AB_MCP_Sync_Code_Stage::take_in()` (`includes/sync/class-sync-code-stage.php:974`),
     legt in eine Gruppe, die `stage()` je Aufruf neu öffnet (`:752`). Am Code von K4h gelesen, nicht nachgestellt.
     **Trifft Normalfall:** nein (braucht einen liegen gebliebenen Baum).
-- **Trifft Normalfall:** A3 bis A10 nach Codex ja (gewöhnliche Bedienfolgen), Kernzusage nein: sie werden in dem
-  genannten Zweig behoben und sind bis dahin als Grenze geführt, nicht als hingenommen. B8: nein.
+
+### G-5-3 Meldungen der Ablage und des Transports mit Aussagen über Fristen und Bestand — in G-5-2
+
+- **Grund:** Mit G-5-2 zusammengelegt (Qualitätsdurchsicht vor Teil H, `belege/z5r-q-liste.md` Nr. 22): die Quelle
+  steht dort in der gemeinsamen Quelle, Einträge und Normalfall unter «Fristen und Bestand». Die Nummer bleibt, ohne
+  Umnummerierung.
 
 ### G-5-4 Verwaiste Gruppe der Stufe, wenn das Journal nach `stage()` nicht gespeichert wird
 
@@ -467,28 +466,18 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   ebenfalls einen.
 - **Wirkung:** Zurück kommt nur der Fehler von `abort()` (`:1390`, `:1392`); der Bindungsfehler wird nicht ergänzt.
   Ob die Meldung die Laufnummer nennt, hängt vom Abbruchfehler ab (die Ablehnung, weil ein anderer Aufruf die Sperre
-  hält, nennt sie: «Run %d is not aborted.», `class-sync-engine.php:422`, über `AB_MCP_Sync_Run::under_lock()`,
-  `class-sync-run.php:752`–`:754`). In welchem Zustand der Lauf und seine Pakete dann bleiben, hängt daran, wo
-  `abort()` scheitert; nicht nachgeprüft. An der Site ist bis dahin nichts geschrieben (der Lauf ist eben erst
-  geplant).
+  hält, nennt sie: «Run %d is not aborted.», `class-sync-engine.php:422`, über `AB_MCP_Sync_Run::under_lock()`). In
+  welchem Zustand der Lauf und seine Pakete dann bleiben, hängt daran, wo `abort()` scheitert; nicht nachgeprüft. An
+  der Site ist bis dahin nichts geschrieben (der Lauf ist eben erst geplant).
 - **Trifft Normalfall:** nein (zwei Fehler hintereinander).
 
-### G-5-6 `by_label()` lehnt eine formwidrige Gruppe aus `groups( 'in' )` ab (am Kopf nicht erreichbar)
+### G-5-6 `by_label()` lehnt eine formwidrige Gruppe aus `groups( 'in' )` ab — entfällt
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Plan::by_label()` (`includes/sync/class-sync-code-plan.php:734`), gerufen über alle
-  Gruppen von `AB_MCP_Protected_Store::groups( 'in' )` (`:704`, `:708`).
-- **Quelle:** Fable-Prüfstelle 2, C2; Entscheid der Lead vom 13.11.2026 18:51.
-- **Fall:** Eine Gruppe aus `groups( 'in' )`, deren Eintrag nicht in der Form `GROUP` liest (keine gültige `gid` oder
-  kein gültiges `label`).
-- **Wirkung:** `by_label()` lehnt eine hypothetisch formwidrige Rückgabe von `groups('in')` defensiv ab. Beschädigte
-  Sidecars werden aktuell bereits beim Auflisten ausgelassen: `sidecar()` erkennt einen Sidecar ohne gültige `gid` oder
-  `label` über `whole()` als `unknown` (`includes/class-protected-store.php:4432`–`:4434`, `:4454`–`:4459`; `GROUP`
-  nimmt dieselben Formen `sidecar.gid` und `sidecar.label`, `class-sync-code-plan.php:98`–`:105`), `entries()` lässt
-  ihn aus (`:4052`–`:4056`), `groups()` liefert die übrigen (`:1118`–`:1126`). Fehlt dadurch ein benötigtes Paket,
-  lehnt `bind()` dessen Bindung ab (`class-sync-code-plan.php:720`), und der neue Lauf wird wieder geschlossen (G-5-5
-  ohne den zweiten Fehler). Am Kopf bleibt damit kein Fall, in dem `by_label()` jeden Code-Lauf sperrt. Nichts an der
-  Site geschrieben.
-- **Trifft Normalfall:** nein (die Rückgabe von `groups()` dieser Fassung liest immer in der Form `GROUP`).
+- **Grund:** Seit der Qualitätsdurchsicht vor Teil H (`belege/z5r-q-liste.md` Nr. 7, 17, 21) liest `by_label()` die
+  Gruppen nicht mehr in einer eigenen Form und lehnt keine ab: `groups( 'in' )` gibt nur Einträge, die `entries()` über
+  `sidecar()` und `whole()` ganz las, in denselben Formen `sidecar.gid` und `sidecar.label`. Fehlt dadurch ein
+  benötigtes Paket, lehnt `bind()` dessen Bindung ab, und der neue Lauf wird wieder geschlossen (G-5-5 ohne den zweiten
+  Fehler); kein Fall sperrt jeden Code-Lauf. Die Nummer bleibt, ohne Umnummerierung.
 
 ### G-5-7 Laufende Einheit ganz ohne PHP-Datei wird nicht getauscht
 
@@ -629,9 +618,9 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 ### G-5-10 Umbenennen nur auf einen freien Platz: Exklusivität für Ordner, Restfenster bei einer Datei
 
-- **Fundstelle:** `AB_MCP_Sync_Code_Swap::move()` (`includes/sync/class-sync-code-swap.php:1395`): `lstat()` (Ziel frei),
-  dann `rename()` (`:1396`; `Calls::rename()` `:224`). Keine Reservierung, kein `unlink`, gelöscht wird nichts.
-  Gerufen nur aus `rename_marked()` (`:1322`), für beide Umbenennungen und den Rückweg F35.
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::move()` (`includes/sync/class-sync-code-swap.php`): `lstat()` (Ziel frei),
+  dann `rename()` (über `Calls::rename()`). Keine Reservierung, kein `unlink`, gelöscht wird nichts. Gerufen aus
+  `rename_marked()`, für beide Umbenennungen und den Rückweg F35, und aus `moved_back()` für den Rückweg eines Tauschs.
 - **Quelle:** Entscheid der Lead vom 16.11.2026 02:50 nach der zweiten Codex-Runde über D1
   (`belege/codex-free-z5r-d-2-antwort.md`: Befund 3 offen, zwei neue A an der Reservierung;
   `belege/lead-auftrag-z5r-teil-d2.md`, Vorpunkt): Die Reservierung des Platzes aus der Behebung von D1 (`de8caba`)
@@ -900,35 +889,39 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     der bestehenden Tests gleicht (Marke offen, Vermerk geschrieben, Journal `begun`), ausser der Sperre.
 - **Trifft Normalfall:** nein. Im Normalfall endet der Aufruf des Tauschs nicht hart.
 
-### G-5-18 Theme bei offenem Tausch: kein Vorbehalt
+### G-5-18 Einheit bei offenem Tausch von WordPress abgeschaltet (Theme gewechselt, Plugin deaktiviert)
 
-- **Fundstelle:** Kern (WordPress 7.1.3): `validate_current_theme()` (`wp-includes/theme.php:898`, Filter `:906`,
-  `switch_theme( WP_DEFAULT_THEME )` `:927`), gerufen aus `wp-admin/themes.php:264` und dem Customizer
-  (`wp-includes/class-wp-customize-manager.php:668`); `includes/` hält keinen Filter darauf. Der Satz des Rückwegs in
-  `AB_MCP_Sync_Code_Swap::restored()` (`includes/sync/class-sync-code-swap.php:2207`, Satz `:2267`). Zeilen am Stand
-  von Teil G, Abschnitt 2.
-- **Quelle:** Plan 15.23, «Kein Tauschvorbehalt» (E6); Bauzettel F, Abschnitt 8; Notiz G-24 (Teil E, Abschnitt 2).
-- **Was:** Fehlt bei offenem Tausch der Ordner des aktiven Themes (zwischen den Umbenennungen, nach einem Abbruch an
-  P2), wechselt WordPress beim nächsten Aufruf von «Design → Themes» oder des Customizers auf das Standard-Theme; der
-  Tausch hält das nicht auf. Der Rückweg stellt den Wechsel nicht zurück (das Journal hält für ein Theme kein `active`,
-  G-5-15); seine Antwort nennt ein Theme, das der Aufruf als nicht laufend liest, mit dem Weg in wp-admin, ohne einen
-  Wechsel zu behaupten.
+- **Fundstelle:**
+  - Theme: Kern (WordPress 7.1.3): `validate_current_theme()` (`wp-includes/theme.php:898`, Filter `:906`,
+    `switch_theme( WP_DEFAULT_THEME )` `:927`), gerufen aus `wp-admin/themes.php:264` und dem Customizer
+    (`wp-includes/class-wp-customize-manager.php:668`); `includes/` hält keinen Filter darauf. Der Satz des Rückwegs in
+    `AB_MCP_Sync_Code_Swap::restored()` (`includes/sync/class-sync-code-swap.php:2207`, Satz `:2267`). Zeilen am Stand
+    von Teil G, Abschnitt 2.
+  - Plugin: Kern: `wp-admin/plugins.php:639` ruft `validate_active_plugins()` (`wp-admin/includes/plugin.php:1075`),
+    das ein Plugin ohne Datei still deaktiviert (`deactivate_plugins( $plugin, true )`, `:1099`). Die Anleitung der
+    Marke sagt es und nennt den Weg von Hand (Plugins → Activate; `AB_MCP_Protected_Store::guide()`,
+    `includes/class-protected-store.php:2981`–`:2982`; seit Skeptiker F2+G, C5 ohne Weg (a), der nichts einschaltet);
+    Wiedereinschalten auf dem Rückweg mit `accept` (G-5-15).
+- **Quelle:** Theme: Plan 15.23, «Kein Tauschvorbehalt» (E6); Bauzettel F, Abschnitt 8; Notiz G-24 (Teil E,
+  Abschnitt 2). Plugin: Plan 15.23, «Kein Vergleich am Ende»; Plan E6 (Entscheid 2 von Thomas, 11.11.).
+- **Was:**
+  - **Theme, kein Vorbehalt:** Fehlt bei offenem Tausch der Ordner des aktiven Themes (zwischen den Umbenennungen, nach
+    einem Abbruch an P2), wechselt WordPress beim nächsten Aufruf von «Design → Themes» oder des Customizers auf das
+    Standard-Theme; der Tausch hält das nicht auf. Der Rückweg stellt den Wechsel nicht zurück (das Journal hält für
+    ein Theme kein `active`, G-5-15); seine Antwort nennt ein Theme, das der Aufruf als nicht laufend liest, mit dem
+    Weg in wp-admin, ohne einen Wechsel zu behaupten.
+  - **Plugin, kein Vergleich am Ende:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach, meldet der
+    Tausch es nicht; er vergleicht am Ende nichts. Die Deaktivierungshaken des Plugins laufen dabei nicht. Der nächste
+    Bericht zeigt die Aktivierung als «live geändert». Eingeschaltet wird von Hand (wp-admin, `wp_activate_plugin`)
+    oder, wo der Tausch zurückgeht, über den Rückweg mit `accept`. Die Grenze «Rennen nach dem Vergleich» aus E6
+    entfällt mit dem Vergleich.
 - **Trifft Normalfall:** nein. Im Normalfall liegen beide Umbenennungen im selben Aufruf, ohne Aufruf von wp-admin
-  dazwischen.
+  dazwischen (Theme), und zwischen den zwei Umbenennungen öffnet niemand «Plugins» (Plugin).
 
-### G-5-19 Plugin bei offenem Tausch oder danach deaktiviert: kein Vergleich am Ende
+### G-5-19 Plugin bei offenem Tausch oder danach deaktiviert: kein Vergleich am Ende — in G-5-18
 
-- **Fundstelle:** Kern: `wp-admin/plugins.php:639` ruft `validate_active_plugins()`
-  (`wp-admin/includes/plugin.php:1075`), das ein Plugin ohne Datei still deaktiviert (`deactivate_plugins( $plugin,
-  true )`, `:1099`). Die Anleitung der Marke sagt es und nennt den Weg von Hand (Plugins → Activate;
-  `AB_MCP_Protected_Store::guide()`, `includes/class-protected-store.php:2981`–`:2982`; seit Skeptiker F2+G, C5 ohne
-  Weg (a), der nichts einschaltet); Wiedereinschalten auf dem Rückweg mit `accept` (G-5-15).
-- **Quelle:** Plan 15.23, «Kein Vergleich am Ende»; Plan E6 (Entscheid 2 von Thomas, 11.11.).
-- **Was:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach, meldet der Tausch es nicht; er vergleicht am
-  Ende nichts. Die Deaktivierungshaken des Plugins laufen dabei nicht. Der nächste Bericht zeigt die Aktivierung als
-  «live geändert». Eingeschaltet wird von Hand (wp-admin, `wp_activate_plugin`) oder, wo der Tausch zurückgeht, über
-  den Rückweg mit `accept`. Die Grenze «Rennen nach dem Vergleich» aus E6 entfällt mit dem Vergleich.
-- **Trifft Normalfall:** nein. Im Normalfall öffnet zwischen den zwei Umbenennungen niemand «Plugins».
+- **Grund:** Mit G-5-18 zusammengelegt (Qualitätsdurchsicht vor Teil H, `belege/z5r-q-liste.md` Nr. 20): Fundstelle,
+  Quelle, Fall und Normalfall des Plugins stehen dort je unter «Plugin». Die Nummer bleibt, ohne Umnummerierung.
 
 ### G-5-20 Daten im Ordner eines Plugins
 
