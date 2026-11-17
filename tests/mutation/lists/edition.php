@@ -10,8 +10,11 @@
  * 'trial' out of the comparison, one turns the value of the filter into a
  * string again, as before, instead of checking it.
  *
- * terms_required() (AB_MCP_Site_Mode) is not changed and has no entry here:
- * a trial stays required there as the free edition does.
+ * AB_MCP_Site_Mode (#156-B1): terms_required() and the record of
+ * switch_to_full() check the value as well instead of turning it into a
+ * string; one entry each turns it into a string again. 'trial' has no entry
+ * there: terms_required() never let it through, a trial stays required as
+ * the free edition does, and the record keeps any string as it comes.
  *
  * Held by the unit suite (EditionTrialTest).
  *
@@ -24,6 +27,7 @@ $rc = 'includes/class-rest-controller.php';
 $ad = 'includes/class-admin.php';
 $og = 'includes/class-option-guard.php';
 $mo = 'includes/class-transfer-moments.php';
+$sm = 'includes/class-site-mode.php';
 
 return array(
 	array(
@@ -115,5 +119,23 @@ return array(
 		'replace' => "\t\t\$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );\n\t\treturn ! ( is_string",
 		'run'     => $unit,
 		'expect'  => '/testAnEditionThatIsNotAStringIsTheFreeOneForTheMoments/',
+	),
+	array(
+		'id'      => 'edition/terms-string',
+		'clause'  => 'terms_required(): a value that is not a string must agree to the terms',
+		'file'    => $sm,
+		'search'  => "\t\t\$edition = apply_filters( 'ab_mcp_site_edition', 'free' );\n\t\treturn ! ( is_string",
+		'replace' => "\t\t\$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );\n\t\treturn ! ( is_string",
+		'run'     => $unit,
+		'expect'  => '/testAnEditionThatIsNotAStringMustAgreeToTheTerms/',
+	),
+	array(
+		'id'      => 'edition/record-string',
+		'clause'  => 'switch_to_full(): the record of a value that is not a string holds free',
+		'file'    => $sm,
+		'search'  => "\t\t\$edition = apply_filters( 'ab_mcp_site_edition', 'free' );\n\t\t\$record  = array(",
+		'replace' => "\t\t\$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );\n\t\t\$record  = array(",
+		'run'     => $unit,
+		'expect'  => '/testAnEditionThatIsNotAStringIsRecordedAsTheFreeOne/',
 	),
 );

@@ -345,8 +345,8 @@ class AB_MCP_Site_Mode {
 	 * @return bool
 	 */
 	public static function terms_required() {
-		$edition = (string) apply_filters( 'ab_mcp_site_edition', 'free' );
-		return ! in_array( $edition, array( 'pro', 'agency' ), true );
+		$edition = apply_filters( 'ab_mcp_site_edition', 'free' );
+		return ! ( is_string( $edition ) && in_array( $edition, array( 'pro', 'agency' ), true ) );
 	}
 
 	/**
@@ -528,6 +528,7 @@ class AB_MCP_Site_Mode {
 		$agreed  = self::SOURCE_FORM === $source && true === $terms;
 		$login   = self::login_of( $user_id );
 		$locale  = function_exists( 'get_user_locale' ) ? get_user_locale( $user_id ) : get_locale();
+		$edition = apply_filters( 'ab_mcp_site_edition', 'free' );
 		$record  = array(
 			'user_id'        => $user_id,
 			'user_login'     => $login,
@@ -536,7 +537,7 @@ class AB_MCP_Site_Mode {
 			'plugin_version' => defined( 'AB_MCP_VERSION' ) ? AB_MCP_VERSION : '',
 			'locale'         => (string) $locale,
 			'source'         => $source,
-			'edition'        => (string) apply_filters( 'ab_mcp_site_edition', 'free' ),
+			'edition'        => is_string( $edition ) ? $edition : 'free',
 			'terms_agreed'   => $agreed,
 			'terms_version'  => $agreed ? self::TERMS_VERSION : '',
 		);
