@@ -78,6 +78,7 @@ use AB_MCP_Sync_Said;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use WP_Error;
@@ -1846,6 +1847,149 @@ final class SyncRunTest extends TestCase {
 		self::assertSame( $was, $now, 'Nothing of the steps, the bookings, the backups or the pages changed.' );
 		self::assertSame( 1, $wpdb->update( $runs, array( 'plan' => $plan ), array( 'run_id' => $run_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'With its plan read back, the run goes on (the caches).' );
+	}
+
+	/**
+	 * Prüft: the one reader of the way back (AB_MCP_Sync_Run::wrote(),
+	 * belege/z5r-leser-zettel.md S1 to S7; skeptic E1b, B1) on records that
+	 * do not read back (written by SQL with a marker no writer stores): the
+	 * plan of a run whose budget does not read refuses without the way over
+	 * steps and without a word of plugins or themes, and the step of its way
+	 * back stays planned (S1, C3); a closed run of the way back whose plan
+	 * does not read refuses the plan of the run it takes back, not that of a
+	 * run made after it (S2, F4 B); a step of a way back, closed or of the
+	 * same run, whose entry does not read refuses the plan, and read again
+	 * it is taken back already (S3); the continuation of an interrupted way
+	 * back refuses with nothing written (S5); a step of the way back whose
+	 * entry, or the journal of the step it takes back, does not read fails
+	 * with the sentence of the reader, nothing put back, and the run goes on
+	 * (S6, F2 B); way (a) refuses before anything is written, the pair
+	 * active (S7). The close of that way back names the failed step and no
+	 * pair as unclear; its pair stays active (G2, closed_note()).
+	 * Sonst: a step could go back a second time, a step of the way back
+	 * would end with a wrong reason or be read as empty, way (a) would close
+	 * a run with a pair left active, and the close would call the pair of a
+	 * failed step unclear.
+	 */
+	#[DataProvider( 'way_back_unread' )]
+	public function testAWayBackOnRecordsThatDoNotReadBackIsRefusedAndNoStepGoesBackTwice( string $case ): void {
+		global $wpdb;
+		$runs  = AB_MCP_Sync_Schema::table( 'runs' );
+		$steps = AB_MCP_Sync_Schema::table( 'steps' );
+		$float = '{"x":{"~f":"000000000000f03f"}}';
+		self::pair();
+		$a = self::pages_on_a( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		$b = self::pages_on_b( array( 'contact' => 'Write to us.', 'about' => 'About us.' ) );
+		self::paired( self::staged() );
+		self::change_on_b( $b['contact'], 'contact', 'Write to us on staging.' );
+		self::change_on_b( $b['about'], 'about', 'About us, on staging.' );
+		$r1 = (int) self::begun( self::planned( array( 'contact', 'about' ) )['args'] )['run_id'];
+		self::probe_ok();
+		$pages = array( (int) $a['contact'], (int) $a['about'] );
+		$plan  = static fn( int $run_id, array $more = array() ) => self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) + $more );
+		$spoil = static function ( string $table, array $where, string $field, string $bytes ) use ( $wpdb ): void {
+			self::assertSame( 1, $wpdb->update( $table, array( $field => $bytes ), $where ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		};
+		if ( 'the way back of the same run' === $case ) {
+			self::assertSame( 'done', self::next( $r1 )['step']['state'], 'The check.' );
+			self::assertSame( 'done', self::next( $r1 )['step']['state'], 'The first page.' );
+			self::assertSame( 'closed_reverted', self::revert_all( (int) self::revert( $r1 )['run_id'] )['state'] );
+			$own = array_key_first( self::backs( $r1 ) );
+			$spoil( $steps, array( 'run_id' => $r1, 'seq' => $own ), 'parts', $float );
+			self::assertStringStartsWith( sprintf( 'The record of step %1$d of run %2$d (parts) does not read back', $own, $r1 ), self::refused( $plan( $r1 ), 'ab_mcp_sync_revert_unread' ), 'S3: the way back of the same run counts.' );
+			return;
+		}
+		self::assertSame( 'closed_done', self::finish( $r1 )['state'] );
+		if ( 'budget, plan' === $case ) {
+			$spoil( $runs, array( 'run_id' => $r1 ), 'budget', $float );
+			$says = self::refused( $plan( $r1 ), 'ab_mcp_sync_run_unread' );
+			self::assertStringStartsWith( sprintf( 'The record of run %d (budget) does not read back as it was written', $r1 ), $says );
+			self::assertStringNotContainsString( 'plugins or themes', $says, 'C3: nothing is claimed of the code.' );
+			self::assertStringNotContainsString( 'pass steps without', $says, 'A run names no way over steps.' );
+			return;
+		}
+		$r2   = (int) self::revert( $r1 )['run_id'];
+		$back = self::backs( $r2 );
+		self::assertCount( 2, $back );
+		list( $s1, $s2 ) = array_keys( $back );
+		$live = (int) AB_MCP_Sync_Run::step( $r1, $back[ $s1 ] )['parts']['object']['live_ref'];
+		$was  = self::row_a( $live )['post_content'];
+		$pair = static fn(): string => AB_MCP_Sync_Pairs::find_live( AB_MCP_Sync_Anchor::active()['source_id'], 'post', (string) $live )['state'];
+		if ( in_array( $case, array( 'budget, next', 'entry, next', 'journal of the step it takes back, next' ), true ) ) {
+			if ( 'budget, next' === $case ) {
+				$spoil( $runs, array( 'run_id' => $r1 ), 'budget', $float );
+				self::assertStringStartsWith( sprintf( 'The record of run %d (budget) does not read back', $r1 ), self::refused( self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $r2 ) ), 'ab_mcp_sync_run_unread' ) );
+				self::assertSame( 'planned', AB_MCP_Sync_Run::step( $r2, $s1 )['state'], 'S1: the step stays planned.' );
+				self::assertSame( $was, self::row_a( $live )['post_content'] );
+				return;
+			}
+			$named = 'entry, next' === $case ? array( $s1, $r2 ) : array( $back[ $s1 ], $r1 );
+			$spoil( $steps, array( 'run_id' => $named[1], 'seq' => $named[0] ), 'parts', 'entry, next' === $case ? $float : '{"object":{"~b":"YWJj"}}' );
+			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $r2 ) );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			self::assertSame( 'failed', AB_MCP_Sync_Run::step( $r2, $s1 )['state'], 'F2 B: the step fails.' );
+			self::assertStringStartsWith( vsprintf( 'Not written: The record of step %1$d of run %2$d (parts) does not read back as it was written', $named ), AB_MCP_Sync_Run::step( $r2, $s1 )['result']['message'], 'With the sentence of the reader.' );
+			self::assertSame( $was, self::row_a( $live )['post_content'], 'Nothing is put back.' );
+			$closed = self::revert_all( $r2 );
+			self::assertSame( 'closed_findings', $closed['state'], 'The run went on with the next step.' );
+			self::assertSame( 'done', AB_MCP_Sync_Run::step( $r2, $s2 )['state'] );
+			self::assertStringContainsString( sprintf( 'Step %d of the way back stayed as it is (failed).', $s1 ), (string) $closed['next'] );
+			self::assertStringNotContainsString( 'pairs are unclear', (string) $closed['next'], 'G2: the close names no pair as unclear.' );
+			self::assertSame( 'active', $pair(), 'The pair of the failed step stays as it was.' );
+			return;
+		}
+		if ( 'entry, continue' === $case || 'entry, way (a)' === $case ) {
+			// The first step of the way back begun by a call that ended
+			// without its end: the run of the way back is interrupted on it.
+			self::assertTrue( AB_MCP_Sync_Run::update_step( $r2, $s1, array( 'state' => 'begun' ), 'planned' ) );
+			self::assertSame( 'interrupted', self::gated( 'wp_site_revert', array( 'action' => 'status', 'run_id' => $r2 ) )['state'] );
+			$spoil( $steps, array( 'run_id' => $r2, 'seq' => 'entry, continue' === $case ? $s2 : $s1 ), 'parts', $float );
+			$before = self::untouched( $r2, $pages );
+			unset( $before['run'] );
+			$answer = 'entry, continue' === $case ? $plan( $r2 ) : AB_MCP_Sync_Run::close_checked( $r2, self::admin(), true );
+			self::assertStringStartsWith( sprintf( 'The record of step %1$d of run %2$d (parts) does not read back', 'entry, continue' === $case ? $s2 : $s1, $r2 ), self::refused( $answer, 'ab_mcp_sync_revert_unread' ) );
+			$after = self::untouched( $r2, $pages );
+			unset( $after['run'] );
+			self::assertSame( $before, $after, 'S5, S7: nothing of the steps, the bookings, the backups or the pages changed.' );
+			self::assertSame( 'interrupted', AB_MCP_Sync_Run::get( $r2 )['state'] );
+			self::assertSame( 'active', $pair(), 'S7: the pair as it was.' );
+			return;
+		}
+		self::assertSame( 'closed_reverted', self::revert_all( $r2 )['state'] );
+		if ( 'plan of the way back' === $case ) {
+			// A run made after the way back (F4 B): the contact page again.
+			$r3 = (int) self::begun( self::planned( array( 'contact' ) )['args'] )['run_id'];
+			self::assertSame( 'closed_done', self::finish( $r3 )['state'] );
+			$spoil( $runs, array( 'run_id' => $r2 ), 'plan', $float );
+			self::assertStringStartsWith( sprintf( 'The record of run %d (plan) does not read back', $r2 ), self::refused( $plan( $r1 ), 'ab_mcp_sync_run_unread' ), 'S2: the way back of the run it took back.' );
+			$later = $plan( $r3 );
+			self::assertIsArray( $later, is_wp_error( $later ) ? $later->get_error_code() . ': ' . $later->get_error_message() : '' );
+			self::assertTrue( $later['confirm_required'], 'F4 B: a run made after it is not stopped.' );
+			return;
+		}
+		$entry = (string) $wpdb->get_var( $wpdb->prepare( "SELECT parts FROM `$steps` WHERE run_id = %d AND seq = %d", $r2, $s1 ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$spoil( $steps, array( 'run_id' => $r2, 'seq' => $s1 ), 'parts', $float );
+		self::assertStringStartsWith( sprintf( 'The record of step %1$d of run %2$d (parts) does not read back', $s1, $r2 ), self::refused( $plan( $r1 ), 'ab_mcp_sync_revert_unread' ), 'S3: never planned a second time.' );
+		$spoil( $steps, array( 'run_id' => $r2, 'seq' => $s1 ), 'parts', $entry );
+		self::assertStringContainsString( 'taken back already', self::refused( $plan( $r1, array( 'steps' => array( $back[ $s1 ] ) ) ), 'ab_mcp_sync_revert_steps' ), 'Read again, it is taken back already.' );
+	}
+
+	/** The cases of the records that do not read back, one way back each. */
+	public static function way_back_unread(): array {
+		$cases = array( 'budget, plan', 'budget, next', 'plan of the way back', 'entry, plan again', 'the way back of the same run', 'entry, continue', 'entry, next', 'journal of the step it takes back, next', 'entry, way (a)' );
+		return array_combine( $cases, array_map( static fn( string $c ): array => array( $c ), $cases ) );
+	}
+
+	/** The steps of the way back of a run, seq => the forward_seq its entry names, by seq (the order they go back). */
+	private static function backs( int $run_id ): array {
+		$out = array();
+		foreach ( AB_MCP_Sync_Run::steps( $run_id ) as $step ) {
+			if ( 'revert' === $step['op'] ) {
+				$out[ (int) $step['seq'] ] = (int) $step['parts']['forward_seq'];
+			}
+		}
+		ksort( $out );
+		return $out;
 	}
 
 	/** The seq of the write step of each page of a run, by the slug of its page here. */

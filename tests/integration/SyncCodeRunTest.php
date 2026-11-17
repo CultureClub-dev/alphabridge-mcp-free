@@ -1657,8 +1657,9 @@ final class SyncCodeRunTest extends TestCase {
 	 * of the way back (next) fails through the entrance with nothing moved,
 	 * its sentence naming that step; without the entrance each refuses with
 	 * ab_mcp_sync_revert_code and nothing written. A run of the way back
-	 * whose plan names no run it takes back is refused as not known
-	 * (ab_mcp_sync_run_unread). Never the sentence of the contents.
+	 * whose plan names no run it takes back, or a run that is itself of the
+	 * way back, is refused as not known (ab_mcp_sync_run_unread). Never the
+	 * sentence of the contents.
 	 * Sonst: a step of the way back of a swap whose entry does not read
 	 * would go to the contents past the one entrance: way (a) would close
 	 * it as checked without asking the entrance, and the preview and the
@@ -1683,10 +1684,14 @@ final class SyncCodeRunTest extends TestCase {
 		if ( 'parts' === $unread ) {
 			self::assertSame( 1, $wpdb->update( AB_MCP_Sync_Schema::table( 'steps' ), array( 'parts' => '{"forward_run":{"~f":"000000000000f03f"}}' ), array( 'run_id' => $back, 'seq' => $seq ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			self::assertSame( array( 'parts' ), AB_MCP_Sync_Run::step( $back, $seq )['unread'], 'The entry of the step of the way back does not read back.' );
-		} else {
+		} elseif ( 'plan' === $unread ) {
 			$plan = AB_MCP_Sync_Run::get( $back )['plan'];
 			self::assertSame( 1, $wpdb->update( AB_MCP_Sync_Schema::table( 'runs' ), array( 'plan' => AB_MCP_Sync_Canon::encode( array( 'items' => $plan['items'] ) ) ), array( 'run_id' => $back ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			self::assertSame( array( 'items' ), array_keys( AB_MCP_Sync_Run::get( $back )['plan'] ), 'The plan of the run of the way back names no run it takes back.' );
+		} else {
+			// The run its plan names is itself of the type revert (by SQL):
+			// read as the run that wrote, it is not known (the reader, S1).
+			self::assertSame( 1, $wpdb->update( AB_MCP_Sync_Schema::table( 'runs' ), array( 'type' => 'revert' ), array( 'run_id' => $run_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		$state  = static fn(): array => array( AB_MCP_Sync_Run::get( $back )['state'], array_column( AB_MCP_Sync_Run::steps( $back ), 'state', 'seq' ), self::bytes_of( $target ) );
 		$before = $state();
@@ -1697,11 +1702,14 @@ final class SyncCodeRunTest extends TestCase {
 			$answer = 'checked' === $at ? AB_MCP_Sync_Run::close_checked( $back, self::admin(), true ) : self::gated( 'wp_site_revert', array( 'action' => 'next' === $at ? 'next' : 'plan', 'run_id' => $back ) );
 		} finally {
 			AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
+			if ( 'type' === $unread ) {
+				self::assertSame( 1, $wpdb->update( AB_MCP_Sync_Schema::table( 'runs' ), array( 'type' => 'push' ), array( 'run_id' => $run_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
 		}
 		self::assertStringNotContainsString( 'names no written step with a journal', is_wp_error( $answer ) ? $answer->get_error_message() : (string) json_encode( $answer ), 'Never the sentence of the contents.' );
-		if ( 'plan' === $unread ) {
+		if ( 'parts' !== $unread ) {
 			$says = self::refused( $answer, 'ab_mcp_sync_run_unread' );
-			self::assertStringStartsWith( sprintf( 'The record of run %d (plan) does not read back as it was written', $back ), $says );
+			self::assertStringStartsWith( sprintf( 'The record of run %d (plan) does not read back as it was written', 'plan' === $unread ? $back : $run_id ), $says );
 		} elseif ( ! $entrance ) {
 			$says = self::refused( $answer, 'ab_mcp_sync_revert_code' );
 			self::assertStringStartsWith( sprintf( 'Run %d is a run of plugins or themes, and this installation of AlphaBridge has no way back for code', $run_id ), $says, 'The run that wrote, from the plan of the way back.' );
@@ -1729,7 +1737,37 @@ final class SyncCodeRunTest extends TestCase {
 			'continue without the entrance' => array( 'continue', false, 'parts' ),
 			'way (a) without the entrance'  => array( 'checked', false, 'parts' ),
 			'a plan that names no run'      => array( 'continue', true, 'plan' ),
+			'a plan that names a way back'  => array( 'continue', true, 'type' ),
 		);
+	}
+
+	/**
+	 * Prüft: the case of the skeptic E1b (B1, question 2) for a run of the
+	 * code (the reader, S3): its way back, a run of its own closed as
+	 * reverted, whose step has an entry that does not read back (by SQL),
+	 * refuses the plan of the run of the code with the sentence of the one
+	 * reader (ab_mcp_sync_revert_unread); its entry read back again, the
+	 * swap is taken back already, and a step goes back once.
+	 * Sonst: the swap would be planned back a second time, through the one
+	 * entrance, after its way back was closed.
+	 */
+	public function testAStepOfTheCodeIsNotPlannedBackASecondTimeWhereItsWayBackDoesNotReadBack(): void {
+		global $wpdb;
+		list( $run_id ) = self::swapped_f56();
+		for ( $i = 0; $i < 6 && ! in_array( AB_MCP_Sync_Run::get( $run_id )['state'], AB_MCP_Sync_Schema::CLOSED, true ); $i++ ) {
+			self::next( $run_id );
+		}
+		$way  = self::way_back_of( $run_id );
+		$back = (int) $way['begun']['run_id'];
+		self::assertSame( 'closed_reverted', $way['back']['state'], json_encode( $way['back'] ) );
+		$seq   = (int) self::back_step( $back )['seq'];
+		$steps = AB_MCP_Sync_Schema::table( 'steps' );
+		$entry = (string) $wpdb->get_var( $wpdb->prepare( "SELECT parts FROM `$steps` WHERE run_id = %d AND seq = %d", $back, $seq ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertSame( 1, $wpdb->update( $steps, array( 'parts' => '{"forward_run":{"~f":"000000000000f03f"}}' ), array( 'run_id' => $back, 'seq' => $seq ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$says = self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) ), 'ab_mcp_sync_revert_unread' );
+		self::assertStringStartsWith( sprintf( 'The record of step %1$d of run %2$d (parts) does not read back as it was written', $seq, $back ), $says, 'Never planned a second time.' );
+		self::assertSame( 1, $wpdb->update( $steps, array( 'parts' => $entry ), array( 'run_id' => $back, 'seq' => $seq ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		self::assertStringContainsString( 'taken back already', self::refused( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'steps' => array( 3 ) ) ), 'ab_mcp_sync_revert_steps' ) );
 	}
 
 	/**
@@ -2348,7 +2386,7 @@ final class SyncCodeRunTest extends TestCase {
 			self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $back ) )['state'] );
 			self::assertTrue( rename( $target, $target . '-weg' ), 'No version at the target.' );
 			$says = self::refused( AB_MCP_Sync_Run::close_checked( $back, self::admin(), true ), 'code:checked' );
-			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the plugin ab-it-aktiv proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d), or ', $back ), $says );
+			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the plugin ab-it-aktiv proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d). Where the mark of its swap (run %2$d, step ', $back, $run_id ), $says, 'The way by hand only where the mark of the swap is still open (skeptic F2+G, C1).' );
 			self::assertSame( 'interrupted', AB_MCP_Sync_Run::get( $back )['state'] );
 			self::assertIsArray( self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $back ) ), 'The way it names is open: the continuation of the way back.' );
 			return;
@@ -2376,7 +2414,7 @@ final class SyncCodeRunTest extends TestCase {
 		if ( 'target empty' === $case ) {
 			$says = self::refused( $closed, 'code:checked' );
 			self::assertStringStartsWith( sprintf( 'The version at %s could not be proved as the old version of the swap', $target ), $says );
-			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the plugin ab-it-aktiv proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d), or put the old version back by hand in a shell on the server with the instruction of its mark in ', $run_id ), $says );
+			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the plugin ab-it-aktiv proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d). Where the mark of its swap (run ', $run_id ), $says );
 			self::assertSame( array( 'interrupted', 'begun', 'open', 'active' ), $state(), 'Nothing was written.' );
 			self::assertFalse( file_exists( $target ), 'The target is still empty.' );
 			return;
@@ -2485,7 +2523,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( $at[3], self::fits( $guide, $places, $shown ), 'The first lines send this state to the section of its point.' );
 		clearstatcache();
 		self::assertSame( array( 'P1' => $old, 'P2' => array(), 'P3' => $new )[ $point ], file_exists( $target ) ? self::bytes_of( $target ) : array(), 'The version at the target, byte for byte, or none.' );
-		$sentence = sprintf( 'The theme %s does not run on this site now; where it ran before the swap, switch back to it in wp-admin (Appearance → Themes).', $unit['ref'] );
+		$sentence = sprintf( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it was active before the swap, switch back to it in wp-admin (Appearance → Themes).', $unit['ref'] );
 		if ( 'by hand' === $way ) {
 			self::assertTrue( 'theme' !== $kind || self::theme_let_go(), 'WordPress lets go of the theme whose folder it misses.' );
 			AB_MCP_Sync_Revert::admit( null );
@@ -2516,7 +2554,7 @@ final class SyncCodeRunTest extends TestCase {
 		} elseif ( 'P2' === $point ) {
 			$says = self::refused( AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true ), 'code:checked' );
 			self::assertStringStartsWith( sprintf( 'The version at %s could not be proved as the old version of the swap', $target ), $says );
-			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the %2$s %3$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d), or put the old version back by hand in a shell on the server with the instruction of its mark in ', $run_id, $unit['kind'], $unit['ref'] ), $says );
+			self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the %2$s %3$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d). Where the mark of its swap (run ', $run_id, $unit['kind'], $unit['ref'] ), $says );
 			clearstatcache();
 			self::assertSame( array( array( 'interrupted', 'begun', 'open', 'active' ), false ), array( $state(), file_exists( $target ) ), 'Nothing was written; the target is still empty.' );
 			// What wp-admin does with a unit whose files it misses.
@@ -3439,7 +3477,7 @@ final class SyncCodeRunTest extends TestCase {
 		// The note stands without a replacement, and the answer says so
 		// (the lead on D2a, 16.11. 03:57).
 		self::assertSame( $step['parts']['since'], AB_MCP_Update_Log::replaced_at( 'plugin', 'ab-it-aktiv' ) );
-		self::assertStringContainsString( 'The note that its files are replaced stays written all the same (it is not taken back): the undo of AlphaBridge Pro refuses the file undo points of these files from before this call, as after a swap.', $says );
+		self::assertStringContainsString( 'The note that its files are replaced stays written all the same (it is not taken back): the file undo points of these files from before this call are refused, as after a swap.', $says );
 	}
 
 	/** The places of a rename another process or a failure takes. */
@@ -3717,7 +3755,7 @@ final class SyncCodeRunTest extends TestCase {
 		if ( 'the second rename fails' === $case ) {
 			self::assertSame( 'failed', $step['state'], $says );
 			self::assertStringContainsString( 'so the old one went back to its place', $says );
-			self::assertStringContainsString( 'The note that its files are replaced stays written all the same (it is not taken back): the undo of AlphaBridge Pro refuses the file undo points of these files from before this call, as after a swap.', $says, 'The note stands without a replacement.' );
+			self::assertStringContainsString( 'The note that its files are replaced stays written all the same (it is not taken back): the file undo points of these files from before this call are refused, as after a swap.', $says, 'The note stands without a replacement.' );
 			self::assertSame( 'closed', $mark['state'], 'The mark closed on the old version (kept).' );
 			self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-aktiv' ) );
 			self::assertSame( $seen['old'], self::digest( $target ), 'Nothing of the site changed.' );

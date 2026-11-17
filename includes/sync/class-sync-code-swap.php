@@ -1527,7 +1527,7 @@ final class AB_MCP_Sync_Code_Swap {
 			return true;
 		}
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
-		return self::refusal( 'code:note', sprintf( __( 'The note that the files of the %1$s %2$s are replaced (it tells a file undo point of before the swap from one of after it) did not read back as written, so nothing of it was moved; where the note is written all the same, the undo of AlphaBridge Pro refuses the file undo points of these files from before this call, as after a swap. Where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ), $kind, $ref ) );
+		return self::refusal( 'code:note', sprintf( __( 'The note that the files of the %1$s %2$s are replaced (it tells a file undo point of before the swap from one of after it) did not read back as written, so nothing of it was moved; where the note is written all the same, the file undo points of these files from before this call are refused, as after a swap. Where it keeps failing, check that the database of this site accepts writes.', 'alphabridge-mcp' ), $kind, $ref ) );
 	}
 
 	/**
@@ -1917,7 +1917,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		// After the note, a rename that failed leaves it without a
 		// replacement; it is not taken back (the lead on D2a, 16.11. 03:57).
-		$void = __( 'The note that its files are replaced stays written all the same (it is not taken back): the undo of AlphaBridge Pro refuses the file undo points of these files from before this call, as after a swap.', 'alphabridge-mcp' );
+		$void = __( 'The note that its files are replaced stays written all the same (it is not taken back): the file undo points of these files from before this call are refused, as after a swap.', 'alphabridge-mcp' );
 		$why  = array(
 			// A mark not given may still be written in part (mark.json before
 			// its instruction; D2a 3, the Festlegung of this part): named, as
@@ -2258,13 +2258,13 @@ final class AB_MCP_Sync_Code_Swap {
 			$message = sprintf( __( 'The %1$s %2$s is in its old version at %3$s, proved there (device, inode and hash). What the new version wrote into the database while it ran stays as it is; confirm the pair of the unit anew (wp_site_pairs) before its next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'] );
 			// Only now, on the old version proved at the target (Z25).
 			$message = implode( ' ', array_merge( array( $message ), self::on_again( $journal, $unit['ref'], ! empty( $step['parts']['accept'] ), (int) $swap['seq'], true ) ) );
-			// A theme read in this call as not running (WordPress switches
+			// A theme read in this call as not active (WordPress switches
 			// away from a theme whose folder it misses), with the way; no
 			// switch claimed, and nothing where it is not read (option B;
-			// part F, question 2 A).
+			// part F, question 2 A; the word active as V4, skeptic F2+G, C2).
 			if ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {
 				/* translators: %s: the name of the theme (its folder). */
-				$message .= ' ' . sprintf( __( 'The theme %s does not run on this site now; where it ran before the swap, switch back to it in wp-admin (Appearance → Themes).', 'alphabridge-mcp' ), $unit['ref'] );
+				$message .= ' ' . sprintf( __( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it was active before the swap, switch back to it in wp-admin (Appearance → Themes).', 'alphabridge-mcp' ), $unit['ref'] );
 			}
 		}
 		return self::ended(
@@ -2411,8 +2411,8 @@ final class AB_MCP_Sync_Code_Swap {
 			return true;
 		}
 		$store = AB_MCP_Protected_Store::named_by_swap();
-		/* translators: 1: what failed (one or more whole sentences), 2: run number, 3: kind of the unit, as the tools name it (plugin, theme), 4: its name, 5: the folder of the marks of the protected store (absolute path). */
-		return self::refusal( 'code:checked', sprintf( __( '%1$s So run %2$d is not closed as checked: that takes the old version of the %3$s %4$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %2$d), or put the old version back by hand in a shell on the server with the instruction of its mark in %5$s, then close it as checked again.', 'alphabridge-mcp' ), $closed->get_error_message(), $run_id, $unit['kind'], $unit['ref'], is_wp_error( $store ) ? 'the protected store' : $store['marks'] ) . self::kept_note( $kept ) );
+		/* translators: 1: what failed (one or more whole sentences), 2: run number, 3: kind of the unit, as the tools name it (plugin, theme), 4: its name, 5: the folder of the marks of the protected store (absolute path), 6: the run of the swap, 7: its step. */
+		return self::refusal( 'code:checked', sprintf( __( '%1$s So run %2$d is not closed as checked: that takes the old version of the %3$s %4$s proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %2$d). Where the mark of its swap (run %6$d, step %7$d) is still open in %5$s, its instruction there says how to put the old version back in a shell on the server; then close it as checked again.', 'alphabridge-mcp' ), $closed->get_error_message(), $run_id, $unit['kind'], $unit['ref'], is_wp_error( $store ) ? 'the protected store' : $store['marks'], (int) $swap['run_id'], (int) $swap['seq'] ) . self::kept_note( $kept ) );
 	}
 
 	/**

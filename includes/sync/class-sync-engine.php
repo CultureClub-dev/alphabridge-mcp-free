@@ -2950,6 +2950,14 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * The step of the way back of a run of the contents (run_revert()). The
+	 * step it takes back, and the run that wrote it, come from the one reader
+	 * of the way back (AB_MCP_Sync_Run::wrote(); belege/z5r-leser-zettel.md,
+	 * S6): what does not read back there ends the step failed with the
+	 * sentence of the reader, nothing put back, and the run goes on (the
+	 * steering 16.11. 21:43, F2 B); an error of the database is the answer,
+	 * the step stays planned.
+	 *
 	 * @param array $run  Run.
 	 * @param array $step Step.
 	 * @param array $ctx  context().
@@ -2959,10 +2967,10 @@ final class AB_MCP_Sync_Engine {
 		unset( $ctx );
 		$run_id  = (int) $run['run_id'];
 		$seq     = (int) $step['seq'];
-		$what    = is_array( $step['parts'] ) ? $step['parts'] : array();
-		$forward = AB_MCP_Sync_Run::step( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : $run_id, isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : 0 );
-		if ( ! is_array( $forward ) || ! is_array( $forward['parts'] ) || ! isset( $forward['parts']['object'] ) ) {
-			return self::fail_step( $run_id, $seq, 'planned', __( 'The step of the way back names no written step with a journal; nothing is put back.', 'alphabridge-mcp' ) );
+		$took    = AB_MCP_Sync_Run::wrote( $run, $step );
+		$forward = is_wp_error( $took ) ? $took : $took['record'];
+		if ( ! is_array( $forward ) || ! isset( $forward['parts']['object'] ) ) {
+			return is_wp_error( $took ) && ! in_array( $took->get_error_code(), array( 'ab_mcp_sync_run_unread', 'ab_mcp_sync_revert_unread' ), true ) ? $took : self::fail_step( $run_id, $seq, 'planned', is_wp_error( $took ) ? $took->get_error_message() : __( 'The step of the way back names no written step with a journal; nothing is put back.', 'alphabridge-mcp' ) );
 		}
 		$journal = $forward['parts'];
 		$object  = $journal['object'];
@@ -2972,7 +2980,7 @@ final class AB_MCP_Sync_Engine {
 			return $begun;
 		}
 		AB_MCP_Sync_Run::touch( $run_id );
-		$pair_id = isset( $object['pair_id'] ) && null !== $object['pair_id'] ? (int) $object['pair_id'] : ( null !== $forward['pair_id'] ? (int) $forward['pair_id'] : null );
+		$pair_id = isset( $object['pair_id'] ) ? (int) $object['pair_id'] : ( null !== $forward['pair_id'] ? (int) $forward['pair_id'] : null );
 		// A step without a backup wrote nothing (it failed before the backup):
 		// there is nothing to take back; the plan leaves such a step out (B9).
 		if ( ! is_array( $journal['backup'] ) ) {
@@ -3009,7 +3017,7 @@ final class AB_MCP_Sync_Engine {
 				// The fields of a shared row the step set for its new object (a
 				// position of a new menu; decision 23, «setzt … die Positionen
 				// zurück»): put back where they are still the step's own.
-				$shared = self::shared_back( $run_id, $seq, $journal, $live_id, $what );
+				$shared = self::shared_back( $run_id, $seq, $journal, $live_id, $took['run'] );
 				if ( null !== $shared ) {
 					$result['parts'] = $shared['parts'];
 					if ( ! $shared['all_back'] ) {
@@ -3038,7 +3046,7 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $guard ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );
 		}
-		$backup = AB_MCP_Sync_Backup::get( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : $run_id, $journal['backup'] );
+		$backup = AB_MCP_Sync_Backup::get( $took['run'], $journal['backup'] );
 		if ( is_wp_error( $backup ) ) {
 			return self::fail_step( $run_id, $seq, 'begun', $backup->get_error_message() );
 		}
@@ -3217,7 +3225,10 @@ final class AB_MCP_Sync_Engine {
 	 * What the close of a way back says: reverted, or with findings, naming
 	 * the steps of the way back that stayed as they are (unclear: the
 	 * interruption, a part changed since, an object that deviated; failed)
-	 * and the rests.
+	 * and the rests. It says nothing of their pairs: a step that left its
+	 * pair unclear says so in its own answer (pair_back(), restored() of the
+	 * swap, the way back led on), and a step that failed leaves its pair as
+	 * it was (G2, the steering 16.11. 23:26).
 	 *
 	 * @param array $run The run as closed.
 	 * @return string
@@ -3247,7 +3258,7 @@ final class AB_MCP_Sync_Engine {
 			/* translators: %d: number of new objects that stay as rests. */
 			$out[] = sprintf( _n( '%d new object stays as a rest (named in rests).', '%d new objects stay as rests (named in rests).', $rests, 'alphabridge-mcp' ), $rests );
 		}
-		$out[] = __( 'Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go.', 'alphabridge-mcp' );
+		$out[] = __( 'Check those objects in wp-admin (each part left names its value before); remove a rest by hand where it should go.', 'alphabridge-mcp' );
 		return implode( ' ', $out );
 	}
 
@@ -3362,10 +3373,10 @@ final class AB_MCP_Sync_Engine {
 	 * @param int        $seq     Step of the way back.
 	 * @param array      $journal Journal of the step that made the object.
 	 * @param int|string $live_id The object.
-	 * @param array      $what    forward_run, forward_seq.
+	 * @param int        $wrote   The run that wrote the step (its backup).
 	 * @return array{all_back:bool,parts:array}|null
 	 */
-	private static function shared_back( $run_id, $seq, array $journal, $live_id, array $what ) {
+	private static function shared_back( $run_id, $seq, array $journal, $live_id, $wrote ) {
 		$w = self::writer_of( $journal );
 		if ( null === $w || ! method_exists( $w, 'shared_part' ) ) {
 			return null;
@@ -3398,7 +3409,7 @@ final class AB_MCP_Sync_Engine {
 		if ( is_wp_error( $guard ) ) {
 			return $left( $guard->get_error_message() );
 		}
-		$backup = AB_MCP_Sync_Backup::get( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : $run_id, $journal['backup'] );
+		$backup = AB_MCP_Sync_Backup::get( (int) $wrote, $journal['backup'] );
 		if ( is_wp_error( $backup ) || ! is_array( $backup ) || ! isset( $backup['parts'] ) || ! is_array( $backup['parts'] ) ) {
 			return $left( __( 'The backup of the step holds no fields of the shared row, so they are left as they are; set them by hand in wp-admin.', 'alphabridge-mcp' ) );
 		}

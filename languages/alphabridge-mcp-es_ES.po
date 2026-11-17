@@ -10521,9 +10521,6 @@ msgid_plural "%d new objects stay as rests (named in rests)."
 msgstr[0] "%d objeto nuevo se queda como resto (indicado en rests)."
 msgstr[1] "%d objetos nuevos se quedan como restos (indicados en rests)."
 
-msgid "Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go."
-msgstr "Comprueba esos objetos en wp-admin (cada parte que se deja indica su valor anterior; sus pares son inciertos hasta que wp_site_pairs confirme una nueva alineación); elimina a mano un resto donde deba desaparecer."
-
 msgid "Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here."
 msgstr "Los adjuntos de left no cabían en este paquete: expórtalos en otro (wp_site_export con purpose=media y sus refs). Uno de too_large supera lo que lleva un paquete: sube su archivo a mano a la biblioteca de medios del sitio de producción. Uno de unread tiene una lista de archivos que no se lee completa en este sitio (un archivo que falta, un enlace, una ruta fuera de las subidas): compruébalo aquí en la biblioteca de medios."
 

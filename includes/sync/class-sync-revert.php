@@ -764,7 +764,10 @@ final class AB_MCP_Sync_Revert {
 	 * go as they are.
 	 *
 	 * A step of the way back of the code shows and binds what its entrance
-	 * gives (code(), continue); without the entrance nothing is led on.
+	 * gives (code(), continue); without the entrance nothing is led on. Each
+	 * other step still to go is read through the one reader of the way back
+	 * (AB_MCP_Sync_Run::wrote()): what does not read back is refused, and
+	 * nothing is written (belege/z5r-leser-zettel.md, S5).
 	 *
 	 * @param array   $run    The interrupted run on its way back.
 	 * @param array[] $steps  Its steps.
@@ -792,15 +795,18 @@ final class AB_MCP_Sync_Revert {
 				$live    = $code['live'] + $live;
 				continue;
 			}
-			$what    = is_array( $step['parts'] ) ? $step['parts'] : array();
-			$forward = AB_MCP_Sync_Run::step( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : (int) $run['run_id'], isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : 0 );
+			$took = AB_MCP_Sync_Run::wrote( $run, $step );
+			if ( is_wp_error( $took ) ) {
+				return $took;
+			}
+			$forward = $took['record'];
 			$object  = is_array( $forward ) && is_array( $forward['parts'] ) && isset( $forward['parts']['object'] ) ? $forward['parts']['object'] : array();
 			$live_id   = self::live_ref_of( $object );
 			$objects[] = $object;
 			$shown[]   = array(
 				'seq'         => (int) $step['seq'],
 				'state'       => $step['state'],
-				'forward_seq' => isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : null,
+				'forward_seq' => $took['seq'],
 				'kind'        => isset( $object['kind'] ) ? $object['kind'] : null,
 				'live_ref'    => AB_MCP_Sync_Engine::is_ref( $live_id ) ? (string) $live_id : null,
 				'will'        => 'begun' === $step['state'] ? 'stays' : 'back where own',
@@ -981,7 +987,7 @@ final class AB_MCP_Sync_Revert {
 		$run    = $plan['run'];
 		$run_id = (int) $run['run_id'];
 		$began = AB_MCP_Sync_Run::transaction(
-			static function () use ( $run_id, $steps ) {
+			static function () use ( $run, $run_id, $steps ) {
 				$moved = AB_MCP_Sync_Run::set_state( $run_id, array( 'open', 'interrupted' ), 'reverting' );
 				if ( is_wp_error( $moved ) ) {
 					return $moved;
@@ -1012,7 +1018,10 @@ final class AB_MCP_Sync_Revert {
 						);
 						// The pair of a step of the way back left begun: unclear, as
 						// a close as checked makes it (its object may be back in part).
-						$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run_id, $step ) : null;
+						$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run, $step ) : null;
+						if ( is_wp_error( $pair_id ) ) {
+							return $pair_id;
+						}
 						if ( null !== $pair_id ) {
 							$pair = AB_MCP_Sync_Pairs::get( $pair_id );
 							if ( is_array( $pair ) && 'active' === $pair['state'] ) {

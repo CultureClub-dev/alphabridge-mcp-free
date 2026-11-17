@@ -1169,7 +1169,8 @@ final class AB_MCP_Sync_Run {
 	 * begun is asked first, before anything is written, through the one
 	 * entrance of the way back of the code (AB_MCP_Sync_Revert::code(),
 	 * checked; way (a), part E): its refusal, or none there, leaves the run
-	 * interrupted.
+	 * interrupted; so does the refusal of the one reader for the pair of a
+	 * step of the way back left begun (pair_of_revert_step()).
 	 *
 	 * @param array   $run     The run as read.
 	 * @param array[] $steps   Its steps as read.
@@ -1178,11 +1179,18 @@ final class AB_MCP_Sync_Run {
 	 */
 	private static function close_checked_on( array $run, array $steps, $user_id ) {
 		$run_id = (int) $run['run_id'];
+		$pairs  = array();
 		foreach ( $steps as $step ) {
 			$code = 'begun' === $step['state'] && in_array( $step['op'], array( 'write', 'revert' ), true ) ? AB_MCP_Sync_Revert::code( 'checked', $run, $step ) : null;
-			if ( is_wp_error( $code ) ) {
-				return $code;
+			// The pair: the step's own, or, for a step of the way back (which
+			// gets its pair_id only as it ends), the pair of the step it was
+			// taking back (a run of the way back closed as checked, GitHub Codex
+			// round 4 on free#137), read before anything is written.
+			$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ? $step['pair_id'] : self::pair_of_revert_step( $run, $step );
+			if ( is_wp_error( $code ) || is_wp_error( $pair ) ) {
+				return is_wp_error( $code ) ? $code : $pair;
 			}
+			$pairs[ (int) $step['seq'] ] = $pair;
 		}
 		foreach ( $steps as $step ) {
 			if ( 'begun' !== $step['state'] ) {
@@ -1191,11 +1199,7 @@ final class AB_MCP_Sync_Run {
 			// The step stays what it was: unclear, its parts as the journal
 			// has them (a part written but not read back is unclear).
 			self::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear', 'result' => array( 'closed_checked_by' => (int) $user_id ) ), 'begun' );
-			// The pair: the step's own, or, for a step of the way back (which
-			// gets its pair_id only as it ends), the pair of the step it was
-			// taking back (a run of the way back closed as checked, GitHub Codex
-			// round 4 on free#137).
-			$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : self::pair_of_revert_step( $run_id, $step );
+			$pair_id = $pairs[ (int) $step['seq'] ];
 			if ( null !== $pair_id ) {
 				$pair = AB_MCP_Sync_Pairs::get( $pair_id );
 				if ( is_array( $pair ) && 'active' === $pair['state'] ) {
@@ -1248,20 +1252,20 @@ final class AB_MCP_Sync_Run {
 
 	/**
 	 * The pair of a step of the way back: the pair of the step it takes back
-	 * (its own pair_id is set only as it ends). Null for another step, or
-	 * where the step taken back names none.
+	 * (its own pair_id is set only as it ends), read through the one reader
+	 * of the way back (wrote()): what does not read back is its refusal,
+	 * never no pair (belege/z5r-leser-zettel.md, S7). Null for another step,
+	 * or where the step taken back is gone or names none.
 	 *
-	 * @param int   $run_id Run.
-	 * @param array $step   Step (op revert; parts: forward_run, forward_seq).
-	 * @return int|null
+	 * @param array $run  Run.
+	 * @param array $step Step (op revert; parts: forward_run, forward_seq).
+	 * @return int|null|WP_Error
 	 */
-	public static function pair_of_revert_step( $run_id, array $step ) {
-		if ( 'revert' !== $step['op'] || ! is_array( $step['parts'] ) || ! isset( $step['parts']['forward_seq'] ) ) {
-			return null;
-		}
-		$forward = self::step( isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run_id, (int) $step['parts']['forward_seq'] );
+	public static function pair_of_revert_step( array $run, array $step ) {
+		$took    = 'revert' === $step['op'] ? self::wrote( $run, $step ) : null;
+		$forward = is_array( $took ) ? $took['record'] : null;
 		if ( ! is_array( $forward ) ) {
-			return null;
+			return is_wp_error( $took ) ? $took : null;
 		}
 		if ( null !== $forward['pair_id'] ) {
 			return (int) $forward['pair_id'];

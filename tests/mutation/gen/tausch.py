@@ -583,8 +583,8 @@ e('e-weg-a-eigener-schritt', 'Ops::back(): way (a) on a step of the run itself t
 e('e-weg-a-anschluss', 'close_checked_on(): a step of the code left begun goes through the one entrance of the way back before the run is closed as checked (way (a), N12; Teil E, section 2)', RU,
   "? AB_MCP_Sync_Revert::code( 'checked', $run, $step ) : null;", '? null : null;', 'coderun', E_WA)
 e('e-weg-a-vor-schreiben', 'close_checked_on(): every step of the code left begun is asked before anything of the run is written, so a refusal leaves it interrupted with its steps as they were (way (a); Teil E, section 2)', RU,
-  "\t\t\tif ( is_wp_error( $code ) ) {\n\t\t\t\treturn $code;\n\t\t\t}\n\t\t}\n\t\tforeach ( $steps as $step ) {\n\t\t\tif ( 'begun' !== $step['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n",
-  "\t\t}\n\t\tforeach ( $steps as $step ) {\n\t\t\tif ( 'begun' !== $step['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\tself::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear' ), 'begun' );\n\t\t\t$code = AB_MCP_Sync_Revert::code( 'checked', $run, $step );\n\t\t\tif ( is_wp_error( $code ) ) {\n\t\t\t\treturn $code;\n\t\t\t}\n", 'coderun', E_WA)
+  "\t\t\tif ( is_wp_error( $code ) || is_wp_error( $pair ) ) {\n\t\t\t\treturn is_wp_error( $code ) ? $code : $pair;\n\t\t\t}\n\t\t\t$pairs[ (int) $step['seq'] ] = $pair;\n\t\t}\n\t\tforeach ( $steps as $step ) {\n\t\t\tif ( 'begun' !== $step['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n",
+  "\t\t\t$pairs[ (int) $step['seq'] ] = $pair;\n\t\t}\n\t\tforeach ( $steps as $step ) {\n\t\t\tif ( 'begun' !== $step['state'] ) {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\tself::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear' ), 'begun' );\n\t\t\t$code = AB_MCP_Sync_Revert::code( 'checked', $run, $step );\n\t\t\tif ( is_wp_error( $code ) ) {\n\t\t\t\treturn $code;\n\t\t\t}\n", 'coderun', E_WA)
 e('e-weg-a-nur-begonnen', 'close_checked_on(): only a step left begun is asked, never a swap done long before (way (a); Teil E, section 2)', RU,
   "$code = 'begun' === $step['state'] && in_array(", '$code = in_array(', 'coderun', E_WA)
 e('e-weg-a-nur-schreibschritte', 'close_checked_on(): only a write step or a step of the way back is asked, never one of the checks of the run (way (a); Teil E, section 2)', RU,
@@ -627,6 +627,12 @@ e('l-eintrag-ohne-schritt', 'Run::wrote(): an entry of a step of the way back th
   " || $seq < 1 || ", ' || ', 'run', L_RD)
 e('l-fremder-lauf', 'Run::wrote(): an entry that names another run than the run that wrote is refused, never left out (the reader)', RU,
   " || (int) ( $what['forward_run'] ?? $id ) !== $id ) {", ' ) {', 'run', L_RD)
+
+# ------------------------------------------- the reader of the way back (review before H, section 2) and C3 of the skeptic F2+G
+e('l-art-rueckweg', 'Run::wrote() for Revert::code(): a run that wrote which is itself of the way back is not known and refused, never read as the run of the code (the reader, S1)', RU,
+  " && ( $i > 0 || $id === (int) $of['run_id'] ) ) ) {", " && 0 === $i && $id === (int) $of['run_id'] ) ) {", 'coderun', E_EU)
+e('g-c4-satz', 'at_target(): the refusal of the proof at the target names the version that is to be there, the old or the new one (skeptic E1b, C4; skeptic F2+G, C3)', CS,
+  "sprintf( $says[ $which ], $plan['target'] )", "sprintf( $says['old'], $plan['target'] )", 'coderun', AFTER)
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

@@ -896,8 +896,8 @@ final class StoreTreesTest extends TestCase {
 			self::assertNotEmpty( AB_MCP_IT_Handweg::commands( $text, $point ), $point );
 		}
 		self::assertStringContainsString( 'The plugin ' . self::UNIT . '/' . self::UNIT . '.php was active when the swap began.', $text );
-		self::assertStringContainsString( 'way (a) with its approval in accept', $text );
-		self::assertStringContainsString( 'Plugins → Activate in wp-admin by hand', $text );
+		self::assertStringContainsString( 'Where it is inactive afterwards: Plugins → Activate in wp-admin by hand.', $text );
+		self::assertStringNotContainsString( 'way (a)', $text, 'Way (a) switches nothing on (skeptic F2+G, C5).' );
 		self::assertStringContainsString( 'A request to the page Plugins at the same time can still deactivate the plugin after the swap; the next report shows it then.', $text );
 		$mark = json_decode( (string) file_get_contents( $s['mark']['mark'] ), true );
 		self::assertSame( array( self::UNIT . '/' . self::UNIT . '.php' ), $mark['active'], 'The mark holds the main files active at the beginning.' );

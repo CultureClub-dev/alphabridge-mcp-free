@@ -587,9 +587,9 @@ e('engine-abort-fresh', 'abort(): the run read again under the lock; moved since
 e('revert-continue-planned-stay', 'begin_same_run(): a step of the way back still planned stays and goes back in its turn; a forward step is skipped', RV,
   "\t\t\t\t\t} elseif ( 'planned' === $step['state'] && 'revert' !== $step['op'] ) {", "\t\t\t\t\t} elseif ( 'planned' === $step['state'] ) {", 'it', LED)
 e('revert-continue-pair', 'begin_same_run(): the pair of a step of the way back left begun is unclear', RV,
-  "\t\t\t\t\t\t$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run_id, $step ) : null;", "\t\t\t\t\t\t$pair_id = null;", 'it', LED)
+  "\t\t\t\t\t\t$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run, $step ) : null;", "\t\t\t\t\t\t$pair_id = null;", 'it', LED)
 e('run-close-checked-revert-pair', 'close_checked(): the pair of a step of the way back left begun is the pair of the step it took back', RU,
-  "\t\t\t$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : self::pair_of_revert_step( $run_id, $step );", "\t\t\t$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : null;", 'it', LED)
+  "\t\t\t$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ? $step['pair_id'] : self::pair_of_revert_step( $run, $step );", "\t\t\t$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ? $step['pair_id'] : null;", 'it', LED)
 LOG_IT = 'testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding'
 e('engine-log-mark-empty', 'error_log_mark(): no log yet is marked at 0, so a log made since is new whole', EN,
   "\t\tif ( null === $path ) {\n\t\t\treturn array( 'bytes' => 0 );", "\t\tif ( null === $path ) {\n\t\t\treturn null;", 'it', LOG_IT)
@@ -725,6 +725,29 @@ e('engine-fresh-unread', 'fresh(): a run whose plan or booking does not read bac
   "\t\tif ( isset( $now['unread'] ) ) {", "\t\tif ( false ) {", 'it', UNREAD_IT)
 e('revert-plan-unread', 'way_back(): no way back is planned on a journal that does not read back (through the one reader), with the way', RV,
   "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step, false );\n\t\t\tif ( is_wp_error( $took ) ) {", "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step, false );\n\t\t\tif ( false ) {", 'it', UNREAD_IT)
+
+# ------------------------------- the reader of the way back (review before H, section 2; belege/z5r-leser-zettel.md S1 to S7, G2)
+WB = 'testAWayBackOnRecordsThatDoNotReadBackIsRefusedAndNoStepGoesBackTwice'
+e('l-genommen-ungelesen', 'Run::wrote(): the step a step of the way back takes back, read with it, is refused where it does not read back, never read as no journal (the reader, S6)', RU,
+  "\t\tif ( is_wp_error( $read ) || isset( $read['unread'] ) ) {", "\t\tif ( is_wp_error( $read ) ) {", 'it', WB)
+e('l-weg-zurueck', 'way_back(): a step of a way back whose entry does not read back refuses the plan, never counted as not taken back (the reader, S3)', RV,
+  "\t\t\t\t$took = AB_MCP_Sync_Run::wrote( $way, $step, false );\n\t\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\t\treturn $took;", "\t\t\t\t$took = AB_MCP_Sync_Run::wrote( $way, $step, false );\n\t\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\t\tcontinue;", 'it', WB)
+e('l-weg-laeufe', 'reverts_of(): a run of the way back whose plan does not read back refuses, never left out (the reader, S2)', RU,
+  "\t\t\t$took = self::wrote( $run, null, false );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\treturn $took;", "\t\t\t$took = self::wrote( $run, null, false );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\tcontinue;", 'it', WB)
+e('l-weg-juenger', 'reverts_of(): only the runs of the way back made after the run are asked, so an older one that does not read back stops no way back of a later run (the steering 16.11. 21:43, F4 B)', RU,
+  " AND run_id > %d ORDER BY", " AND run_id <> %d ORDER BY", 'it', WB)
+e('l-weg-klausel', 'way_back(): the way over steps is named only for a write step that does not read back, never for a run (the reader, S1, C3)', RV,
+  "return 'ab_mcp_sync_revert_unread' === $took->get_error_code() ? new WP_Error(", "return true ? new WP_Error(", 'it', WB)
+e('l-grenze-satz', 'revert_boundary(): what the reader refuses ends the step with its sentence, never with the sentence of no journal (the reader, S6)', EN,
+  "is_wp_error( $took ) ? $took->get_error_message() : __( 'The step of the way back names no written step", "__( 'The step of the way back names no written step", 'it', WB)
+e('l-grenze-fehlschlag', 'revert_boundary(): a refusal of the reader ends the step failed and the run goes on, only an error of the database is the answer (F2 B)', EN,
+  "return is_wp_error( $took ) && ! in_array( $took->get_error_code(), array( 'ab_mcp_sync_run_unread', 'ab_mcp_sync_revert_unread' ), true ) ? $took :", "return is_wp_error( $took ) ? $took :", 'it', WB)
+e('l-fortsetzung', 'continuation(): a step still to go whose entry does not read back refuses the continuation, never shown as empty (the reader, S5)', RV,
+  "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\treturn $took;\n\t\t\t}\n\t\t\t$forward = $took['record'];", "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\t$took = array( 'seq' => null, 'record' => null );\n\t\t\t}\n\t\t\t$forward = $took['record'];", 'it', WB)
+e('l-weg-a-paar', 'close_checked_on(): the refusal of the reader for the pair of a step left begun leaves the run interrupted, never no pair (the reader, S7)', RU,
+  "\t\t\tif ( is_wp_error( $code ) || is_wp_error( $pair ) ) {", "\t\t\t$pair = is_wp_error( $pair ) ? null : $pair;\n\t\t\tif ( is_wp_error( $code ) ) {", 'it', WB)
+e('l-schluss-paar', 'closed_note(): the close of a way back names no pair as unclear; a failed step leaves its pair as it was (G2, the steering 16.11. 23:26)', EN,
+  "'Check those objects in wp-admin (each part left names its value before); remove a rest by hand where it should go.'", "'Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go.'", 'it', WB)
 
 # ------------------------------- GitHub Codex round 9 on free#137 (one P2)
 # Every checkpoint of the journal is checked; the boundary stops before any

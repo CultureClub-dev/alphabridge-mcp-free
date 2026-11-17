@@ -833,7 +833,7 @@ return array(
 		'id'      => 'struktur/engine-shared-back',
 		'clause'  => 'revert: the fields a new object took in shared rows go back',
 		'file'    => $en,
-		'search'  => "\t\t\t\t\$shared = self::shared_back( \$run_id, \$seq, \$journal, \$live_id, \$what );",
+		'search'  => "\t\t\t\t\$shared = self::shared_back( \$run_id, \$seq, \$journal, \$live_id, \$took['run'] );",
 		'replace' => "\t\t\t\t\$shared = null;",
 		'run'     => $it( 'SyncStructureTest', 'testANewMenuAtAPositionOfTheThemeGoesOverAndTheWayBackPutsThePositionBackAndLeavesTheMenuAsARest' ),
 		'expect'  => '/testANewMenuAtAPositionOfTheThemeGoesOverAndTheWayBackPutsThePositionBackAndLeavesTheMenuAsARest/',

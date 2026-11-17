@@ -768,12 +768,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 ### G-5-14 Der Rückweg eines Tauschs: ein Eingang, keine eigene Marke, die Marke über ihre Liste
 
 - **Fundstelle:** Der Platz des Eingangs `AB_MCP_Sync_Revert::admit()` und die Weiche `code()`
-  (`includes/sync/class-sync-revert.php:126`, `:151`), belegt in der letzten Zeile von
+  (`includes/sync/class-sync-revert.php:126`, `:149`), belegt in der letzten Zeile von
   `includes/sync/class-sync-code-ops.php` (`:592`); der Rückweg im Tausch `back()`, `restore()`, `restored()`,
-  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2097`, `:2161`, `:2202`, `:2296`, `:2421`); das
+  `moved_back()`, `mark_id()` (`includes/sync/class-sync-code-swap.php:2102`, `:2166`, `:2207`, `:2301`, `:2426`); das
   Journal in der Form seiner Zeile `step.swap` (`includes/class-store-inputs.php:985`); die Fortsetzung eines
-  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:994`). Zeilen am Stand von Teil F,
-  Abschnitt 2.
+  unterbrochenen Rückweg-Schritts `begin_same_run()` (`class-sync-revert.php:986`). Zeilen am Stand des Abschnitts
+  «ein Leser», Commit 2 (Qualitätsdurchsicht vor H).
 - **Quelle:** Teil E des Rests, Bauzettel `z5r-e-zettel.md` (Grenzen) mit der Freigabe der Lead (Fragen 1 bis 5, N12)
   und der Kürzung nach `z5r-e1-abweichung.md`.
 - **Was:**
@@ -781,7 +781,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     Umbenennungen lässt das Ziel leer; die neue Fassung liegt dann in der Gruppe `back-<lauf>-<schritt>` der
     Sicherungen des Rückweglaufs, die alte in der Sicherung. Der Rückweg-Schritt wird bei der Fortsetzung `unclear`
     (`begin_same_run()`, deren Satz von «object» spricht), und einen Handweg gibt es nur, solange die Marke des Tauschs
-    offen ist (nach einem gelungenen Tausch ist sie zu). Abbruchtests des Rückwegs gehören zu Teil F.
+    offen ist (nach einem gelungenen Tausch ist sie zu). Ein harter Abbruch eines Rückweg-Schritts ist nicht getestet
+    (F58 bricht nur den Tausch ab).
   - Der Platz des Eingangs ist öffentlich wie jeder Aufruf in PHP: Code im selben Prozess könnte ihn belegen oder
     leeren. Free belegt ihn nur aus der Datei von `AB_MCP_Sync_Code_Ops`; leer lehnen Vorschau, Schritt und
     Fortsetzung eines Laufs mit Code-Schritten ab (`ab_mcp_sync_revert_code`).
@@ -795,14 +796,16 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     verweigert ihn der Speicher, bleibt der Schritt `planned`. Bewegt der Schritt danach nichts (die alte Fassung ist
     schon am Ziel, oder ein Nachweis scheitert), bleibt die Gruppe `back-<lauf>-<schritt>` leer stehen, so lange wie
     die Sicherungen des Rückweglaufs.
-  - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2213`) trägt den Satz von
-    `clock_refusal()` (`:2483`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
+  - Die Ablehnung der Uhr auf dem Rückweg (`restored()`, `class-sync-code-swap.php:2218`) trägt den Satz von
+    `clock_refusal()` (`:2488`): «the unit is not swapped». Er ist wörtlich wahr (nichts wird getauscht), und der Weg
     (`action=next`) stimmt; er nennt den Rückweg nicht als solchen.
   - Der Schlusssatz eines Rückweglaufs mit Befunden (`AB_MCP_Sync_Engine::closed_note()`,
-    `includes/sync/class-sync-engine.php:3225`, Satz `:3250`, Stand Teil G, Abschnitt 2) spricht für jeden Schritt,
-    der `unclear` oder `failed` blieb, von Teilen und Resten («each part left names its value before …; remove a rest
-    by hand …»), auch für einen Code-Schritt, der weder Teile noch Rest hat; den Weg eines Code-Schritts (seine Antwort,
-    die Anleitung der offenen Marke) nennt er nicht (Skeptiker E1, C4; wie der Satz von `begin_same_run()` oben).
+    `includes/sync/class-sync-engine.php:3236`, Satz `:3261`) spricht für jeden Schritt, der `unclear` oder `failed`
+    blieb, von Teilen und Resten («each part left names its value before; remove a rest by hand …»), auch für einen
+    Code-Schritt, der weder Teile noch Rest hat; den Weg eines Code-Schritts (seine Antwort, die Anleitung der offenen
+    Marke) nennt er nicht (Skeptiker E1, C4; wie der Satz von `begin_same_run()` oben). Von Paaren sagt er nichts mehr:
+    ein Schritt, der sein Paar `unclear` liess, sagt es in seiner Antwort, ein `failed`-Schritt lässt es, wie es war
+    (Befund G2, Nachtrag der Steuerung 16.11. 23:26).
 - **Trifft Normalfall:** nein. Im Normalfall (F59, F1, F2, F6, F47, F55) ist der Eingang belegt, die Marke in der Liste,
   und beide Umbenennungen gelingen in einem Aufruf.
 
@@ -811,17 +814,19 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Fundstelle:** `accept` im Schema von `wp_site_revert` (`includes/tools/class-tools-staging.php:481`), durchgereicht
   von `AB_MCP_Sync_Revert::one()` und `code()`, geprüft in `AB_MCP_Sync_Code_Ops::back()`
   (`includes/sync/class-sync-code-ops.php:163`); im Tausch `back()`, `restored()`, `on_again()`, `closed_checked()`
-  (`includes/sync/class-sync-code-swap.php:2097`, `:2202`, `:2340`, `:2382`); Weg (a) in
-  `AB_MCP_Sync_Run::close_checked_on()` (`includes/sync/class-sync-run.php:1095`). Zeilen am Stand von Teil F,
-  Abschnitt 2.
+  (`includes/sync/class-sync-code-swap.php:2102`, `:2207`, `:2345`, `:2387`); Weg (a) in
+  `AB_MCP_Sync_Run::close_checked_on()` (`includes/sync/class-sync-run.php:1180`). Zeilen am Stand des Abschnitts
+  «ein Leser», Commit 2 (Qualitätsdurchsicht vor H).
 - **Quelle:** Teil E des Rests, Abschnitt 2, Kurzzettel `z5r-e2-zettel.md` nach dem Bauzettel `z5r-e-zettel.md`
   (Bausteine 4 und 7, Frage 2 der Lead).
 - **Was:**
   - Wieder eingeschaltet werden nur Plugins, deren Hauptdatei beim Beginn des Tauschs lief (Journal `active`, wie die
     Marke sie nennt). Ein Wechsel des Themes durch den Kern (`validate_current_theme()`, wo der Ordner fehlte) wird
     nicht zurückgestellt (G-24); das Journal hält für ein Theme kein `active`. Seit Teil F, Abschnitt 2 nennt die
-    Antwort des Rückweg-Schritts ein Theme, das dieser Aufruf als nicht laufend liest, mit dem Weg (wp-admin), ohne
-    einen Wechsel zu behaupten; wo das nicht gelesen wird (`runs()` null), sagt sie nichts dazu (Option B).
+    Antwort des Rückweg-Schritts ein Theme, das dieser Aufruf als nicht aktiv liest (weder Theme der Site noch sein
+    Eltern-Theme, Wortlaut wie V4), mit dem Weg (wp-admin), ohne einen Wechsel zu behaupten und auch für ein Theme, das
+    nie aktiv war («where it was active before the swap»); wo das nicht gelesen wird (`runs()` null), sagt sie nichts
+    dazu (Option B).
   - `accept` wirkt nur für einen Schritt, dessen Rückweg geplant wird. Eine Nummer, die kein Schreibschritt des Laufs
     ist, nicht in `steps` steht, schon zurückgenommen wurde, oder `accept` für einen Lauf der Inhalte bleibt ohne
     Wirkung und wird nicht abgelehnt (wie `steps`). Bei der Fortsetzung eines unterbrochenen Rückwegs gilt der Eintrag
@@ -832,15 +837,17 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - Die Aktivierung läuft im Aufruf des Rückweg-Schritts, mit dem Zeitbudget des Guards ab dem Beginn dieses Aufrufs;
     lehnt er ab (etwa keine Zeit mehr für seine Testanfragen), bleibt das Plugin inaktiv, der Schritt `done`, und die
     Antwort nennt die Ablehnung mit dem Weg. Einen zweiten Versuch über `wp_site_revert` gibt es nicht (ein Schritt geht
-    einmal zurück); der Weg ist wp-admin oder `wp_activate_plugin`.
+    einmal zurück); der Weg ist wp-admin oder `wp_activate_plugin`. Das gilt seit dem einen Leser auch, wo ein Eintrag
+    oder Plan nicht liest (G-5-23).
   - Weg (a) schliesst nur, wo am Ziel die neue Fassung und in der Sicherung die alte ganz belegt ist, oder am Ziel die
-    alte; die Marke schliesst dabei (bei `swap` mit dem Verwerfen der Datei-Undo-Punkte der Einheit wie Z20a). Die
+    alte; sonst nennt die Ablehnung den Rückweg und den Handweg über die Anleitung der Marke nur, wo diese Marke noch
+    offen ist (Skeptiker F2+G, C1; nach einem gelungenen Tausch ist sie zu). Die Marke schliesst dabei (bei `swap` mit dem Verwerfen der Datei-Undo-Punkte der Einheit wie Z20a). Die
     Meldung der Seite «Staging» danach sagt weiter «Nothing was written». Konnte die Sperre für Änderungen danach nicht
     zurückgegeben werden, nennt das nur eine Ablehnung, nicht ein gelungenes Schliessen. Ein Journal, das nicht als
     Tausch lesbar ist, lehnt mit dem Satz `journal_unknown` ab, der nur den Handweg nennt (die Teilmenge der Schritte
     nur in der Vorschau, wo `steps` gilt); der Lauf bleibt dann unterbrochen, und kein Weg schliesst ihn, solange das
     Journal nicht lesbar ist. Ein Lauf, dessen Datensatz nicht zurückliest, wird weder geplant noch zurückgelegt noch
-    als geprüft geschlossen (`code()`, fail closed).
+    als geprüft geschlossen (`code()` über den einen Leser `AB_MCP_Sync_Run::wrote()`, fail closed; G-5-23).
 - **Trifft Normalfall:** nein. Im Normalfall bleibt ein aktives Plugin über Tausch und Rückweg aktiv, und ein
   unterbrochener Tausch geht über Weg (b) zurück.
 
@@ -869,11 +876,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 - **Fundstelle:** `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`) ruft kein
   `register_shutdown_function` (`git grep -c` ohne Treffer); der Ersatzvermerk in `rename_marked()` (`noted()` `:1521`,
-  vor der ersten Umbenennung `:1471`), «not taken back» (`not_swapped()`, `:1919`). Die Sperre für Änderungen
+  vor der ersten Umbenennung `:1471`), «not taken back» (`not_swapped()`, `:1920`). Die Sperre für Änderungen
   `AB_MCP_Change_Lock::TIMEOUT` (600 s, `includes/lifecycle/class-change-lock.php:54`) und
-  `AB_MCP_Sync_Run::settle()` (`includes/sync/class-sync-run.php:793`). Test
-  `SyncCodeRunTest::testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow` (F58). Zeilen am Stand von Teil G,
-  Abschnitt 2.
+  `AB_MCP_Sync_Run::settle()` (`includes/sync/class-sync-run.php:877`). Test
+  `SyncCodeRunTest::testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow` (F58). Zeilen am Stand des Abschnitts
+  «ein Leser», Commit 2 (Qualitätsdurchsicht vor H).
 - **Quelle:** Plan 15.23, «Keine Shutdown-Rettung»; Bauzettel F, Abschnitt 8 (`belege/z5r-f-zettel.md`), am Bau von
   Teil F, Abschnitt 2 geprüft; Notiz G-2 (D2a).
 - **Was:**
@@ -913,8 +920,9 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 
 - **Fundstelle:** Kern: `wp-admin/plugins.php:639` ruft `validate_active_plugins()`
   (`wp-admin/includes/plugin.php:1075`), das ein Plugin ohne Datei still deaktiviert (`deactivate_plugins( $plugin,
-  true )`, `:1099`). Die Anleitung der Marke sagt es (`AB_MCP_Protected_Store::guide()`,
-  `includes/class-protected-store.php:2981`–`:2982`); Wiedereinschalten auf dem Rückweg mit `accept` (G-5-15).
+  true )`, `:1099`). Die Anleitung der Marke sagt es und nennt den Weg von Hand (Plugins → Activate;
+  `AB_MCP_Protected_Store::guide()`, `includes/class-protected-store.php:2981`–`:2982`; seit Skeptiker F2+G, C5 ohne
+  Weg (a), der nichts einschaltet); Wiedereinschalten auf dem Rückweg mit `accept` (G-5-15).
 - **Quelle:** Plan 15.23, «Kein Vergleich am Ende»; Plan E6 (Entscheid 2 von Thomas, 11.11.).
 - **Was:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach, meldet der Tausch es nicht; er vergleicht am
   Ende nichts. Die Deaktivierungshaken des Plugins laufen dabei nicht. Der nächste Bericht zeigt die Aktivierung als
@@ -985,26 +993,34 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** nein. Die Wächter sind Tests; ein Aufruf, den sie nicht sehen, ändert an der Site nichts,
   solange der Code ihn nicht schreibt.
 
-### G-5-23 Ungelesenes auf dem Rückweg: bis zum einen Leser
+### G-5-23 Ungelesenes auf dem Rückweg: was nach dem einen Leser bleibt
 
-- **Fundstelle:** `AB_MCP_Sync_Revert::way_back()` (`includes/sync/class-sync-revert.php:487`, Rückweg-Schritt ohne
-  lesbaren Eintrag `:532`, «a step goes back once» `:578`, `:580`). Ausserhalb der drei Funktionen des Lesers: die Seite
-  «Staging» `AB_MCP_Transfer::way_back_open()`, `back_of()`, `pairs_back()` (`includes/class-transfer.php:565`, `:761`,
-  `:789`; `reverts_of()` `:571`, `:792`; `plan_for_person()` `:736`); `AB_MCP_Sync_Engine::close_revert()` und
-  `closed_note()` (`includes/sync/class-sync-engine.php:3188`, `:3225`); `AB_MCP_Sync_Run::decode_step()`
-  (`includes/sync/class-sync-run.php:1242`) mit `AB_MCP_Sync_Engine::pick()` (`:583`). Zeilen am Stand von Teil G,
-  Abschnitt 2.
+- **Fundstelle:** der eine Leser `AB_MCP_Sync_Run::wrote()` (`includes/sync/class-sync-run.php:335`) mit
+  `reverts_of()` (`:245`, nur Läufe mit grösserer Nummer), `close_checked_on()` (`:1180`) und `pair_of_revert_step()`
+  (`:1264`); `AB_MCP_Sync_Revert::code()`, `way_back()` («a step goes back once» `:564`, `:566`) und `continuation()`
+  (`includes/sync/class-sync-revert.php:149`, `:474`, `:778`); `AB_MCP_Sync_Engine::revert_boundary()`
+  (`includes/sync/class-sync-engine.php:2966`). Ausserhalb des Lesers: die Seite «Staging»
+  `AB_MCP_Transfer::way_back_open()`, `back_of()`, `pairs_back()` (`includes/class-transfer.php:565`, `:761`, `:789`;
+  `reverts_of()` `:571`, `:792`; `plan_for_person()` `:736`); `AB_MCP_Sync_Engine::close_revert()` und `closed_note()`
+  (`:3196`, `:3236`); `AB_MCP_Sync_Run::decode_step()` (`:1330`) mit `AB_MCP_Sync_Engine::pick()` (`:583`). Zeilen am
+  Stand des Abschnitts «ein Leser», Commit 2 (Qualitätsdurchsicht vor H).
 - **Quelle:** Skeptiker E1b, B1 (`belege/skeptiker-e1b.md`, dritter Befund der Klasse «Ungelesenes wird
-  durchgelassen»); Bauzettel des Lesers `belege/z5r-leser-zettel.md` (Stellen S1 bis S13) mit der Freigabe der
-  Steuerung vom 16.11. 21:43 (Frage 1 B, Frage 5 A).
-- **Was:**
-  - `way_back()` zählt einen Rückweg-Schritt, dessen Eintrag nicht zurückliest, nicht als zurückgenommen. Wird der
-    Lauf, der schrieb, nach dem Schliessen eines solchen Rückwegs neu geplant, kann derselbe Schritt ein zweites Mal
-    geplant werden; «a step goes back once» hält dann nicht. Bei Code fragt das Planen den Eingang (`code( 'plan' )`).
-    Behoben wird das mit dem einen Leser (Bauzettel des Lesers) in der Qualitätsdurchsicht vor H; danach laufen die
-    stehenden Prüfungen von Teil G noch einmal, und Abschnitt 9 des Bauzettels nennt, was als Grenze bleibt (S2, S5
-    mit S7, C3).
-  - Ausserhalb der drei Funktionen des Lesers bleibt es nach Frage 5 (A) beim heutigen Verhalten:
+  durchgelassen»); Bauzettel des Lesers `belege/z5r-leser-zettel.md` (Stellen S1 bis S13, Abschnitt 9) mit der Freigabe
+  der Steuerung vom 16.11. 21:43 (F2 B, F4 B, Frage 5 A).
+- **Was:** Seit dem einen Leser liest kein Rückweg einen Datensatz, der nicht zurückliest, als leer, als nicht
+  zurückgenommen oder als Lauf der Inhalte; er lehnt ab (Planen, Fortsetzen, Weg (a)), oder ein Rückweg-Schritt der
+  Inhalte endet `failed` mit dem Satz des Lesers, nichts zurückgelegt, und der Lauf geht weiter. Ein Schritt geht damit
+  einmal zurück, auch wo der Eintrag eines Rückweg-Schritts nicht liest. Es bleibt:
+  - S2 (mit F4 B): Ein Rückweglauf, dessen Datensatz nicht zurückliest, sperrt den Rückweg jedes älteren Laufs der Site
+    (welchen Lauf er zurücknimmt, ist dann nicht bekannt), bis der Host den Datensatz prüft; den Rückweg eines jüngeren
+    Laufs sperrt er nicht.
+  - S5 mit S7: Ein unterbrochener Rückweg, dessen offener Schritt nicht zurückliest, wird weder fortgesetzt noch über
+    Weg (a) geschlossen; der Lauf bleibt `interrupted` und offen, bis der Host den Datensatz prüft (beim Code seit dem
+    Rest von B4 ebenso).
+  - Folge von C3 für Inhalte: Liest ein Feld des Laufs, der schrieb, nicht zurück, das der Rückweg der Inhalte nicht
+    braucht (sein `budget`), lehnt der Leser trotzdem ab (Planen, Schritt, Fortsetzen, Weg (a)); der Schritt bleibt
+    `planned`, ein unterbrochener Rückweg offen wie bei S5.
+  - Ausserhalb des Lesers bleibt es nach Frage 5 (A) beim heutigen Verhalten:
     - S11: Die Seite «Staging» überspringt einen solchen Schritt und liest einen Fehler von `reverts_of()` als leer.
       Sie zeigt nur an; der Rückweg selbst geht über `plan_for_person()` und `way_back()` und lehnt dort ab, was die
       Seite unter `no_back` zeigt.
@@ -1012,8 +1028,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
       Lauf dann `closed_reverted` statt `closed_findings` schliessen, und `closed_note()` zählt den Schritt nicht.
     - S13: `decode_step()` liest ein `depends`, das nicht zurückliest, als keine Abhängigkeit, für jeden Lauf;
       Rückweg-Schritte haben `depends` leer.
-- **Trifft Normalfall:** nein. Ein Eintrag, ein Ergebnis oder `depends`, das nicht zurückliest, ist ein beschädigter
-  Datensatz.
+  - Ein Fehler der Datenbank beim Lesen des genannten Schritts in `revert_boundary()` ist die Antwort, der Schritt
+    bleibt `planned`; nicht getestet (keine Naht für ein scheiterndes `step()` im Integrationslauf).
+- **Trifft Normalfall:** nein. Ein Eintrag, ein Plan, ein Ergebnis oder `depends`, das nicht zurückliest, ist ein
+  beschädigter Datensatz.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 

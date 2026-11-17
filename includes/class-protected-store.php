@@ -2978,7 +2978,7 @@ final class AB_MCP_Protected_Store {
 		}
 		foreach ( (array) $mark['active'] as $file ) {
 			/* translators: %s: the main file of a plugin (folder/file.php). */
-			$lines[] = sprintf( __( 'The plugin %s was active when the swap began. Where it is inactive afterwards: way (a) with its approval in accept (it is switched on as by hand, its activation routine runs), or Plugins → Activate in wp-admin by hand.', 'alphabridge-mcp' ), (string) $file );
+			$lines[] = sprintf( __( 'The plugin %s was active when the swap began. Where it is inactive afterwards: Plugins → Activate in wp-admin by hand.', 'alphabridge-mcp' ), (string) $file );
 			$lines[] = __( 'A request to the page Plugins at the same time can still deactivate the plugin after the swap; the next report shows it then.', 'alphabridge-mcp' );
 		}
 		return implode( "\n", $lines ) . "\n";
