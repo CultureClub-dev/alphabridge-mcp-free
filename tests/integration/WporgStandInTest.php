@@ -75,16 +75,16 @@ final class WporgStandInTest extends TestCase {
 
 	public function testWithoutAVersionTheNewestAndAThemeAlike(): void {
 		$wporg = new AB_MCP_Test_Wporg();
-		self::assertSame( file_get_contents( AB_MCP_IT_Code::zip( 'plugin', 'ab-it-aktiv', 'php' ) ), wp_remote_retrieve_body( $wporg->get( 'https://downloads.wordpress.org/plugin/ab-it-aktiv.zip' ) ), 'The newest of 1.0.0, 2.0.0, 2.0.1 and 2.0.2.' );
+		self::assertSame( file_get_contents( AB_MCP_IT_Code::zip( 'plugin', 'ab-it-aktiv', 'startseite' ) ), wp_remote_retrieve_body( $wporg->get( 'https://downloads.wordpress.org/plugin/ab-it-aktiv.zip' ) ), 'The newest of 1.0.0, 2.0.0, 2.0.1, 2.0.2 and 2.0.3.' );
 		self::assertSame( file_get_contents( AB_MCP_IT_Code::zip( 'theme', 'ab-it-kind', '1.1.0' ) ), wp_remote_retrieve_body( $wporg->get( 'https://downloads.wordpress.org/theme/ab-it-kind.1.1.0.zip' ) ) );
 	}
 
 	public function testTheInformationOfThePluginAndTheThemeApi(): void {
 		$wporg = new AB_MCP_Test_Wporg();
 		$info  = json_decode( wp_remote_retrieve_body( $wporg->get( 'https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request%5Bslug%5D=ab-it-aktiv' ) ), true );
-		self::assertSame( '2.0.2', $info['version'] );
-		self::assertSame( 'https://downloads.wordpress.org/plugin/ab-it-aktiv.2.0.2.zip', $info['download_link'] );
-		self::assertSame( array( '1.0.0', '2.0.0', '2.0.1', '2.0.2' ), array_keys( $info['versions'] ) );
+		self::assertSame( '2.0.3', $info['version'] );
+		self::assertSame( 'https://downloads.wordpress.org/plugin/ab-it-aktiv.2.0.3.zip', $info['download_link'] );
+		self::assertSame( array( '1.0.0', '2.0.0', '2.0.1', '2.0.2', '2.0.3' ), array_keys( $info['versions'] ) );
 		$theme = json_decode( wp_remote_retrieve_body( $wporg->get( 'https://api.wordpress.org/themes/info/1.2/?action=theme_information&slug=ab-it-eltern' ) ), true );
 		self::assertSame( '1.1.0', $theme['version'] );
 		self::assertSame( 1, count( array_filter( AB_MCP_Test_Wporg::everything()['plugin']['ab-it-migration'], static fn( $f ) => '1.0.0' === $f ) ), 'The version number 1.0.0 two versions share goes to the first.' );

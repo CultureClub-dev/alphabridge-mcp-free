@@ -857,7 +857,7 @@ final class StagingTransferTest extends TestCase {
 					'connection'  => AB_MCP_Sync_Run::connection(),
 					'expires'     => time() + 3600,
 					'budget'      => array( 'bytes' => 0 ),
-					'plan'        => array( 'reverts' => array(), 'items' => array() ),
+					'plan'        => array( 'reverts' => array( $push ), 'items' => array() ),
 				),
 				array(
 					array(
