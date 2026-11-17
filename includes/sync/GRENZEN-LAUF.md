@@ -105,6 +105,14 @@ Ablehnung entsteht, nennt sie den Weg.
   Entscheid A vom 07.11.2026, unten; Prüffälle
   `testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun`,
   `testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun`).
+  Gibt ein solcher Request die Sperre am Ende frei (`AB_MCP_Sync_Run::under_lock()`
+  `finally`, `AB_MCP_Change_Lock::release()`), löscht er die Sperrzeile über
+  `WP_Upgrader::release_lock()`, ohne ihren Wert anzusehen. Hat inzwischen ein
+  anderer Request sie übernommen, löscht er dessen Zeile; ein dritter Request
+  kann dann neben dem Übernehmer beginnen. Für den Tausch: G-5-24 in
+  `GRENZEN-CODE.md`; Freigabe nur der eigenen Zeile ist ein Posten vor dem
+  ersten Release, das den Tausch enthält (Fable-Prüfstelle B1, Entscheid der
+  Steuerung 17.11.2026).
 - Ein lesender Aufruf sieht an `AB_MCP_Sync_Run::lock_fresh()` (Sperrzeile
   `ab_mcp_pro_code_change.lock`, jünger als `TIMEOUT`), ob ein anderer
   Request die Sperre hält: eine frische Zeile heisst «ein Schritt läuft»

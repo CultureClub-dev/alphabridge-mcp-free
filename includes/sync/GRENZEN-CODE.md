@@ -1051,6 +1051,72 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 - **Trifft Normalfall:** nein. Ein Eintrag, ein Plan, ein Ergebnis oder `depends`, das nicht zurückliest, ist ein
   beschädigter Datensatz.
 
+### G-5-24 Sperre für Änderungen nach Ablauf übernommen: Weiterschreiben und Freigabe der fremden Zeile
+
+- **Fundstelle:** `AB_MCP_Change_Lock` (`includes/lifecycle/class-change-lock.php`): `TIMEOUT` 600 s (`:54`), `take()`
+  (`:76`–`:79`, verschachtelt nur gezählt), `release()` (`:117`–`:130`), `touch()` (`:158`–`:164`), `create()`
+  (`:171`–`:189`). `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`): `take_lock()`/`release_lock()`
+  (`:144`, `:153`), `lock_held()` (`:539`–`:541`, gefragt nur in `under_lock()` `:763`), `release()` (`:551`), `until()`
+  (`:1135`), die Bereiche mit der Sperre `:638`–`:648`, `:1183`–`:1187`, `:2179`–`:2187`, `:2399`–`:2411`.
+  `AB_MCP_Sync_Run::under_lock()` (`includes/sync/class-sync-run.php:829`–`:852`). Zeilen am Kopf `63a3e27`.
+- **Quelle:** Fable-Prüfstelle «Lösch-, Überschreib- und Freigabestellen» vor dem Merge von Teil H, B1
+  (`belege/fable-pruefstelle-ergebnis.md`); Entscheid der Steuerung vom 17.11. nach 21:02: jetzt als Grenze, mit dem
+  Code als Posten vor dem ersten Release, das den Tausch enthält (unten).
+- **Was:**
+  - **Ab wann die 600 s laufen.**
+    - Die Sperrzeile trägt die Zeit, zu der sie geschrieben wurde: beim ersten `take()` des Aufrufs über `create()`,
+      danach bei jedem `touch()`, frühestens alle 60 s.
+    - Der Tausch ruft `touch()` nicht (`git grep -c "Change_Lock::touch" -- includes/sync/class-sync-code-swap.php`:
+      0). Die Engine ruft es an `:1249`, `:1701` und `:2441`, also erst nach der Rückkehr des Tauschs.
+    - Der Tausch nimmt die Sperre in einem Lauf verschachtelt (`take()` `:77`–`:79`). Die Zeile stammt dann vom äusseren
+      `take()` in `under_lock()` (Run `:831`), am Anfang des Aufrufs, oder vom letzten `touch()` davor im selben Aufruf.
+    - Die 600 s laufen also nicht je Dateiaufruf, sondern über den ganzen Aufruf, bis zur Freigabe.
+  - **Schleifen über Dateien zwischen `take()` und `release()`, aus dem Code.** Die Frist des Aufrufs (`until()`)
+    wird zwischen den Schritten gefragt. Ein einzelner Aufruf darin ist von ihr nicht begrenzt (ein `rename()`, ein
+    `chmod()`, das Lesen einer Datei, ein `scandir()`, ein `opcache_invalidate()`).
+    - `given_rights()` (`:1362`–`:1395`): Rechte über die ganze Stufe; die Frist wird je Eintrag gefragt (`:1377`–`:1378`).
+    - `at_target()` und `in_backup()` (`:1818`–`:1827`, `:1848`): Der Beweis am Ziel und in der Sicherung liest den
+      ganzen Baum über `AB_MCP_Sync_File_Manifest::unit()`. Die Frist wird vor jedem Schritt des Lesens gefragt; das
+      Lesen einer Datei ist ein einzelner Aufruf (`class-sync-file-manifest.php:221`–`:235`).
+    - `invalidated()` mit `php_paths()` (`:1673`–`:1700`, `:1710`–`:1745`): Die Frist wird einmal je Ordner gefragt
+      (`:1722`–`:1724`), nicht je Eintrag. Die Schleife, die den Cache je Datei leert (`:1687`–`:1693`), fragt sie
+      nicht.
+    - `discard_files` (`:1801` → `AB_MCP_Undo::discard_files_of()`, `includes/undo/class-undo.php:1279`, Schleife
+      `:1291`): Die Schleife über den Index der Rückgängig-Punkte fragt die Frist nicht.
+  - **Folgen, wenn ein Aufruf die 600 s überschreitet.** Das geschieht, wenn eine der Schleifen oder ein einzelner
+    Aufruf darin die Zeit über den Rest des Aufrufs hinaus braucht.
+    1. **Übernahme.** Ein anderer Aufruf (ein zweiter Tausch, ein Schritt eines Laufs, eine Aktivierung, ein Update)
+       findet die Zeile älter als 600 s und übernimmt sie (`create()` über `WP_Upgrader::create_lock()` mit `TIMEOUT`,
+       `:173`).
+    2. **Weiterschreiben ohne Sperre.** Der erste Aufruf läuft weiter und schreibt ohne Sperre. Er fragt nicht, ob die
+       Zeile noch seine ist: `lock_held()` prüft nur, dass eine Zeile da ist, die sich als Zeit liest, und wird nur in
+       `under_lock()` vor dem Tausch gefragt (`:763`). Danach laufen Umbenennen, Rechte, Schliessen der Marke und
+       `discard_files` ohne neue Prüfung.
+    3. **Freigabe der fremden Zeile am Ende.** Die äusserste Freigabe des ersten Aufrufs (Run `:847`, oder `release()`
+       des Tauschs ohne äussere Sperre) löscht die Zeile über `WP_Upgrader::release_lock()`, ohne ihren Wert anzusehen
+       (`:117`–`:130`). Sie löscht damit die Zeile des Übernehmers. Ein dritter Aufruf kann dann neben dem Übernehmer
+       beginnen, der weiter glaubt, die Sperre zu halten.
+  - **Was dann noch schützt:**
+    - Vor jedem Umbenennen steht ein gespeichertes `begun` mit Rücklesung (`:1545`–`:1547`; Rückweg `:2228`). Das
+      Schreiben des Schritts ist bedingt auf seinen Zustand (Run `:780`–`:789`, `AND state = …`); von zwei Aufrufen
+      kann nur einer denselben Schritt von `planned` auf `begun` setzen.
+    - Ersetzt wird am Ziel nur, wo `lstat()` nichts findet (`:1509`); das Zeitfenster dazwischen nennt G-5-10.
+    - Der Tausch löscht keine Sicherung; `discard_files` trifft nur Schnappschüsse der Datei-Werkzeuge und läuft erst
+      nach dem Beweis (`:1782`–`:1801`).
+    - Ohne Beweis am Ziel endet ein Schritt `unclear` oder `failed`, nie `done` (`:1780`–`:1786`, `:1909`–`:1934`).
+  - **Was nicht geschützt ist:**
+    - Was der erste Aufruf nach der Übernahme schreibt, schreibt er neben dem Übernehmer, an anderen Einheiten, im
+      Speicher und an den Schnappschüssen ohne Ausschluss.
+    - Nach der Freigabe der fremden Zeile schützt die Sperre den Übernehmer nicht mehr gegen einen dritten Aufruf.
+    - Ob eine Abfolge daraus eine Kernzusage bricht (Code am Ziel ohne Sicherung der alten Fassung, ein Zustand, den
+      kein Weg kennt, ein `done` ohne gültigen Beweis), ist hier nicht behauptet. Die Prüfung vor dem Push hat dazu
+      eine eigene geschlossene Frage (Steuerung, nach 21:02, Punkt 2).
+- **Posten (Entscheid der Steuerung):** «Sperre für Änderungen: Freigabe und `lock_held()` nur für die eigene Zeile;
+  `touch()` im Tausch; `register_shutdown_function` vor `forget_active()` (B2)». Erledigt vor dem ersten Release, das den
+  Tausch enthält. Eigener Bauzettel, nicht Zweig 5.
+- **Trifft Normalfall:** nein. Es braucht einen Aufruf, der mit allem vor dem Tausch länger als 600 s dauert; das
+  Budget eines Aufrufs liegt weit darunter (`until()`).
+
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
 ### G-M1 Ein Lesen über Teile ist kein Augenblick
