@@ -1616,6 +1616,13 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_wp_error( $closed ) ) {
 			return self::unclear( $in, $plan, $moved, $closed->get_error_message(), $whole );
 		}
+		// The proof read again after close_mark() and discard_files(), before
+		// the end that names the new version at the target; after it only
+		// the database (A1, G-5-24).
+		$again = self::proved_now( $in, $plan, 'new' );
+		if ( is_wp_error( $again ) ) {
+			return self::unclear( $in, $plan, $moved, $again->get_error_message(), $whole );
+		}
 		$rebased = self::rebased( $in, $plan );
 		if ( is_wp_error( $rebased ) ) {
 			/* translators: %s: the error of the object pairs (one or more whole sentences). */
@@ -1856,6 +1863,32 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
+	 * The proof of close() read again, right before a state whose result
+	 * says which version lies at the target (A1 of the Codex round on
+	 * G-5-24, GRENZEN-CODE.md): after close() came calls on the files
+	 * (close_mark(), discard_files(), on the way back the activation of a
+	 * plugin), and a change that took the lock over in between may have put
+	 * another version there. The same proof as close(): the version at the
+	 * target (at_target()), for the new one the old one whole in the backup
+	 * as well (in_backup()), within the time of the call; where that time
+	 * is over, it is not proved. Its refusal carries the sentence of that
+	 * proof under a code of its own, never code:close_target, on which way
+	 * (a) turns to kept (closed_checked()).
+	 *
+	 * @param array  $in    The arguments.
+	 * @param array  $plan  plan_of(), or the journal of the swap.
+	 * @param string $which old or new: the version close() proved.
+	 * @return true|WP_Error
+	 */
+	private static function proved_now( array $in, array $plan, $which ) {
+		$proved = self::at_target( $in, $plan, $which );
+		if ( true === $proved && 'new' === $which ) {
+			$proved = self::in_backup( $plan['old'], $in['until'] );
+		}
+		return true === $proved ? true : self::refusal( 'code:proof_again', $proved->get_error_message() );
+	}
+
+	/**
 	 * The files of the pair of the unit take their new bases (E5 11, Z38):
 	 * live and staging the hash of the new version, from the kind code,
 	 * which writes and checks the part files; on the condition that the
@@ -1931,6 +1964,13 @@ final class AB_MCP_Sync_Code_Swap {
 		);
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: why (one or more whole sentences). */
 		$message = sprintf( __( 'The %1$s %2$s is not swapped, and the old version is at its place: %3$s Its stage stays in the protected store. The run goes on with the next step (action=next); to swap the unit, make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $in['unit']['kind'], $in['unit']['ref'], $why[ $moved['at'] ] );
+		// The old version proved at the target after the last call on the
+		// files (close_mark()), before the end that says it is at its place
+		// (A1, G-5-24).
+		$again = self::proved_now( $in, $plan, 'old' );
+		if ( is_wp_error( $again ) ) {
+			return self::unclear( $in, $plan, $moved, $again->get_error_message() );
+		}
 		return self::ended( $in, 'failed', $moved['journal'], array( 'message' => $message ) );
 	}
 
@@ -2242,6 +2282,29 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( is_array( $pair ) && 'active' === $pair['state'] ) {
 			AB_MCP_Sync_Pairs::set_state( $unit['pair_id'], 'unclear', AB_MCP_Sync_Pairs::snapshot_hash( AB_MCP_Sync_Pairs::snapshot( $unit['pair_id'] ) ) );
 		}
+		if ( ! isset( $moved['fault'] ) ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the folder or file of the unit (absolute path). */
+			$message = sprintf( __( 'The %1$s %2$s is in its old version at %3$s, proved there (device, inode and hash). What the new version wrote into the database while it ran stays as it is; confirm the pair of the unit anew (wp_site_pairs) before its next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'] );
+			// Only now, on the old version proved at the target (Z25).
+			$message = implode( ' ', array_merge( array( $message ), self::on_again( $journal, $unit['ref'], ! empty( $step['parts']['accept'] ), (int) $swap['seq'], true ) ) );
+			// A theme read in this call as not active (WordPress switches
+			// away from a theme whose folder it misses), with the way; no
+			// switch claimed, and nothing where it is not read (option B;
+			// part F, question 2 A; the word active as V4, skeptic F2+G, C2).
+			if ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {
+				/* translators: %s: the name of the theme (its folder). */
+				$message .= ' ' . sprintf( __( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it, or a child theme of it, was active before the swap, switch back to that theme in wp-admin (Appearance → Themes).', 'alphabridge-mcp' ), $unit['ref'] );
+			}
+			// The proof of close() read again after the last calls on the
+			// files (close_mark(), the activation of a plugin, which runs its
+			// code), before the end that names the old version at the target;
+			// where it fails, the step is unclear as after any fault (A1,
+			// G-5-24).
+			$again = self::proved_now( $in, $journal, 'old' );
+			if ( is_wp_error( $again ) ) {
+				$moved['fault'] = $again->get_error_message();
+			}
+		}
 		if ( isset( $moved['fault'] ) ) {
 			$named   = AB_MCP_Protected_Store::named_by_swap();
 			$message = implode(
@@ -2255,19 +2318,6 @@ final class AB_MCP_Sync_Code_Swap {
 					sprintf( __( 'Backup: %s', 'alphabridge-mcp' ), $journal['old']['path'] ),
 				)
 			);
-		} else {
-			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the folder or file of the unit (absolute path). */
-			$message = sprintf( __( 'The %1$s %2$s is in its old version at %3$s, proved there (device, inode and hash). What the new version wrote into the database while it ran stays as it is; confirm the pair of the unit anew (wp_site_pairs) before its next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'] );
-			// Only now, on the old version proved at the target (Z25).
-			$message = implode( ' ', array_merge( array( $message ), self::on_again( $journal, $unit['ref'], ! empty( $step['parts']['accept'] ), (int) $swap['seq'], true ) ) );
-			// A theme read in this call as not active (WordPress switches
-			// away from a theme whose folder it misses), with the way; no
-			// switch claimed, and nothing where it is not read (option B;
-			// part F, question 2 A; the word active as V4, skeptic F2+G, C2).
-			if ( 'theme' === $unit['kind'] && false === self::runs( 'theme', $unit['ref'] ) ) {
-				/* translators: %s: the name of the theme (its folder). */
-				$message .= ' ' . sprintf( __( 'The theme %s is not active on this site now (neither the theme of this site nor its parent); where it, or a child theme of it, was active before the swap, switch back to that theme in wp-admin (Appearance → Themes).', 'alphabridge-mcp' ), $unit['ref'] );
-			}
 		}
 		return self::ended(
 			$in,
@@ -2402,14 +2452,22 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		try {
 			$mid    = self::mark_id( $swap );
+			$which  = 'new';
 			$closed = self::close( 'swap', $in, $journal, $mid );
 			if ( is_wp_error( $closed ) && 'code:close_target' === $closed->get_error_code() ) {
+				$which  = 'old';
 				$closed = self::close( 'kept', $in, $journal, $mid );
 			}
 		} finally {
 			$kept = self::release();
 		}
 		if ( ! is_wp_error( $closed ) || 'ab_mcp_store_no_mark' === $closed->get_error_code() ) {
+			// The version close() proved, read again after close_mark() and
+			// discard_files(), before the run is closed as checked on it; a
+			// mark that is gone left that proof standing (A1, G-5-24).
+			$closed = self::proved_now( $in, $journal, $which );
+		}
+		if ( true === $closed ) {
 			return true;
 		}
 		$store = AB_MCP_Protected_Store::named_by_swap();

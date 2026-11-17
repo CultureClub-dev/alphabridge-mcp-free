@@ -512,9 +512,11 @@ e('e-platz-genannt', 'moved_back(): where the new version cannot go back to the 
 e('e-opcache', 'restored(): OPcache not cleared for a file put back or moved away ends the step of the way back unclear with the host (Z13; Teil E)', CS,
   "\t\tif ( is_wp_error( $opcache ) ) {\n\t\t\t$moved['fault']",
   "\t\tif ( false ) {\n\t\t\t$moved['fault']", 'coderun', 'testOpcacheNotClearedOnTheWayBackEndsItsStepUnclearWithTheHost')
-e('e-z20b', 'restored(): the step of the way back is done only where close() with kept proves the old version at the target (Z20b; Teil E)', CS,
+# Since A1 the done of the way back is held twice: by close() and by the proof read again (proved_now()); without
+# close() the mark of the swap stays open, which the way back of a swap broken off between its renames shows.
+e('e-z20b', 'restored(): the step of the way back closes the mark of the swap only through close() with kept, which proves the old version at the target first; a way back done leaves no mark open (Z20b; Teil E; A1)', CS,
   "$closed = isset( $moved['fault'] ) ? true : self::close( 'kept', $in, $journal, self::mark_id( $swap ) );",
-  '$closed = true;', 'coderun', 'testTheWayBackIsDoneOnlyWhereTheOldVersionIsProvedAtTheTargetAfterItsRenames')
+  '$closed = true;', 'coderun', 'testASwapBrokenOffBetweenItsRenamesIsPutBackByTheWayBackOfItsRun')
 e('e-marke-weg', 'restored(): a mark that is gone (no mark of the swap found) leaves the proof at the target alone (G-5-14; Teil E)', CS,
   "if ( is_wp_error( $closed ) && 'ab_mcp_store_no_mark' !== $closed->get_error_code() ) {",
   'if ( is_wp_error( $closed ) ) {', 'coderun', 'testTheWayBackOfASwapWhoseMarkIsGoneIsDoneOnTheProofAtTheTargetAlone')
@@ -632,6 +634,16 @@ e('l-art-rueckweg', 'Run::wrote() for Revert::code(): a run that wrote which is 
   " && ( $i > 0 || $id === (int) $of['run_id'] ) ) ) {", " && 0 === $i && $id === (int) $of['run_id'] ) ) {", 'coderun', E_EU)
 e('g-c4-satz', 'at_target(): the refusal of the proof at the target names the version that is to be there, the old or the new one (skeptic E1b, C4; skeptic F2+G, C3)', CS,
   "sprintf( $says[ $which ], $plan['target'] )", "sprintf( $says['old'], $plan['target'] )", 'coderun', AFTER)
+
+# ------------------------------------------- A1 of the Codex round on G-5-24 (Zettel A1, Fassung 3): the proof of close() read again before each state that names the version at the target
+e('a1-vorwaerts', 'after_renames(): the proof of close() is read again after close_mark() and discard_files(), before the step ends done; another version put at the target meanwhile ends it unclear (A1, G-5-24)', CS,
+  "\t\t$again = self::proved_now( $in, $plan, 'new' );", "\t\t$again = true;", 'coderun', 'testASwapWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotDone')
+e('a1-nicht-getauscht', 'not_swapped(): the old version is proved at the target again after close_mark(), before the step ends failed with the old version at its place (A1, G-5-24)', CS,
+  "\t\t$again = self::proved_now( $in, $plan, 'old' );", "\t\t$again = true;", 'coderun', 'testASwapNotMadeWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotFailed')
+e('a1-rueckweg', 'restored(): the old version is proved at the target again after close_mark() and the activation of the plugins, before the step of the way back ends done (A1, G-5-24)', CS,
+  "\t\t\t$again = self::proved_now( $in, $journal, 'old' );", "\t\t\t$again = true;", 'coderun', 'testAWayBackWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotDone')
+e('a1-weg-a', 'closed_checked(): the version close() proved is read again after close_mark() and discard_files(), before way (a) closes the run as checked (A1, G-5-24)', CS,
+  "\t\t\t$closed = self::proved_now( $in, $journal, $which );", "\t\t\t$closed = true;", 'coderun', 'testWayAWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofClosesNoRun')
 
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}

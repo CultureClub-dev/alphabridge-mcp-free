@@ -1054,66 +1054,125 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
 ### G-5-24 Sperre für Änderungen nach Ablauf übernommen: Weiterschreiben und Freigabe der fremden Zeile
 
 - **Fundstelle:** `AB_MCP_Change_Lock` (`includes/lifecycle/class-change-lock.php`): `TIMEOUT` 600 s (`:54`), `take()`
-  (`:76`–`:79`, verschachtelt nur gezählt), `release()` (`:117`–`:130`), `touch()` (`:158`–`:164`), `create()`
-  (`:171`–`:189`). `AB_MCP_Sync_Code_Swap` (`includes/sync/class-sync-code-swap.php`): `take_lock()`/`release_lock()`
-  (`:144`, `:153`), `lock_held()` (`:539`–`:541`, gefragt nur in `under_lock()` `:763`), `release()` (`:551`), `until()`
-  (`:1135`), die Bereiche mit der Sperre `:638`–`:648`, `:1183`–`:1187`, `:2179`–`:2187`, `:2399`–`:2411`.
-  `AB_MCP_Sync_Run::under_lock()` (`includes/sync/class-sync-run.php:829`–`:852`). Zeilen am Kopf `63a3e27`.
+  (`:76`–`:79`, verschachtelt nur gezählt), `take_for_update()` (`:101`), `release()` (`:117`–`:130`), `touch()`
+  (`:158`–`:164`), `create()` (`:171`–`:189`, `WP_Upgrader::create_lock()` an `:172`). `AB_MCP_Sync_Code_Swap_Calls`
+  (`includes/sync/class-sync-code-swap.php:126`): `take_lock()`/`release_lock()` (`:144`, `:153`).
+  `AB_MCP_Sync_Code_Swap` (dieselbe Datei): `lock_held()` (`:539`–`:541`, gefragt nur in `checked()` an `:763`;
+  `checked()` beginnt an `:728`, `under_lock()` (`:669`) ruft es an `:712`), `release()` (`:551`), `until()` (`:1135`),
+  die Bereiche mit der Sperre `:638`–`:648`, `:1183`–`:1187`, `:2219`–`:2227`, `:2449`–`:2463`; der Beweis `close()`
+  (`:1787`–`:1810`) mit `at_target()` (`:1825`) und `in_backup()` (`:1855`), seine zweite Lesung `proved_now()`
+  (`:1883`) an `:1622`, `:1970`, `:2303` und `:2468`. `AB_MCP_Sync_Run::under_lock()`
+  (`includes/sync/class-sync-run.php:829`–`:852`). Zeilen am Stand der Behebung A1 (Teil H).
 - **Quelle:** Fable-Prüfstelle «Lösch-, Überschreib- und Freigabestellen» vor dem Merge von Teil H, B1
   (`belege/fable-pruefstelle-ergebnis.md`); Entscheid der Steuerung vom 17.11. nach 21:02: jetzt als Grenze, mit dem
-  Code als Posten vor dem ersten Release, das den Tausch enthält (unten).
+  Code als Posten vor dem ersten Release, das den Tausch enthält (unten). Codex-Runde auf `004988a` (Astra,
+  `belege/codex-free-z5r-h-b1-ausgabe.txt`): A1 (P1, Fall (iii): ein `done` auf einem Beweis, den das Ziel nicht mehr
+  hält) und B1 bis B6, hier eingearbeitet; Behebungszettel A1, Fassung 3 (`belege/z5r-a1-behebung-zettel.md`), mit
+  den Entscheiden der Steuerung nach 21:29 (Weg (ii) an allen Stellen) und nach 21:32 (die Frist).
 - **Was:**
   - **Ab wann die 600 s laufen.**
     - Die Sperrzeile trägt die Zeit, zu der sie geschrieben wurde: beim ersten `take()` des Aufrufs über `create()`,
       danach bei jedem `touch()`, frühestens alle 60 s.
     - Der Tausch ruft `touch()` nicht (`git grep -c "Change_Lock::touch" -- includes/sync/class-sync-code-swap.php`:
-      0). Die Engine ruft es an `:1249`, `:1701` und `:2441`, also erst nach der Rückkehr des Tauschs.
+      0). Die drei Aufrufe in der Engine liegen in anderen Pfaden: `includes/sync/class-sync-engine.php:1249` in
+      `boundary()`, `:1701` in `write_parts()`, `:2441` in `put_back()`, alle für Schritte des Inhalts. Ein Schritt des
+      Codes geht in `run_write()` an `:1022`–`:1024` direkt an `AB_MCP_Sync_Code_Ops::run()` und kehrt von dort zurück;
+      keiner der drei frischt die Zeile während oder nach einem Schritt des Tauschs auf.
     - Der Tausch nimmt die Sperre in einem Lauf verschachtelt (`take()` `:77`–`:79`). Die Zeile stammt dann vom äusseren
       `take()` in `under_lock()` (Run `:831`), am Anfang des Aufrufs, oder vom letzten `touch()` davor im selben Aufruf.
     - Die 600 s laufen also nicht je Dateiaufruf, sondern über den ganzen Aufruf, bis zur Freigabe.
   - **Schleifen über Dateien zwischen `take()` und `release()`, aus dem Code.** Die Frist des Aufrufs (`until()`)
-    wird zwischen den Schritten gefragt. Ein einzelner Aufruf darin ist von ihr nicht begrenzt (ein `rename()`, ein
-    `chmod()`, das Lesen einer Datei, ein `scandir()`, ein `opcache_invalidate()`).
+    wird zwischen den Schritten gefragt. Ein einzelner Aufruf an das Dateisystem ist durch sie nicht unterbrechbar (ein
+    `rename()`, ein `chmod()`, das Lesen eines Blocks einer Datei, ein `scandir()`, ein `opcache_invalidate()`).
     - `given_rights()` (`:1362`–`:1395`): Rechte über die ganze Stufe; die Frist wird je Eintrag gefragt (`:1377`–`:1378`).
-    - `at_target()` und `in_backup()` (`:1818`–`:1827`, `:1848`): Der Beweis am Ziel und in der Sicherung liest den
-      ganzen Baum über `AB_MCP_Sync_File_Manifest::unit()`. Die Frist wird vor jedem Schritt des Lesens gefragt; das
-      Lesen einer Datei ist ein einzelner Aufruf (`class-sync-file-manifest.php:221`–`:235`).
-    - `invalidated()` mit `php_paths()` (`:1673`–`:1700`, `:1710`–`:1745`): Die Frist wird einmal je Ordner gefragt
-      (`:1722`–`:1724`), nicht je Eintrag. Die Schleife, die den Cache je Datei leert (`:1687`–`:1693`), fragt sie
+    - `at_target()` und `in_backup()`: Der Beweis am Ziel und in der Sicherung liest den ganzen Baum, Datei für Datei
+      und jede Datei blockweise (`class-sync-file-manifest.php:558`–`:586`). Die Frist geben die beiden verschieden
+      weiter:
+      - `at_target()` gibt `AB_MCP_Sync_File_Manifest::unit()` eine Zahl, `min( until, jetzt + UNIT_BUDGET )`
+        (`:1830`), ohne Frist eines Aufrufers. `unit()` fragt sie über `due()` vor jedem Eintrag eines Ordners, vor dem
+        Öffnen einer Datei, nach jedem Block, der nicht der letzte ist, in `still()` und vor der Ausgabe des Hashes
+        (`class-sync-file-manifest.php:693`–`:724`).
+      - `in_backup()` gibt `AB_MCP_Protected_Store::tree()` eine Frist `AB_MCP_Sync_Deadline::at( until )` (`:1857`),
+        die die Ablage an ihren eigenen Toren fragt.
+    - `invalidated()` mit `php_paths()` (`:1680`–`:1702`, `:1717`–`:1750`): Die Frist wird einmal je Ordner gefragt
+      (`:1729`–`:1731`), nicht je Eintrag. Die Schleife, die den Cache je Datei leert (`:1694`–`:1700`), fragt sie
       nicht.
-    - `discard_files` (`:1801` → `AB_MCP_Undo::discard_files_of()`, `includes/undo/class-undo.php:1279`, Schleife
+    - `discard_files` (`:1808` → `AB_MCP_Undo::discard_files_of()`, `includes/undo/class-undo.php:1279`, Schleife
       `:1291`): Die Schleife über den Index der Rückgängig-Punkte fragt die Frist nicht.
   - **Folgen, wenn ein Aufruf die 600 s überschreitet.** Das geschieht, wenn eine der Schleifen oder ein einzelner
     Aufruf darin die Zeit über den Rest des Aufrufs hinaus braucht.
     1. **Übernahme.** Ein anderer Aufruf (ein zweiter Tausch, ein Schritt eines Laufs, eine Aktivierung, ein Update)
-       findet die Zeile älter als 600 s und übernimmt sie (`create()` über `WP_Upgrader::create_lock()` mit `TIMEOUT`,
-       `:173`).
+       findet die Zeile älter als 600 s und übernimmt sie: `create()` über `WP_Upgrader::create_lock()` mit `TIMEOUT`
+       (`:172`), ein Update über `take_for_update()` (`:101`, `includes/lifecycle/class-update-guard.php:153`).
     2. **Weiterschreiben ohne Sperre.** Der erste Aufruf läuft weiter und schreibt ohne Sperre. Er fragt nicht, ob die
        Zeile noch seine ist: `lock_held()` prüft nur, dass eine Zeile da ist, die sich als Zeit liest, und wird nur in
-       `under_lock()` vor dem Tausch gefragt (`:763`). Danach laufen Umbenennen, Rechte, Schliessen der Marke und
-       `discard_files` ohne neue Prüfung.
+       `checked()` vor dem Tausch gefragt (`:763`). Danach laufen Umbenennen, Rechte, Schliessen der Marke und
+       `discard_files` ohne Prüfung der Sperre.
     3. **Freigabe der fremden Zeile am Ende.** Die äusserste Freigabe des ersten Aufrufs (Run `:847`, oder `release()`
        des Tauschs ohne äussere Sperre) löscht die Zeile über `WP_Upgrader::release_lock()`, ohne ihren Wert anzusehen
        (`:117`–`:130`). Sie löscht damit die Zeile des Übernehmers. Ein dritter Aufruf kann dann neben dem Übernehmer
        beginnen, der weiter glaubt, die Sperre zu halten.
   - **Was dann noch schützt:**
-    - Vor jedem Umbenennen steht ein gespeichertes `begun` mit Rücklesung (`:1545`–`:1547`; Rückweg `:2228`). Das
-      Schreiben des Schritts ist bedingt auf seinen Zustand (Run `:780`–`:789`, `AND state = …`); von zwei Aufrufen
-      kann nur einer denselben Schritt von `planned` auf `begun` setzen.
+    - Vor jedem Umbenennen steht ein gespeichertes `begun`. Das Schreiben des Schritts ist bedingt auf seinen Zustand
+      (Run `:780`–`:789`, `AND state = …`); von zwei Aufrufen kann nur einer denselben Schritt von `planned` auf `begun`
+      setzen. Zurückgelesen wird nur vorwärts: `begun()` liest den Schritt nach dem Schreiben und vergleicht sein
+      Journal (`:1544`–`:1547`). Der Rückweg schreibt `begun` bedingt (`:2268`) und prüft nur die Antwort des Schreibens;
+      `journal()` (`:294`–`:296`) gibt an `AB_MCP_Sync_Run::update_step()` weiter, ohne Rücklesung.
     - Ersetzt wird am Ziel nur, wo `lstat()` nichts findet (`:1509`); das Zeitfenster dazwischen nennt G-5-10.
     - Der Tausch löscht keine Sicherung; `discard_files` trifft nur Schnappschüsse der Datei-Werkzeuge und läuft erst
-      nach dem Beweis (`:1782`–`:1801`).
-    - Ohne Beweis am Ziel endet ein Schritt `unclear` oder `failed`, nie `done` (`:1780`–`:1786`, `:1909`–`:1934`).
-  - **Was nicht geschützt ist:**
-    - Was der erste Aufruf nach der Übernahme schreibt, schreibt er neben dem Übernehmer, an anderen Einheiten, im
-      Speicher und an den Schnappschüssen ohne Ausschluss.
+      nach dem Beweis und dem Schliessen der Marke (`:1787`–`:1808`).
+    - **Beweis neu gelesen vor jedem Zustand mit einer Aussage über das Ziel (A1).** Die Invariante der Steuerung: «Ein
+      Zustand, dessen Ergebnis sagt, welche Fassung am Ziel liegt, wird nur auf einem Beweis nach dem letzten
+      Dateiaufruf geschrieben.» Der Beweis von `close()` steht vor `close_mark()` und `discard_files()`. Danach liest
+      `proved_now()` (`:1883`) denselben Beweis neu (`at_target()`, für die neue Fassung dazu `in_backup()`), an vier
+      Stellen:
+      1. vorwärts in `after_renames()` vor `rebased()` (`:1622`), erst danach `done` (`:1642`); bei Abweichung
+         `unclear` mit dem Satz des Beweises und den Befehlen von Hand (`unclear()` mit `$whole`);
+      2. in `not_swapped()` vor `failed` mit «… the old version is at its place» (`:1970`, `:1974`); bei Abweichung
+         `unclear` mit der kurzen Antwort;
+      3. auf dem Rückweg in `restored()` nach `on_again()`, das Plugins aktiviert und damit ihren Code ausführt, und vor
+         `ended()` (`:2303`, `:2322`), nur ohne Fehler davor; bei Abweichung `unclear` über den Fehlerweg des Rückwegs;
+      4. in Weg (a), `closed_checked()`, nach `release()` und vor `return true` (`:2468`, `:2471`), mit der Fassung des
+         `close()`, das gelang, auch bei `ab_mcp_store_no_mark`; bei Abweichung die Ablehnung `code:checked`, und der
+         Lauf bleibt unterbrochen.
+
+      Die Ablehnung von `proved_now()` hat den Code `code:proof_again`, nie `code:close_target`, auf den Weg (a) zu
+      `kept` ausweicht (`:2457`). `unclear()` (`:2018`) sagt keine Fassung am Ziel und braucht keine zweite Lesung.
+      Weg (a) und Weg (b) kennen `unclear`: Der Rückweg nimmt einen Tausch-Schritt `begun`, `unclear` oder `done`
+      (`class-sync-code-ops.php:168`); Weg (a) setzt `begun` auf `unclear` (Run `:1203`) und listet `unclear` (Run
+      `:1440`). Tests: `SyncCodeRunTest::testASwapWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotDone`,
+      `::testASwapNotMadeWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotFailed`,
+      `::testAWayBackWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotDone` und
+      `::testWayAWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofClosesNoRun`, je mit Weg (a) und Weg (b) danach;
+      Gegenproben `tausch/a1-vorwaerts`, `tausch/a1-nicht-getauscht`, `tausch/a1-rueckweg`, `tausch/a1-weg-a`.
+    - **Die Frist der zweiten Lesung.** Die Frist des Aufrufs ist `until()` (`:1135`) = jetzt + `budget`, mit
+      `budget = min( WORK_MAX, limit / 2 )` und `WORK_MAX` = 50 s (`includes/sync/class-sync-resources.php:62`,
+      `budget()` `:173`; ohne Limit `WORK_MAX`). Das Limit hebt der Aufruf, wo der Host es erlaubt, auf `WANTED_TIME` =
+      120 s (`:59`), sonst gilt das Limit des Hosts. `at_target()` liest höchstens bis `min( until, jetzt +
+      UNIT_BUDGET )` mit `UNIT_BUDGET` = 45 s (`includes/sync/class-sync-env.php:256`). Gemessen ist eine Lesung bei
+      WooCommerce 11.3.0 mit 5452 Dateien: 0,156–0,166 s (G-3-8, `:141`–`:143` dieser Datei); die zweite Lesung kostet
+      je festgeschriebenem Beweis eine solche Lesung mehr. Reicht die Frist nicht für die zweite Lesung, endet der
+      Schritt `unclear`, mit dem Satz von `at_target()`. Test:
+      `SyncCodeRunTest::testASwapWhoseTimeRunsOutInTheSecondReadingOfItsProofIsUnclearWithItsSentence`.
+  - **Was nicht geschützt ist (Restfenster nach A1):**
+    - Nach der zweiten Lesung folgen nur Aufrufe an die Datenbank: vorwärts `rebased()` →
+      `AB_MCP_Sync_Pairs::rebase()` (`includes/sync/class-sync-pairs.php:725`–`:793`) und `ended()`; in `not_swapped()`
+      und auf dem Rückweg nur `ended()`; in Weg (a) das Schliessen des Laufs (`AB_MCP_Sync_Run::close_checked_on()`).
+      Hängt einer dieser Aufrufe so lange, dass ein anderer Aufruf die Sperre übernimmt und das Ziel ersetzt, ist ein
+      Zustand mit einer Aussage über das Ziel auf einem Beweis, den das Ziel nicht mehr hält, weiter möglich.
+    - Der Beweis liest die Dateien einzeln; eine Datei, die nach ihrem Lesen ersetzt wird, sieht er nicht (wie G-5-10).
+    - Was der erste Aufruf nach der Übernahme schreibt, schreibt er neben dem Übernehmer, an anderen Einheiten wie an
+      derselben, im Speicher und an den Schnappschüssen, ohne Ausschluss.
     - Nach der Freigabe der fremden Zeile schützt die Sperre den Übernehmer nicht mehr gegen einen dritten Aufruf.
-    - Ob eine Abfolge daraus eine Kernzusage bricht (Code am Ziel ohne Sicherung der alten Fassung, ein Zustand, den
-      kein Weg kennt, ein `done` ohne gültigen Beweis), ist hier nicht behauptet. Die Prüfung vor dem Push hat dazu
-      eine eigene geschlossene Frage (Steuerung, nach 21:02, Punkt 2).
+    - Die Prüfung vor dem Push fand mit A1 eine Abfolge, die eine Kernzusage brach: ein `done` auf einem Beweis, den das
+      Ziel nicht mehr hält. Die vier Stellen oben schliessen sie bis auf das Restfenster. Ob eine weitere Abfolge eine
+      Kernzusage bricht (Code am Ziel ohne Sicherung der alten Fassung, ein Zustand, den kein Weg kennt), ist hier
+      nicht behauptet; die Bestätigung nach dieser Behebung fragt es.
 - **Posten (Entscheid der Steuerung):** «Sperre für Änderungen: Freigabe und `lock_held()` nur für die eigene Zeile;
   `touch()` im Tausch; `register_shutdown_function` vor `forget_active()` (B2)». Erledigt vor dem ersten Release, das den
-  Tausch enthält. Eigener Bauzettel, nicht Zweig 5.
+  Tausch enthält. Eigener Bauzettel, nicht Zweig 5. Vermerk aus A1: Sobald die Sperre ein Eigentum kennt, darf die
+  zweite Lesung auf «nur bei Verlust der Sperre» verengt werden; das ist dann eine Beschleunigung, kein Teil der
+  Zusage. Die Vorarbeit dazu liegt in `belege/sperre-posten-vorarbeit-a1-fassung2.md`.
 - **Trifft Normalfall:** nein. Es braucht einen Aufruf, der mit allem vor dem Tausch länger als 600 s dauert; das
   Budget eines Aufrufs liegt weit darunter (`until()`).
 

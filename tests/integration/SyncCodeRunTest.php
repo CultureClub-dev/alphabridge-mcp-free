@@ -1879,6 +1879,319 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: A1 of the Codex round on G-5-24 (Fable checkpoint B1, sequence
+	 * of Astra 17.11.2026, P1 (iii)): after the proof of the new version at
+	 * the target and the closing of its mark, the call stays in
+	 * discard_files past TIMEOUT; another change takes the lock over (its
+	 * row is another's now) and replaces the unit at the target (here a line
+	 * appended to a file, as an update writes another version). The swap
+	 * that goes on does not end done on the proof read before that: the
+	 * proof read again ends it unclear with its sentence (Zettel A1,
+	 * Abnahme 1). Way (a) and way (b) go on from there (ways_on_after_a1()).
+	 * Sonst: the run would say done with the hash of the new version while
+	 * another version lies at the target: a step done whose proof does not
+	 * hold.
+	 */
+	public function testASwapWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotDone(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$answer = self::swap_with(
+			$run_id,
+			array(
+				array(
+					'method' => 'discard_files',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => static function () use ( $target ): void {
+						update_option( \AB_MCP_Change_Lock::OPTION, (string) ( time() + 7 ) );
+						self::assertNotFalse( file_put_contents( $target . '/readme.txt', "\nanders", FILE_APPEND ) );
+					},
+				),
+			)
+		);
+		$says = is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : (string) ( $answer['next'] ?? '' );
+		$swap = self::step( $run_id, 3 );
+		self::assertNotSame( 'done', $swap['state'], 'A step is not done on a proof the target no longer holds: ' . $says );
+		self::assertSame( 'unclear', $swap['state'], $says );
+		self::assertStringStartsWith( 'The version at ' . $target . ' could not be proved as the new version of the swap (', $says, 'The sentence of the proof read again.' );
+		AB_MCP_Test_Seam::restore_all();
+		self::ways_on_after_a1( $run_id, 'ab_mcp_sync_run_not_interrupted', 'The version at ' . $target . ' could not be proved as the new version of the swap (' );
+	}
+
+	/**
+	 * Prüft: A1 at not_swapped() (Zettel A1, Abnahme 2): the second rename
+	 * fails and the old version goes back to the target; close() with kept
+	 * proves it there, and before close_mark() another change takes the
+	 * lock over and replaces the unit at the target (taken_over()). The
+	 * step does not end failed with «the old version is at its place»: the
+	 * proof read again ends it unclear with the short answer and the
+	 * sentence of that proof. Way (a) and way (b) go on from there
+	 * (ways_on_after_a1()).
+	 * Sonst: the run would say that the old version is at its place on a
+	 * proof the target no longer holds.
+	 */
+	public function testASwapNotMadeWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotFailed(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$answer = self::swap_with(
+			$run_id,
+			array(
+				// The second rename fails; the third, the way back, runs.
+				array(
+					'method' => 'rename',
+					'nth'    => 2,
+					'kind'   => 'return',
+					'value'  => false,
+				),
+				array(
+					'method' => 'close_mark',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => self::taken_over( $target ),
+				),
+			)
+		);
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$says = $answer['next'];
+		$swap = self::step( $run_id, 3 );
+		self::assertNotSame( 'failed', $swap['state'], 'Not «the old version is at its place» on a proof the target no longer holds: ' . $says );
+		self::assertSame( 'unclear', $swap['state'], $says );
+		self::assertStringStartsWith( 'The version at ' . $target . ' could not be proved as the old version of the swap (', $says, 'The sentence of the proof read again.' );
+		self::assertStringNotContainsString( 'is not swapped, and the old version is at its place', $says );
+		AB_MCP_Test_Seam::restore_all();
+		self::ways_on_after_a1( $run_id, 'ab_mcp_sync_run_not_interrupted', 'The version at ' . $target . ' could not be proved as the new version of the swap (' );
+	}
+
+	/**
+	 * Prüft: A1 on the way back (Zettel A1, Abnahme 3): the way back of a
+	 * swap done puts the old version back, and close() with kept proves it
+	 * at the target; before close_mark() another change takes the lock over
+	 * and replaces the unit there (taken_over()). The step of the way back
+	 * does not end done with «is in its old version at …, proved there»:
+	 * the proof read again after the activation of the plugins ends it
+	 * unclear with the sentence of that proof, as after any fault. Way (a)
+	 * and way (b) go on from there: each refuses with its sentence (the run
+	 * of the way back is not interrupted, and no step is left to take back),
+	 * and the step stays unclear for a person to check by hand.
+	 * Sonst: the way back would say the old version is proved at the target
+	 * on a proof the target no longer holds.
+	 */
+	public function testAWayBackWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotDone(): void {
+		list( $run_id, , $target ) = self::swapped_f56();
+		self::seam_of_swap(
+			array(
+				array(
+					'method' => 'close_mark',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => self::taken_over( $target ),
+				),
+			)
+		);
+		$way  = self::way_back_of( $run_id );
+		$back = (int) $way['begun']['run_id'];
+		$step = self::back_step( $back );
+		$says = $step['result']['message'];
+		self::assertNotSame( 'done', $step['state'], 'Not done on a proof the target no longer holds: ' . $says );
+		self::assertSame( 'unclear', $step['state'], $says );
+		self::assertStringStartsWith( 'The version at ' . $target . ' could not be proved as the old version of the swap (', $says, 'The sentence of the proof read again.' );
+		self::assertStringContainsString( 'The step of the way back is unclear: nothing more of the unit is moved by itself;', $says );
+		self::assertStringNotContainsString( 'is in its old version', $says );
+		AB_MCP_Test_Seam::restore_all();
+		// The step of the way back stays unclear for a person to check, as
+		// its answer says: way (a) refuses (the run of the way back is not
+		// interrupted), and so does way (b) (no step left to take back),
+		// each with its sentence.
+		$ways = self::ways_on( $back );
+		self::assertSame( array( 'ab_mcp_sync_run_not_interrupted', 'ab_mcp_sync_revert_nothing' ), array( $ways['a'], $ways['b'] ), json_encode( $ways ) );
+		self::assertSame( 'unclear', self::back_step( $back )['state'] );
+	}
+
+	/**
+	 * Prüft: A1 at way (a) (Zettel A1, Abnahme 4): a swap broken off after
+	 * its renames leaves its run interrupted with the new version at the
+	 * target. A person closes it as checked; close() with swap proves both
+	 * versions and closes the mark, and before discard_files() another
+	 * change takes the lock over and replaces the unit at the target
+	 * (taken_over()). The run is not closed as checked: the proof read
+	 * again refuses it with its sentence and the sentence of way (a); the
+	 * run stays interrupted, its step begun. Way (a) and way (b) go on from
+	 * there (ways_on_after_a1()).
+	 * Sonst: a person would close a run as checked on a version at the
+	 * target that the proof no longer holds.
+	 */
+	public function testWayAWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofClosesNoRun(): void {
+		list( $run_id, $unit, $target ) = self::ready_to_swap();
+		// Broken off after the renames (call 1 of OPcache is the one of
+		// prepare(); 2 the first after the renames).
+		self::swap_with(
+			$run_id,
+			array(
+				array(
+					'method' => 'opcache',
+					'nth'    => 2,
+					'kind'   => 'throw',
+				),
+			)
+		);
+		AB_MCP_Test_Seam::restore_all();
+		self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
+		$state = static fn(): array => array( AB_MCP_Sync_Run::get( $run_id )['state'], self::step( $run_id, 3 )['state'], AB_MCP_Sync_Pairs::get( $unit['pair_id'] )['state'] );
+		self::assertSame( array( 'interrupted', 'begun', 'active' ), $state() );
+		self::seam_of_swap(
+			array(
+				array(
+					'method' => 'discard_files',
+					'nth'    => 1,
+					'kind'   => 'before',
+					'before' => self::taken_over( $target ),
+				),
+			)
+		);
+		$says = self::refused( AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true ), 'code:checked' );
+		self::assertStringStartsWith( 'The version at ' . $target . ' could not be proved as the new version of the swap (', $says, 'The sentence of the proof read again.' );
+		self::assertStringContainsString( sprintf( 'So run %1$d is not closed as checked: that takes the old version of the plugin ab-it-aktiv proved at its target, or the new one there and the old one whole in the backup. Nothing was written, and the run stays interrupted. Take its way back (wp_site_revert action=plan with run_id %1$d).', $run_id ), $says );
+		self::assertSame( array( 'interrupted', 'begun', 'active' ), $state(), 'The run stays interrupted, its step begun, its pair as it was.' );
+		AB_MCP_Test_Seam::restore_all();
+		self::ways_on_after_a1( $run_id, 'code:checked', 'The version at ' . $target . ' could not be proved as the new version of the swap (' );
+	}
+
+	/**
+	 * Prüft: the time of the call in the second reading of the proof
+	 * (Zettel A1, Bau «Die Frist», Abnahme 5): after close() proved both
+	 * versions and closed the mark, the time of the call runs out right as
+	 * the proof is read again (the clock of the budget,
+	 * AB_MCP_Sync_Env::$clock, past the end once that reading begins). The
+	 * step is not done: it ends unclear with the sentence of at_target()
+	 * («… or it could not be read whole within the time of this call»),
+	 * as an answer of its form, never a refusal without a sentence. The new
+	 * version lies at the target as the swap put it there. Way (a) refuses
+	 * with its sentence (the run is not interrupted), and the way back of
+	 * the run, on the proofs it reads itself, puts the old version back and
+	 * is done.
+	 * Sonst: a step would be done on a proof that was not read again, or a
+	 * second reading out of time would leave the step in a state no way
+	 * knows.
+	 */
+	public function testASwapWhoseTimeRunsOutInTheSecondReadingOfItsProofIsUnclearWithItsSentence(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		try {
+			$answer = self::swap_with(
+				$run_id,
+				array(
+					array(
+						'method' => 'lstat',
+						'kind'   => 'before',
+						'before' => static function (): void {
+							if ( self::within( 'proved_now' ) ) {
+								AB_MCP_Sync_Env::$clock = static fn(): float => microtime( true ) + 86400.0;
+							}
+						},
+					),
+				)
+			);
+		} finally {
+			AB_MCP_Sync_Env::$clock = null;
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$says = $answer['next'];
+		$swap = self::step( $run_id, 3 );
+		self::assertNotSame( 'done', $swap['state'], $says );
+		self::assertSame( 'unclear', $swap['state'], $says );
+		self::assertStringStartsWith( 'The version at ' . $target . ' could not be proved as the new version of the swap (its device, inode or hash differ, or it could not be read whole within the time of this call). The step is unclear.', $says, 'The sentence of at_target().' );
+		self::assertSame( 'closed', self::mark_of_swap( $run_id )['state'], 'The mark was closed on the first proof.' );
+		self::assertSame( self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ), self::bytes_of( $target ), 'The new version at the target, as the swap put it there.' );
+		AB_MCP_Test_Seam::restore_all();
+		$ways = self::ways_on( $run_id );
+		self::assertSame( 'ab_mcp_sync_run_not_interrupted', $ways['a'], json_encode( $ways ) );
+		self::assertSame( 'done', $ways['step']['state'], json_encode( $ways ) );
+		self::assertStringStartsWith( 'The plugin ab-it-aktiv is in its old version at ' . $target . ', proved there', $ways['step']['result']['message'] );
+		self::assertSame( self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '1.0.0' ) ), self::bytes_of( $target ), 'The old version is back.' );
+	}
+
+	/**
+	 * What A1 has another change do while a call of the swap holds the lock
+	 * past TIMEOUT (sequence of Astra, P1 (iii)): it takes the lock over
+	 * (its row another's, a time to come) and replaces the unit at the
+	 * target (a line appended to a file of it, as an update writes another
+	 * version).
+	 */
+	private static function taken_over( string $target ): callable {
+		return static function () use ( $target ): void {
+			update_option( AB_MCP_Change_Lock::OPTION, (string) ( time() + 7 ) );
+			self::assertNotFalse( file_put_contents( $target . '/readme.txt', "\nanders", FILE_APPEND ) );
+		};
+	}
+
+	/**
+	 * Way (a), then way (b), on a run whose step A1 left unclear or whose
+	 * way (a) it refused, with another version at the target than either
+	 * the swap knows (Zettel A1, Abnahme, «zusätzlich je Test»): way (a)
+	 * refuses with its sentence ($refusal: the run is not interrupted, or,
+	 * where it is, no version is proved at the target); the way back of the
+	 * run reads its own proofs, moves nothing of a version it does not
+	 * prove, its step ends unclear with the sentence of its proof
+	 * ($sentence) and its run closes with findings. None of them ends done,
+	 * none refuses without a sentence (ways_on()).
+	 */
+	private static function ways_on_after_a1( int $run_id, string $refusal, string $sentence ): void {
+		$ways = self::ways_on( $run_id );
+		$json = json_encode( $ways );
+		self::assertSame( array( $refusal, 'closed_findings' ), array( $ways['a'], $ways['b'] ), 'Way (a) refuses with its sentence; the run of the way back closes with findings: ' . $json );
+		self::assertIsArray( $ways['step'], 'Way (b) reaches the step of the way back: ' . $json );
+		self::assertSame( 'unclear', $ways['step']['state'], $json );
+		self::assertStringStartsWith( $sentence, $ways['step']['result']['message'], $json );
+	}
+
+	/**
+	 * Way (a) as a person takes it (AB_MCP_Sync_Run::close_checked()), then
+	 * way (b) as a client takes it (wp_site_revert plan, its token, next
+	 * until the run of the way back is closed). Every answer is one of its
+	 * form or a refusal with a sentence, never one without. What each ended
+	 * in: for way (a) the code of its refusal or the state of the run; for
+	 * way (b) the code of its refusal or the state of the run of the way
+	 * back, with its step for the swap.
+	 *
+	 * @return array{a:string,b:string,back:int,step:array|null}
+	 */
+	private static function ways_on( int $run_id ): array {
+		$said    = static function ( $answer, string $way ): string {
+			if ( is_wp_error( $answer ) ) {
+				self::assertNotSame( '', trim( $answer->get_error_message() ), $way . ' refuses with a sentence: ' . $answer->get_error_code() );
+				return $answer->get_error_code();
+			}
+			self::assertIsArray( $answer, $way . ' answers in its form.' );
+			self::assertIsString( $answer['state'] ?? null, $way . ' names a state: ' . json_encode( $answer ) );
+			return $answer['state'];
+		};
+		$a       = $said( AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true ), 'Way (a)' );
+		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+		if ( is_wp_error( $preview ) ) {
+			return array(
+				'a'    => $a,
+				'b'    => $said( $preview, 'Way (b)' ),
+				'back' => 0,
+				'step' => null,
+			);
+		}
+		$begun = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id, 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_code() . ': ' . $begun->get_error_message() : '' );
+		$back = (int) $begun['run_id'];
+		$b    = '';
+		for ( $i = 0; $i < 12 && ! in_array( $b, AB_MCP_Sync_Schema::CLOSED, true ); $i++ ) {
+			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) );
+			$b      = $said( $answer, 'Way (b)' );
+			if ( is_wp_error( $answer ) ) {
+				break;
+			}
+		}
+		return array(
+			'a'    => $a,
+			'b'    => $b,
+			'back' => $back,
+			'step' => self::back_step( $back ),
+		);
+	}
+
+	/**
 	 * Prüft: Z26 on the way back (question 5 of part E): the rights of the
 	 * operation of the unit are asked right before the first write of the
 	 * way back; where this site lets WordPress change no files (the filter
@@ -2365,7 +2678,10 @@ final class SyncCodeRunTest extends TestCase {
 	 * interrupted on its step with no version at the target: the refusal
 	 * names that run and its way (its continuation, wp_site_revert
 	 * action=plan with its number), not the run that wrote (skeptic E1b,
-	 * B2).
+	 * B2). Both versions proved, but the mark refusing its end: the run is
+	 * not closed as checked, nothing is written, the mark stays open (A1:
+	 * the proof read again holds there, so this is the end of the mark
+	 * alone).
 	 * Sonst: a person could close a run of the code as checked with the
 	 * plugin missing at its target and its mark closed, or a run with a
 	 * version proved, or one whose swap was done long before, could not be
@@ -2409,8 +2725,29 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
 		$state = static fn(): array => array( AB_MCP_Sync_Run::get( $run_id )['state'], self::step( $run_id, 3 )['state'], self::mark_of_swap( $run_id )['state'], AB_MCP_Sync_Pairs::get( $unit['pair_id'] )['state'] );
 		self::assertSame( array( 'interrupted', 'begun', 'open', 'active' ), $state() );
+		if ( 'the mark does not close' === $case ) {
+			// Both versions proved at their places, then the mark refuses
+			// its end (A1: the proof read again would hold, so only the end
+			// of the mark refuses it).
+			self::seam_of_swap(
+				array(
+					array(
+						'method' => 'close_mark',
+						'nth'    => 1,
+						'kind'   => 'return',
+						'value'  => new WP_Error( 'ab_it_mark', 'The mark refused its end.' ),
+					),
+				)
+			);
+		}
 		$closed = AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true );
 		clearstatcache();
+		if ( 'the mark does not close' === $case ) {
+			$says = self::refused( $closed, 'code:checked' );
+			self::assertStringStartsWith( sprintf( 'The mark refused its end. So run %d is not closed as checked:', $run_id ), $says );
+			self::assertSame( array( 'interrupted', 'begun', 'open', 'active' ), $state(), 'Nothing was written; the mark stays open.' );
+			return;
+		}
 		if ( 'target empty' === $case ) {
 			$says = self::refused( $closed, 'code:checked' );
 			self::assertStringStartsWith( sprintf( 'The version at %s could not be proved as the old version of the swap', $target ), $says );
@@ -2424,7 +2761,7 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( 'new version at the target' === $case ? self::bytes_of( AB_MCP_IT_Code::source( 'plugin', 'ab-it-aktiv', '2.0.0' ) ) : $old, self::bytes_of( $target ) );
 	}
 
-	/** Where a swap is broken off: between its renames (the target empty), after them (the new version at the target, OPcache), before the first (the old version at the target); a run interrupted on its next step after its swap was done, and a run of the way back of its own interrupted on its step with no version at the target (no fault: the cases of their own). */
+	/** Where a swap is broken off: between its renames (the target empty), after them (the new version at the target, OPcache), before the first (the old version at the target); a run interrupted on its next step after its swap was done, and a run of the way back of its own interrupted on its step with no version at the target (no fault: the cases of their own); after the renames, with the mark refusing its end in way (a). */
 	public static function closed_as_checked(): array {
 		return array(
 			'target empty'              => array(
@@ -2454,6 +2791,14 @@ final class SyncCodeRunTest extends TestCase {
 			),
 			'after the swap'            => array( 'after the swap', null ),
 			'a run of the way back'     => array( 'a run of the way back', null ),
+			'the mark does not close'   => array(
+				'the mark does not close',
+				array(
+					'method' => 'opcache',
+					'nth'    => 2,
+					'kind'   => 'throw',
+				),
+			),
 		);
 	}
 
