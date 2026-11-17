@@ -928,7 +928,7 @@ final class AB_MCP_Sync_Net {
 	 *
 	 * @param string $text The layer.
 	 * @param string $part The text from the last sign (or the cut) to this one.
-	 * @param string $last $part without white space at its end (Net:820).
+	 * @param string $last $part without white space at its end.
 	 * @param string $sign This sign.
 	 * @param array  $run  keyed_run(), taken on.
 	 * @param array  $keys keyed_lengths().

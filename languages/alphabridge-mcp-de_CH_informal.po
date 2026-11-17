@@ -7171,10 +7171,6 @@ msgid "Run %d takes no step."
 msgstr "Lauf %d macht keinen Schritt."
 
 #, php-format
-msgid "Run %1$d is not changed: its record (%2$s) does not read back as it was written (a marker of its bytes that does not hold), so nothing of the run is decided on it. Ask the host to check the table of the runs; the backups of the run in the protected store hold the objects as they were before its steps."
-msgstr "Lauf %1$d wird nicht geändert: Sein Datensatz (%2$s) lässt sich nicht so zurücklesen, wie er geschrieben wurde (eine Prüfmarke seiner Bytes stimmt nicht); darum wird über den Lauf nichts danach entschieden. Den Hoster bitten, die Tabelle der Läufe zu prüfen; die Sicherungen des Laufs in der geschützten Ablage enthalten die Objekte, wie sie vor seinen Schritten waren."
-
-#, php-format
 msgid "Run %1$d was %2$s when this call read it and is %3$s now (another call moved it in between): nothing was written, its steps stay as they are. Ask for the status of the run (wp_site_push action=status) and go on from there."
 msgstr "Lauf %1$d war %2$s, als dieser Aufruf ihn las, und ist jetzt %3$s (ein anderer Aufruf hat ihn dazwischen verändert): Nichts wurde geschrieben, seine Schritte bleiben, wie sie sind. Den Zustand des Laufs abfragen (wp_site_push action=status) und von dort weitermachen."
 
@@ -9136,12 +9132,6 @@ msgid "(a credential by its name, not shown)"
 msgstr "(dem Namen nach Zugangsdaten, nicht gezeigt)"
 
 #, php-format
-msgid "%d byte (no revision of the post holds it; the backup of the step does)"
-msgid_plural "%d bytes (no revision of the post holds it; the backup of the step does)"
-msgstr[0] "%d Byte (keine Revision des Beitrags enthält den Wert; die Sicherung des Schritts enthält ihn)"
-msgstr[1] "%d Bytes (keine Revision des Beitrags enthält den Wert; die Sicherung des Schritts enthält ihn)"
-
-#, php-format
 msgid "%1$d byte (revision %2$d of the post holds it, wp-admin → Revisions)"
 msgid_plural "%1$d bytes (revision %2$d of the post holds it, wp-admin → Revisions)"
 msgstr[0] "%1$d Byte (Revision %2$d des Beitrags enthält den Wert, wp-admin → Revisionen)"
@@ -9152,9 +9142,6 @@ msgstr "nichts (keine Meta-Zeile dazu)"
 
 msgid "none (no term of the taxonomy)"
 msgstr "nichts (kein Begriff der Taxonomie)"
-
-msgid "(composed by an earlier build, not shown; the backup of the step in the protected store holds the value)"
-msgstr "(von einem früheren Build zusammengesetzt, nicht gezeigt; die Sicherung des Schritts in der geschützten Ablage enthält den Wert)"
 
 msgid "(holds a credential, not shown)"
 msgstr "(enthält Zugangsdaten, nicht gezeigt)"
@@ -9583,9 +9570,6 @@ msgstr "Der Rückweg von Lauf %1$d beginnt nicht: Der Lauf war %2$s, als der Rü
 msgid "The way back of run %d does not begin: the run changed while it was planned (a step was written, an object of this site changed, or the run changed its state), so the plan confirmed is not the run as it is. Plan the way back again (wp_site_revert action=plan); the new plan takes every step that wrote back."
 msgstr "Der Rückweg von Lauf %d beginnt nicht: Der Lauf hat sich geändert, während er geplant wurde (ein Schritt wurde geschrieben, ein Objekt dieser Website hat sich geändert, oder der Lauf hat seinen Zustand gewechselt); der bestätigte Plan ist also nicht der Lauf, wie er ist. Den Rückweg erneut planen (wp_site_revert action=plan); der neue Plan nimmt jeden Schritt zurück, der geschrieben hat."
 
-msgid "Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run."
-msgstr "Unterbrochen: Die Anfrage, die diesen Schritt zurücksetzte, endete, bevor er fertig war; was sie erreicht hat, bleibt, wie es ist, und nichts davon wird erneut zurückgesetzt (kein Zurücksetzen wird wiederholt). Das Objekt in wp-admin prüfen; die Sicherung des schreibenden Schritts enthält seinen Stand vor dem Lauf."
-
 msgid "Interrupted: the request that wrote this step ended before it finished; the way back reads its journal."
 msgstr "Unterbrochen: Die Anfrage, die diesen Schritt schrieb, endete, bevor er fertig war; der Rückweg liest sein Journal."
 
@@ -9595,9 +9579,6 @@ msgstr "Übersprungen: Der Lauf ging auf seinen Rückweg, bevor dieser Schritt l
 #, php-format
 msgid "%1$s The run %2$d stays %3$s and nothing of its way back began: its steps are stored all at once or not at all. Plan the way back again (wp_site_revert action=plan with run_id %2$d); if it keeps failing, the database error log names the cause."
 msgstr "%1$s Der Lauf %2$d bleibt %3$s, und nichts von seinem Rückweg hat begonnen: Seine Schritte werden alle auf einmal gespeichert oder gar nicht. Den Rückweg erneut planen (wp_site_revert action=plan mit run_id %2$d); scheitert es weiter, nennt das Fehlerprotokoll der Datenbank die Ursache."
-
-msgid "(cut: an answer carries at most 16384 bytes of values before; the backup of this step in the protected store holds the object as it was before the step)"
-msgstr "(gekürzt: Eine Antwort trägt höchstens 16384 Bytes vorheriger Werte; die Sicherung dieses Schritts in der geschützten Ablage enthält das Objekt, wie es vor dem Schritt war)"
 
 #, php-format
 msgid "A run needs %s. Pass it."

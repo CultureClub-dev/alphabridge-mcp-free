@@ -1010,7 +1010,7 @@ final class AB_MCP_Sync_Revert {
 								'state'  => 'unclear',
 								'result' => array(
 									'message' => 'revert' === $step['op']
-										? __( 'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run.', 'alphabridge-mcp' )
+										? __( 'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run, while the backups of the run are kept.', 'alphabridge-mcp' )
 										: __( 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.', 'alphabridge-mcp' ),
 								),
 							),

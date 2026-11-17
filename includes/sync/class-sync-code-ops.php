@@ -59,9 +59,6 @@ require_once __DIR__ . '/class-sync-code-swap.php';
  */
 final class AB_MCP_Sync_Code_Ops {
 
-	/** The operations of a step of the code in this version. */
-	const OPS = array( 'stage', 'swap' );
-
 	/* ------------------------------------------------------ the plan */
 
 	/**

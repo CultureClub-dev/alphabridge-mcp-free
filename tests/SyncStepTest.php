@@ -4,10 +4,9 @@
  * the order belege/auftrag-teil-r12b.txt, sections 3.1 and 6.2 point 1),
  * once per method from one data provider (methods()), without WordPress:
  *
- * - in time the same result as the direct call (and the same effect where a
- *   test sees one: the sorted array, the context hashed or inflated, the
- *   option read, the query of $wpdb), the check and the step told to the
- *   seam, the clock read once and no gate (DeadlineClock, variant T1);
+ * - in time the same result as the direct call, the check and the step
+ *   told to the seam, the clock read once and no gate (DeadlineClock,
+ *   variant T1);
  * - without a deadline (null) the same, without a reading of the clock;
  * - over at its own check (DeadlineClock::late_at_step(): the halt in the
  *   helper, set on purpose): the stop in full, the step not run (no step of
@@ -20,9 +19,8 @@
  *
  * The list is closed both ways: each public method of the class is a case
  * here and each case a method; each is static, takes the deadline first and
- * has no default value. A step the helper ran with no effect a test sees
- * (the disk, the codecs that return their value) is shown by the seam and
- * the result only.
+ * has no default value. A step the helper ran (the disk, with no effect a
+ * test sees) is shown by the seam and the result only.
  *
  * @package AlphaBridge_MCP
  */
@@ -49,24 +47,6 @@ require_once __DIR__ . '/../includes/sync/class-sync-env.php';
 require_once __DIR__ . '/../includes/sync/class-sync-step.php';
 require_once __DIR__ . '/DeadlineClock.php';
 
-/**
- * The global $wpdb of a test: each query it is asked, the answer a text of it.
- */
-final class SyncStepWpdb {
-
-	/** @var array[] The arguments of each call of get_var(), in order. */
-	public $asked = array();
-
-	/**
-	 * @param mixed ...$args The query and its place.
-	 * @return string
-	 */
-	public function get_var( ...$args ) {
-		$this->asked[] = $args;
-		return 'value of ' . $args[0];
-	}
-}
-
 final class SyncStepTest extends TestCase {
 
 	/** The deadline is over (ab_mcp_read_late), in full. */
@@ -75,14 +55,8 @@ final class SyncStepTest extends TestCase {
 	/** A deadline that is not one (ab_mcp_read_deadline), in full. */
 	const DEADLINE_TEXT = 'The time limit this reading was given is not a time (a finite number of seconds), so nothing was read. This is a fault of the code that asked for the reading, not of the site: call again, and where it keeps failing, update AlphaBridge MCP or report it to its makers.';
 
-	/** The option the case get_option reads. */
-	const OPTION = 'ab_mcp_step_test';
-
 	/** @var string A folder of this test: a file f.txt and a link l to it. */
 	private static $dir = '';
-
-	/** @var mixed The global $wpdb before the test. */
-	private $wpdb = null;
 
 	protected function setUp(): void {
 		ab_test_reset();
@@ -91,16 +65,10 @@ final class SyncStepTest extends TestCase {
 		mkdir( self::$dir, 0700 );
 		file_put_contents( self::$dir . '/f.txt', 'abc' );
 		symlink( self::$dir . '/f.txt', self::$dir . '/l' );
-		$GLOBALS['ab_test_options'][ self::OPTION ] = array( 'kept' => true );
-		$this->wpdb = null;
-		if ( isset( $GLOBALS['wpdb'] ) ) {
-			$this->wpdb = $GLOBALS['wpdb'];
-		}
 	}
 
 	protected function tearDown(): void {
 		DeadlineClock::restore();
-		$GLOBALS['wpdb'] = $this->wpdb;
 		unlink( self::$dir . '/l' );
 		unlink( self::$dir . '/f.txt' );
 		rmdir( self::$dir );
@@ -126,13 +94,6 @@ final class SyncStepTest extends TestCase {
 	private static function ways(): array {
 		$dir  = self::$dir;
 		$file = $dir . '/f.txt';
-		$gz   = gzencode( 'abc' );
-		$keys = sodium_crypto_sign_seed_keypair( str_repeat( "\1", SODIUM_CRYPTO_SIGN_SEEDBYTES ) );
-		$sig  = sodium_crypto_sign_detached( 'message', sodium_crypto_sign_secretkey( $keys ) );
-		$pub  = sodium_crypto_sign_publickey( $keys );
-		$cmp  = static function ( $a, $b ) {
-			return $a <=> $b;
-		};
 		return array(
 			// The disk: a folder is no file but readable; the link and its target differ for lstat() and stat().
 			'is_file'                            => array(
@@ -175,225 +136,7 @@ final class SyncStepTest extends TestCase {
 				'direct'    => static fn() => array( realpath( $dir . '/./l' ), null ),
 				'untouched' => null,
 			),
-			// The database: the option counts its readings (tests/bootstrap.php), $wpdb its queries.
-			'get_option'                         => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::get_option( $d, self::OPTION, 'none' ), self::option_reads() ),
-				'direct'    => static fn() => array( get_option( self::OPTION, 'none' ), self::option_reads() ),
-				'untouched' => 0,
-			),
-			'home_url'                           => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::home_url( $d, '/x' ), null ),
-				'direct'    => static fn() => array( home_url( '/x' ), null ),
-				'untouched' => null,
-			),
-			'admin_url'                          => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::admin_url( $d, 'admin.php?page=x' ), null ),
-				'direct'    => static fn() => array( admin_url( 'admin.php?page=x' ), null ),
-				'untouched' => null,
-			),
-			'wp_upload_dir'                      => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::wp_upload_dir( $d, null, false ), null ),
-				'direct'    => static fn() => array( wp_upload_dir( null, false ), null ),
-				'untouched' => null,
-			),
-			'wpdb_get_var'                       => array(
-				'helper'    => static function ( $d ) {
-					$GLOBALS['wpdb'] = new SyncStepWpdb();
-					return array( AB_MCP_Sync_Step::wpdb_get_var( $d, 'SELECT 1', 0 ), $GLOBALS['wpdb']->asked );
-				},
-				'direct'    => static function () {
-					$GLOBALS['wpdb'] = new SyncStepWpdb();
-					return array( $GLOBALS['wpdb']->get_var( 'SELECT 1', 0 ), $GLOBALS['wpdb']->asked );
-				},
-				'untouched' => array(),
-			),
-			// The codecs; a context shows what the step did to it.
-			'hash'                               => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::hash( $d, 'sha256', 'abc', true ), null ),
-				'direct'    => static fn() => array( hash( 'sha256', 'abc', true ), null ),
-				'untouched' => null,
-			),
-			'hash_init'                          => array(
-				'helper'    => static fn( $d ) => array( self::finished( AB_MCP_Sync_Step::hash_init( $d, 'sha1' ) ), null ),
-				'direct'    => static fn() => array( self::finished( hash_init( 'sha1' ) ), null ),
-				'untouched' => null,
-			),
-			'hash_update'                        => array(
-				'helper'    => static function ( $d ) {
-					$context = hash_init( 'sha256' );
-					return array( AB_MCP_Sync_Step::hash_update( $d, $context, 'abc' ), hash_final( $context ) );
-				},
-				'direct'    => static function () {
-					$context = hash_init( 'sha256' );
-					return array( hash_update( $context, 'abc' ), hash_final( $context ) );
-				},
-				'untouched' => hash( 'sha256', '' ),
-			),
-			'hash_final'                         => array(
-				'helper'    => static function ( $d ) {
-					$context = hash_init( 'sha256' );
-					hash_update( $context, 'abc' );
-					return array( AB_MCP_Sync_Step::hash_final( $d, $context, true ), self::finished( $context ) );
-				},
-				'direct'    => static function () {
-					$context = hash_init( 'sha256' );
-					hash_update( $context, 'abc' );
-					return array( hash_final( $context, true ), self::finished( $context ) );
-				},
-				'untouched' => hash( 'sha256', 'abc' ),
-			),
-			'sha1'                               => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::sha1( $d, 'abc' ), null ),
-				'direct'    => static fn() => array( sha1( 'abc' ), null ),
-				'untouched' => null,
-			),
-			'json_decode'                        => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::json_decode( $d, '{"a":[1,2.5]}', true, 8 ), null ),
-				'direct'    => static fn() => array( json_decode( '{"a":[1,2.5]}', true, 8 ), null ),
-				'untouched' => null,
-			),
-			'json_encode'                        => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::json_encode( $d, array( 'a' => '/é', 'b' => 1.0 ), JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION ), null ),
-				'direct'    => static fn() => array( json_encode( array( 'a' => '/é', 'b' => 1.0 ), JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION ), null ),
-				'untouched' => null,
-			),
-			'wp_json_encode'                     => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::wp_json_encode( $d, array( 'a' => '/é' ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), null ),
-				'direct'    => static fn() => array( wp_json_encode( array( 'a' => '/é' ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), null ),
-				'untouched' => null,
-			),
-			'maybe_unserialize'                  => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::maybe_unserialize( $d, 'a:1:{s:1:"a";i:1;}' ), null ),
-				'direct'    => static fn() => array( maybe_unserialize( 'a:1:{s:1:"a";i:1;}' ), null ),
-				'untouched' => null,
-			),
-			'base64_encode'                      => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::base64_encode( $d, "\0\xff" ), null ),
-				'direct'    => static fn() => array( base64_encode( "\0\xff" ), null ),
-				'untouched' => null,
-			),
-			'base64_decode'                      => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::base64_decode( $d, 'AP8=', true ), null ),
-				'direct'    => static fn() => array( base64_decode( 'AP8=', true ), null ),
-				'untouched' => null,
-			),
-			'bin2hex'                            => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::bin2hex( $d, "\0\xff" ), null ),
-				'direct'    => static fn() => array( bin2hex( "\0\xff" ), null ),
-				'untouched' => null,
-			),
-			'hex2bin'                            => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::hex2bin( $d, '00ff' ), null ),
-				'direct'    => static fn() => array( hex2bin( '00ff' ), null ),
-				'untouched' => null,
-			),
-			'pack'                               => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::pack( $d, 'En', 1.5, 7 ), null ),
-				'direct'    => static fn() => array( pack( 'En', 1.5, 7 ), null ),
-				'untouched' => null,
-			),
-			'gzdecode'                           => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::gzdecode( $d, $gz, 10 ), null ),
-				'direct'    => static fn() => array( gzdecode( $gz, 10 ), null ),
-				'untouched' => null,
-			),
-			'inflate_init'                       => array(
-				'helper'    => static fn( $d ) => array( self::inflated( AB_MCP_Sync_Step::inflate_init( $d, ZLIB_ENCODING_GZIP ), $gz ), null ),
-				'direct'    => static fn() => array( self::inflated( inflate_init( ZLIB_ENCODING_GZIP ), $gz ), null ),
-				'untouched' => null,
-			),
-			'inflate_add'                        => array(
-				'helper'    => static function ( $d ) use ( $gz ) {
-					$context = inflate_init( ZLIB_ENCODING_GZIP );
-					return array( AB_MCP_Sync_Step::inflate_add( $d, $context, $gz, ZLIB_FINISH ), inflate_get_status( $context ) );
-				},
-				'direct'    => static function () use ( $gz ) {
-					$context = inflate_init( ZLIB_ENCODING_GZIP );
-					return array( inflate_add( $context, $gz, ZLIB_FINISH ), inflate_get_status( $context ) );
-				},
-				'untouched' => inflate_get_status( inflate_init( ZLIB_ENCODING_GZIP ) ),
-			),
-			'sodium_crypto_sign_verify_detached' => array(
-				'helper'    => static fn( $d ) => array( AB_MCP_Sync_Step::sodium_crypto_sign_verify_detached( $d, $sig, 'message', $pub ), null ),
-				'direct'    => static fn() => array( sodium_crypto_sign_verify_detached( $sig, 'message', $pub ), null ),
-				'untouched' => null,
-			),
-			// The sorts: the array shows whether the step ran.
-			'sort'                               => array(
-				'helper'    => static function ( $d ) {
-					$list = array( 'b', 'a', '10', '9' );
-					return array( AB_MCP_Sync_Step::sort( $d, $list, SORT_STRING ), $list );
-				},
-				'direct'    => static function () {
-					$list = array( 'b', 'a', '10', '9' );
-					return array( sort( $list, SORT_STRING ), $list );
-				},
-				'untouched' => array( 'b', 'a', '10', '9' ),
-			),
-			'ksort'                              => array(
-				'helper'    => static function ( $d ) {
-					$map = array( 'b' => 1, 'a' => 2, '10' => 3, '9' => 4 );
-					return array( AB_MCP_Sync_Step::ksort( $d, $map, SORT_STRING ), $map );
-				},
-				'direct'    => static function () {
-					$map = array( 'b' => 1, 'a' => 2, '10' => 3, '9' => 4 );
-					return array( ksort( $map, SORT_STRING ), $map );
-				},
-				'untouched' => array( 'b' => 1, 'a' => 2, '10' => 3, '9' => 4 ),
-			),
-			'usort'                              => array(
-				'helper'    => static function ( $d ) use ( $cmp ) {
-					$list = array( 3, 1, 2 );
-					return array( AB_MCP_Sync_Step::usort( $d, $list, $cmp ), $list );
-				},
-				'direct'    => static function () use ( $cmp ) {
-					$list = array( 3, 1, 2 );
-					return array( usort( $list, $cmp ), $list );
-				},
-				'untouched' => array( 3, 1, 2 ),
-			),
 		);
-	}
-
-	/** @return int How often the option of the case get_option was read. */
-	private static function option_reads(): int {
-		if ( isset( $GLOBALS['ab_test_option_reads'][ self::OPTION ] ) ) {
-			return $GLOBALS['ab_test_option_reads'][ self::OPTION ];
-		}
-		return 0;
-	}
-
-	/**
-	 * What a context of hash_init() gives at its end, or 'finished' where it
-	 * was finished before; anything else as it is (a stop).
-	 *
-	 * @param mixed $context A context.
-	 * @return mixed
-	 */
-	private static function finished( $context ) {
-		if ( ! $context instanceof \HashContext ) {
-			return $context;
-		}
-		try {
-			return hash_final( $context );
-		} catch ( \Error $e ) {
-			return 'finished';
-		}
-	}
-
-	/**
-	 * What a context of inflate_init() makes of a gzip member; anything else
-	 * as it is (a stop).
-	 *
-	 * @param mixed  $context A context.
-	 * @param string $gz      The member.
-	 * @return mixed
-	 */
-	private static function inflated( $context, string $gz ) {
-		if ( ! $context instanceof \InflateContext ) {
-			return $context;
-		}
-		return inflate_add( $context, $gz, ZLIB_FINISH );
 	}
 
 	/**
@@ -442,7 +185,6 @@ final class SyncStepTest extends TestCase {
 	public function testInTimeTheHelperAnswersAsTheDirectCall( string $name ): void {
 		$way    = self::ways()[ $name ];
 		$direct = ( $way['direct'] )();
-		$GLOBALS['ab_test_option_reads'] = array();
 		$clock = DeadlineClock::in_time()->install();
 		$have  = ( $way['helper'] )( DeadlineClock::deadline() );
 		self::assertSame( $direct, $have, 'The result and the effect of the direct call, unchanged.' );
@@ -456,7 +198,6 @@ final class SyncStepTest extends TestCase {
 	public function testWithoutADeadlineTheHelperIsTheBareCallWithoutAReadingOfTheClock( string $name ): void {
 		$way    = self::ways()[ $name ];
 		$direct = ( $way['direct'] )();
-		$GLOBALS['ab_test_option_reads'] = array();
 		$clock = DeadlineClock::in_time()->install();
 		$have  = ( $way['helper'] )( null );
 		self::assertSame( $direct, $have, 'The bare call.' );

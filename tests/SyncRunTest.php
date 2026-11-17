@@ -2240,7 +2240,7 @@ final class SyncRunTest extends TestCase {
 		// text by its bytes; no revision of this post holds the text.
 		$row = AB_MCP_Sync_Post_Writer::before_value( 'row', $backup, $now, 77 );
 		self::assertStringContainsString( 'post_title: "Contact"', $row );
-		self::assertStringContainsString( 'post_content: 260 bytes (no revision of the post holds it; the backup of the step does)', $row );
+		self::assertStringContainsString( 'post_content: 260 bytes (no revision of the post holds it; the backup of the step does, while the backups of the run are kept)', $row );
 		self::assertStringContainsString( 'post_password: (a credential by its name, not shown)', $row );
 		self::assertStringNotContainsString( 'geheim-synthetic', $row );
 		self::assertStringNotContainsString( 'post_status', $row, 'A column as now is not named.' );

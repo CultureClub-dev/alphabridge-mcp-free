@@ -3149,7 +3149,7 @@ final class AB_MCP_Sync_Post_Writer {
 		}
 		return null === $held
 			/* translators: %d: number of bytes. */
-			? sprintf( _n( '%d byte (no revision of the post holds it; the backup of the step does)', '%d bytes (no revision of the post holds it; the backup of the step does)', $bytes, 'alphabridge-mcp' ), $bytes )
+			? sprintf( _n( '%d byte (no revision of the post holds it; the backup of the step does, while the backups of the run are kept)', '%d bytes (no revision of the post holds it; the backup of the step does, while the backups of the run are kept)', $bytes, 'alphabridge-mcp' ), $bytes )
 			/* translators: 1: number of bytes, 2: ID of the revision. */
 			: sprintf( _n( '%1$d byte (revision %2$d of the post holds it, wp-admin → Revisions)', '%1$d bytes (revision %2$d of the post holds it, wp-admin → Revisions)', $bytes, 'alphabridge-mcp' ), $bytes, $held );
 	}
@@ -3202,7 +3202,7 @@ final class AB_MCP_Sync_Post_Writer {
 		if ( self::VALUE_RULES !== $rules ) {
 			// Composed by an earlier build, by rules this one does not vouch
 			// for (Codex round 9): never shown, fail closed.
-			return __( '(composed by an earlier build, not shown; the backup of the step in the protected store holds the value)', 'alphabridge-mcp' );
+			return __( '(composed by an earlier build, not shown)', 'alphabridge-mcp' );
 		}
 		$text  = (string) $text;
 		$extra = AB_MCP_Redactor::extra_keys();

@@ -103,7 +103,7 @@ final class AB_MCP_Sync_Run {
 	 * @return string
 	 */
 	public static function value_cut() {
-		return __( '(cut: an answer carries at most 16384 bytes of values before; the backup of this step in the protected store holds the object as it was before the step)', 'alphabridge-mcp' );
+		return __( '(cut: an answer carries at most 16384 bytes of values before)', 'alphabridge-mcp' );
 	}
 
 	/** The operations of a step. */

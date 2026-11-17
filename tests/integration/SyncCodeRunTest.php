@@ -5820,13 +5820,7 @@ final class SyncCodeRunTest extends TestCase {
 			AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => $unit + $item['unit'] ) + $item );
 			$foreign( $what );
 		}
-		// A binding not of its form (a staging_hash that is no SHA-256): not
-		// known, the step stays planned and the stage is not written.
 		self::replan( $run_id, $journal );
-		$got = AB_MCP_Sync_Code_Ops::run( AB_MCP_Sync_Run::get( $run_id ), self::step( $run_id, 2 ), array( 'unit' => array( 'staging_hash' => 'not-a-hash' ) + $item['unit'] ) + $item );
-		self::assertStringContainsString( 'does not read in its form, so the stage is neither checked nor taken', self::refused( $got, 'code:stage_bound' ) );
-		self::assertSame( 'planned', self::step( $run_id, 2 )['state'] );
-		self::assertSame( $untouched, self::stage_bytes( $gid ), 'A binding not of its form: the stage is not written.' );
 		// Bound as the plan names it: checked and done, its state written.
 		self::assertSame( 'done', self::next( $run_id )['step']['state'] );
 		self::assertNotSame( $untouched, self::stage_bytes( $gid ), 'The stage of the step is checked.' );

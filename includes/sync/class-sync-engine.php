@@ -271,7 +271,7 @@ final class AB_MCP_Sync_Engine {
 			// A record of the run that does not read back as it was written
 			// (AB_MCP_Sync_Run::records()): nothing is decided on it.
 			/* translators: 1: run number, 2: the fields of its record that do not read back, as the tools name them (plan, budget, …), separated by commas. */
-			return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( __( 'Run %1$d is not changed: its record (%2$s) does not read back as it was written (a marker of its bytes that does not hold), so nothing of the run is decided on it. Ask the host to check the table of the runs; the backups of the run in the protected store hold the objects as they were before its steps.', 'alphabridge-mcp' ), (int) $run['run_id'], implode( ', ', $now['unread'] ) ) );
+			return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( __( 'Run %1$d is not changed: its record (%2$s) does not read back as it was written (a marker of its bytes that does not hold), so nothing of the run is decided on it. Ask the host to check the table of the runs.', 'alphabridge-mcp' ), (int) $run['run_id'], implode( ', ', $now['unread'] ) ) );
 		}
 		if ( (string) $now['state'] !== (string) $run['state'] ) {
 			/* translators: 1: run number, 2: its state as this call read it, 3: its state now; both as the tools name them (open, interrupted, …). */

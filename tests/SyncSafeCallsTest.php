@@ -531,23 +531,9 @@ final class SyncSafeCallsTest extends TestCase {
 		'class-sync-deadline.php' => array(
 			'__' => array( 3, 'the stop of a reading under its deadline (over, its clock unknown) and the refusal of a deadline that is none, each with the way, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value a reader compares or hashes.' ),
 		),
-		// The helpers of the steps of a reading under the deadline (Z8b branch 5,
-		// R12b part 3.1): each the step of its caller, with the arguments of the
-		// caller unchanged, after the check of the deadline; what it reads is what
-		// the caller read before through the same function (the callers outside
-		// includes/sync/: AB_MCP_Settings::get(), AB_MCP_Guidance::settings_url(),
-		// AB_MCP_Protected_Store::candidates() and ::stored(); under it: the
-		// anchor and the manifest, which stand here with their own reasons).
-		'class-sync-step.php'     => array(
-			'get_option'        => array( 1, 'get_option(): the step of its caller (the options of the plugin, the anchor and the retired keys of a staging pair), after the deadline; the option as the caller reads it, no other.' ),
-			'home_url'          => array( 1, 'home_url(): the step of its caller (the address of this site for the print of a pair and the check of a package), after the deadline.' ),
-			'admin_url'         => array( 1, 'admin_url(): the step of its caller (the address of a page of the settings in a guidance), after the deadline.' ),
-			'wp_upload_dir'     => array( 1, 'wp_upload_dir(): the step of its caller (the uploads folder as a place of the protected store), after the deadline.' ),
-			'maybe_unserialize' => array( 1, 'maybe_unserialize(): the step of its caller (the raw record of the proof of the protected store, read through $wpdb), after the deadline.' ),
-		),
 		'class-sync-code-plan.php' => array(
-			'__'                           => array( 33, 'the refusals, the locks and the preview of a plan of the code (with part D3a the versions in the lock without accept, F2: here and on the staging site, or not on this site), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
-			'AB_MCP_Shape::read'           => array( 3, 'entry_of(), pair_of() and by_label(): an entry of the report, its pair and a group of the packages taken over (as AB_MCP_Protected_Store::groups() gives it) read in their forms ENTRY, PAIR and GROUP before the plan uses them (Z8b branch 5, parts 1a-2, 1a-3 and K1a: no cast, no default value); checks the value it is given, no stored value (the forms name no codec).' ),
+			'__'                           => array( 32, 'the refusals, the locks and the preview of a plan of the code (with part D3a the versions in the lock without accept, F2: here and on the staging site, or not on this site), in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes.' ),
+			'AB_MCP_Shape::read'           => array( 2, 'entry_of() and pair_of(): an entry of the report and its pair read in their forms ENTRY and PAIR before the plan uses them (Z8b branch 5, parts 1a-2 and 1a-3: no cast, no default value); checks the value it is given, no stored value (the forms name no codec).' ),
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind(): the packages of the environment of the report and the packages of code bound to the run of the code, kept until its swaps; each binding checked (V20 of the pre-check of branch 5).' ),
 		),
 		// The package and the stage of code (Z8b branch 4).
@@ -555,10 +541,9 @@ final class SyncSafeCallsTest extends TestCase {
 			'__' => array( 12, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 		),
 		'class-sync-code-stage.php' => array(
-			'__'                                 => array( 49, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__'                                 => array( 47, 'the refusals and errors the tools wp_site_* pass on, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Outbound::get'               => array( 1, 'Calls::get(): the ZIP of a plugin or theme from downloads.wordpress.org in its exact version, only over https, no redirect followed, at most ORG_MAX bytes (fetch_zip(), D2), tied to the checked addresses; the answer is checked as data, no stored value of this site is read.' ),
 			'AB_MCP_Protected_Store::entry'      => array( 1, 'foreign(): the entry (sidecar) of the group of the stage, read whole by its id, for the run the group is bound to (Z8b branch 5, K2: the binding in the stage); the same resolving and checking of the store as groups(), the folder of the uploads (wp_upload_dir()) and the own rows of the store\'s id and proof included; no value of WordPress read for a comparison of contents (Codex on 1a-4c, B2).' ),
-			'AB_MCP_Shape::read'                 => array( 2, 'foreign(): the binding the step names (BOUND) and the entry of the group of the stage (GROUP) read in their forms before they are compared (Z8b branch 5, K2; no cast, no default value); checks the value it is given, no stored value (the forms name no codec).' ),
 			'AB_MCP_Own_Files::own_file_refusal' => array( 1, 'stage(): AlphaBridge itself is never staged, by the identity of its path (constants of the plugin, realpath() and stat()); no stored value.' ),
 			'AB_MCP_Protected_Store::web_ready'  => array( 1, 'Calls::web_ready(): whether the protected store takes a tree of these paths as it lies (its place, the PHP proof as its own rows hold it through $wpdb), asked before anything of a unit is written (Codex round 1 of branch 4, A1); no other stored value.' ),
 			'get_filesystem_method'              => array( 1, 'Calls::method(): the way WordPress writes files here (FS_METHOD, the filter filesystem_method and a test file in wp-content), only direct is taken (D5); no stored value.' ),

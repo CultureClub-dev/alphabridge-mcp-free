@@ -513,41 +513,6 @@ final class AB_MCP_Sync_Code_Stage {
 	 */
 	const PERMANENT = array( 'code:stage_other', 'code:unsigned', 'code:stage_foreign' );
 
-	/**
-	 * The binding of a stage a step expects (complete(), ready(); A2 of the
-	 * Codex round 1 on the code, K2): the run its group is bound to, the
-	 * kind and the name of its unit, and the hash of the unit on the staging
-	 * site (staging_hash of the plan).
-	 */
-	const BOUND = array(
-		'type'   => 'record',
-		'fields' => array(
-			'run_id' => AB_MCP_Store_Inputs::RUN,
-			'kind'   => array(
-				'type'      => 'string',
-				'empty'     => false,
-				'max_bytes' => null,
-			),
-			'ref'    => array(
-				'type'      => 'string',
-				'empty'     => false,
-				'max_bytes' => null,
-			),
-			'signed' => AB_MCP_Store_Inputs::SHA256,
-		),
-		'extra'  => false,
-	);
-
-	/** The entry of the group of a stage as the store holds it: its id and the run it is bound to. */
-	const GROUP = array(
-		'type'   => 'record',
-		'fields' => array(
-			'gid'    => AB_MCP_Store_Inputs::TABLE['sidecar.gid']['form'],
-			'run_id' => AB_MCP_Store_Inputs::TABLE['sidecar.run']['form'],
-		),
-		'extra'  => true,
-	);
-
 	/** The calls to the outside (the seam); only the tests put another object here. */
 	private static $naht_sync_code_stage = null;
 
@@ -1052,7 +1017,7 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @param string   $name  The tree.
 	 * @param string   $hash  The hash stage() gave.
 	 * @param string[] $env   The packages of the environment of the report.
-	 * @param array    $bound The binding the step expects (BOUND): run_id, kind, ref, signed.
+	 * @param array    $bound The binding the step expects: run_id, kind, ref, signed.
 	 * @return array|WP_Error The state: state checking (call again), ready or refused (with refusal).
 	 */
 	public static function complete( $gid, $name, $hash, array $env, array $bound ) {
@@ -1135,7 +1100,7 @@ final class AB_MCP_Sync_Code_Stage {
 	 * @param string     $gid      The group.
 	 * @param string     $name     The tree.
 	 * @param string     $hash     Its hash.
-	 * @param array      $bound    The binding the step expects (BOUND).
+	 * @param array      $bound    The binding the step expects: run_id, kind, ref, signed.
 	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|null|WP_Error
 	 */
@@ -1166,41 +1131,27 @@ final class AB_MCP_Sync_Code_Stage {
 	 * (code:stage_foreign, PERMANENT) and never written, neither refused nor
 	 * checked further. The entry of the group not read is not known (the
 	 * error of the store, never «foreign»: a group is read by its id, not
-	 * looked for in a listing); a binding or an entry not of its form is not
-	 * known either.
+	 * looked for in a listing). The binding comes checked from its callers
+	 * (AB_MCP_Sync_Code_Ops::stage() from runs.run_id and plan.code,
+	 * AB_MCP_Sync_Code_Swap::signed_stage() from swap.prepare), the entry in
+	 * its form from AB_MCP_Protected_Store::entry() (the list of the review,
+	 * 6 and 8).
 	 *
-	 * Under a deadline (R12 of Z8b branch 5; ready()) the binding and the
-	 * entry of the group read only while it is not over; its stop is the
-	 * answer.
+	 * Under a deadline (R12 of Z8b branch 5; ready()) the entry of the group
+	 * is read only while it is not over; its stop is the answer.
 	 *
 	 * @param string     $gid      The group.
 	 * @param array      $state    Its state (state()).
-	 * @param array      $bound    The binding the step expects (BOUND).
+	 * @param array      $bound    The binding the step expects: run_id, kind, ref, signed.
 	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return WP_Error|null Null where bound.
 	 */
 	private static function foreign( $gid, array $state, array $bound, $deadline = null ) {
-		$want = AB_MCP_Shape::read( $bound, self::BOUND, $deadline );
-		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
-		if ( null !== $stop ) {
-			return $stop;
-		}
-		if ( null === $want ) {
-			return self::refusal( 'code:stage_bound', __( 'The binding the step names for its stage (its run, the kind and name of its unit, its hash on the staging site) does not read in its form, so the stage is neither checked nor taken. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
-		}
 		$entry = AB_MCP_Protected_Store::entry( 'stage', $gid, $deadline );
 		if ( is_wp_error( $entry ) ) {
 			return $entry;
 		}
-		$group = AB_MCP_Shape::read( $entry, self::GROUP, $deadline );
-		$stop  = AB_MCP_Sync_Deadline::stop( $deadline );
-		if ( null !== $stop ) {
-			return $stop;
-		}
-		if ( null === $group ) {
-			return self::refusal( 'code:stage_group', __( 'The entry of the group of the stage does not read in its form (its id or the run it is bound to), so what the stage is bound to is not known and it is neither checked nor taken. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort).', 'alphabridge-mcp' ) );
-		}
-		if ( $want['run_id'] !== $group['run_id'] || $want['kind'] !== $state['unit']['kind'] || $want['ref'] !== $state['unit']['ref'] || ! hash_equals( $want['signed'], $state['signed'] ) ) {
+		if ( $bound['run_id'] !== $entry['run_id'] || $bound['kind'] !== $state['unit']['kind'] || $bound['ref'] !== $state['unit']['ref'] || ! hash_equals( $bound['signed'], $state['signed'] ) ) {
 			return self::refusal( 'code:stage_foreign', __( 'The stage the journal of this step names is not bound to this run, this unit and the version of the staging site the plan names, so this step is not done on it. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ) );
 		}
 		return null;

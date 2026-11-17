@@ -35,7 +35,7 @@
  *
  * THE SWAP (run(); plan E5 6 to 11 as Variante b keeps them): in the same
  * call, under the same lock, after prepare(): the place of the old version
- * in the backups of the run (backup_place()); whether its code runs, read
+ * in the backups of the run (plan_of()); whether its code runs, read
  * again right before the first write against what prepare() read
  * (as_prepared(), Z24 after option C: changed or not known, nothing is
  * swapped, accept or not); rename_marked(), the one
@@ -71,7 +71,7 @@
  * the swap began is activated again through AB_MCP_Activation_Guard::
  * plugin() (Z25); without accept it stays inactive, named with the way,
  * and the preview says which (on_again(), Z43). A switch of the theme is
- * not put back (G-24); the step names a theme it reads as not running,
+ * not put back (G-5-15); the step names a theme it reads as not running,
  * with the way (part F, section 2). Way (a) (closed_checked()): a person
  * closes a run whose swap step, or a step of its way back, was left begun
  * only where, read under the lock for changes, the target holds the new
@@ -978,9 +978,12 @@ final class AB_MCP_Sync_Code_Swap {
 	/**
 	 * Z4: the stage the journal names, ready for this step (ready(), the one
 	 * reader of the state ready, bound to this run, this unit and the hash
-	 * of the plan), its tree read whole, and three hashes the same: of the
-	 * tree, of its state (tree and signed), and of the signed manifest read
-	 * now (signed()), which is the hash of the plan. ready(), tree() and
+	 * of the plan), its tree read whole, and two hashes the same: of the tree
+	 * and of the signed manifest read now (signed()), which is the hash of
+	 * the plan. The hashes its state names are those already: ready() gives
+	 * the state only with the hash of its tree as the stage names it and,
+	 * through foreign(), with the hash of the plan as signed; tree() the tree
+	 * only with that hash (the list of the review, 4 and 5). ready(), tree() and
 	 * signed() read under the deadline of the swap (R12), whose stop is the
 	 * refusal with its own code; tree() also within its own budget
 	 * (TREE_BUDGET), until the earlier of the two.
@@ -1014,7 +1017,7 @@ final class AB_MCP_Sync_Code_Swap {
 			/* translators: 1: why the stage or the signed manifest was not read (one or more whole sentences), 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
 			return self::refusal( $signed->get_error_code(), sprintf( __( '%1$s So the %2$s %3$s is not swapped. Call action=next again; where it keeps failing, abort the run (wp_site_push action=abort) and plan again.', 'alphabridge-mcp' ), $signed->get_error_message(), $unit['kind'], $unit['ref'] ) );
 		}
-		if ( ! hash_equals( $signed['hash'], $tree['hash'] ) || ! hash_equals( $state['tree']['hash'], $tree['hash'] ) || ! hash_equals( $state['signed'], $signed['hash'] ) || ! hash_equals( $unit['staging_hash'], $signed['hash'] ) ) {
+		if ( ! hash_equals( $signed['hash'], $tree['hash'] ) || ! hash_equals( $unit['staging_hash'], $signed['hash'] ) ) {
 			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name. */
 			return self::refusal( 'code:stage_mismatch', sprintf( __( 'The stage of the %1$s %2$s is not the unit the staging site signed: the hash of its tree, the hashes its state names and the hash of the signed manifest, read now, are not all the same, so it is not swapped. Abort the run (wp_site_push action=abort), make a new report (wp_site_diff) and plan again.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'] ) );
 		}
@@ -1145,9 +1148,8 @@ final class AB_MCP_Sync_Code_Swap {
 	 * more, rename_marked(), OPcache for each PHP file replaced, close() and
 	 * the new bases of the files of its pair; the step ends with its journal
 	 * and result. The lock prepare() took is given back in every way. A unit
-	 * made new is not swapped at this commit (part D3 of the rest). Before
-	 * prepare() the rights of E10 for the operation of the unit
-	 * (AB_MCP_Sync_Code_Kind::rights(); F4, part D3a).
+	 * made new is not swapped. Before prepare() the rights of E10 for the
+	 * operation of the unit (AB_MCP_Sync_Code_Kind::rights(); F4, part D3a).
 	 *
 	 * @param mixed $swap What the swap is asked with, in the form of its row swap.prepare.
 	 * @return array|WP_Error next, the answer of the step as it ended (done; failed where
@@ -1179,7 +1181,7 @@ final class AB_MCP_Sync_Code_Swap {
 			return $prepared;
 		}
 		try {
-			$answer = null === $in ? self::args_refusal() : self::swapped( $in, $prepared );
+			$answer = self::swapped( $in, $prepared );
 		} finally {
 			$kept = self::release();
 		}
@@ -2193,7 +2195,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * The step of the way back under the lock (Z22, Z20b, Z13). Done only
 	 * where close() with kept proved the old version at the target; a mark
 	 * that is gone (its folder a day after it closed) or not found leaves
-	 * that proof alone (GRENZEN-CODE.md, G-27). Anything else ends the step
+	 * that proof alone (GRENZEN-CODE.md, G-5-14). Anything else ends the step
 	 * unclear with what this call did (option B). Either way the pair of
 	 * the unit becomes unclear (question 3 A of part E).
 	 *
@@ -2333,7 +2335,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * it finds active unsaid. Else (the preview, or without accept) each one
 	 * not read as active now is named: with accept as one the way back
 	 * activates, without it as staying inactive, with the way. A theme names
-	 * none: a switch of the theme is not put back (G-24).
+	 * none: a switch of the theme is not put back (G-5-15).
 	 *
 	 * @param array  $journal The journal of the swap.
 	 * @param string $ref     The plugin.
@@ -2374,7 +2376,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * or the target the old version (close() with kept); the mark closes.
 	 * Else the refusal with the way back and the way by hand, before
 	 * AB_MCP_Sync_Run::close_checked() writes anything; the run stays
-	 * interrupted. A mark that is gone leaves the proof alone (G-27). The
+	 * interrupted. A mark that is gone leaves the proof alone (G-5-14). The
 	 * refusal names the run that is closed, for a run of the way back of
 	 * its own that run, not the one that wrote (skeptic E1b, B2).
 	 *
@@ -2418,7 +2420,7 @@ final class AB_MCP_Sync_Code_Swap {
 	/**
 	 * The mark of a swap step, as the store lists it by run and step (a
 	 * swap interrupted before its result names none); null where none is
-	 * found or the marks are not listed (G-27).
+	 * found or the marks are not listed (G-5-14).
 	 *
 	 * @param array $swap The swap step.
 	 * @return string|null

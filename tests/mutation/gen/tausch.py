@@ -232,7 +232,6 @@ e('swap-runs-parent', 'runs(): the parent of the theme that runs runs as well', 
 # ------------------------------------------- K1a: Codex round 1 on the code, A3 and A2
 A3T = 'testAStageThatIsNotTheOneOfItsGroupOrNotSignedFailsItsStepAndItsSwapIsSkipped'
 A2T = 'testAReadyStageNotBoundToThisRunThisUnitAndItsStagingHashNeverMakesTheStepDone'
-BYL = 'testTheGroupsOfThePackagesAreReadInTheirFormBeforeAPackageIsBound'
 e('k1a-permanent-ends', 'stage(): a refusal of the stage no later call changes ends the step failed (A3)', CO,
   "\t\t\tif ( in_array( $state->get_error_code(), AB_MCP_Sync_Code_Stage::PERMANENT, true ) ) {", "\t\t\tif ( false ) {", 'coderun', A3T)
 e('k1a-permanent-other', 'PERMANENT: the stage that is not the one of its group (A3)', ST,
@@ -241,8 +240,6 @@ e('k1a-permanent-unsigned', 'PERMANENT: the unit not signed in the environment (
   "\tconst PERMANENT = array( 'code:stage_other', 'code:unsigned', 'code:stage_foreign' );", "\tconst PERMANENT = array( 'code:stage_other', 'code:stage_foreign' );", 'coderun', A3T)
 e('k1a-stage-other-code', 'complete(): the stage not of its group is a refusal of its own (A3)', ST,
   "\t\t\treturn self::refusal( 'code:stage_other', __( 'The stage named is not the one its group holds.", "\t\t\treturn self::refusal( 'code:stage_unknown', __( 'The stage named is not the one its group holds.", 'coderun', A3T)
-e('k1a-bind-group-form', 'by_label(): a group of the packages not of its form refuses, never cast', CP,
-  "\t\t\tif ( null === $read ) {\n\t\t\t\treturn self::refused( 'ab_mcp_sync_code_bind', __( 'A group", "\t\t\tif ( false ) {\n\t\t\t\treturn self::refused( 'ab_mcp_sync_code_bind', __( 'A group", 'ops', BYL)
 e('k1a-bind-label-known', 'bind(): a package without its group is not bound and refuses (V20)', CP,
   "\t\t\tif ( array_key_exists( $label, $by_label ) ) {", "\t\t\tif ( true ) {", 'coderun', BIND)
 
