@@ -479,21 +479,9 @@ final class AB_MCP_Sync_Push {
 				}
 			}
 		}
-		// The attachments of the run (branch 10): a path two of them name is
-		// shared (attachment:shared_path), both are locked; an attachment
-		// here whose new parent the run creates comes after that post (an
-		// order, a cycle locked); a new one hangs under it by a parent step
-		// after both (decision 16: the weak reference).
-		$by_path = array();
-		foreach ( $items as $n => $item ) {
-			foreach ( 'attachment' === $item['kind'] && isset( $item['files'] ) ? array_unique( $item['files'] ) : array() as $path ) {
-				$by_path[ $path ][] = $n;
-			}
-		}
-		foreach ( $by_path as $path => $ns ) {
-			if ( count( $ns ) < 2 ) {
-				continue;
-			}
+		// A path two attachments of the run name, by the rule shared_paths()
+		// of the writer of the kind (D4 of the seam): both are locked here.
+		foreach ( self::writer_rule( array( 'kind' => 'attachment', 'subtype' => '' ), 'shared_paths', array( $items ), array() ) as $path => $ns ) {
 			$held = AB_MCP_Sync_Kinds::lock( 'attachment', 'shared_path' );
 			foreach ( $ns as $n ) {
 				if ( isset( $items[ $n ] ) ) {

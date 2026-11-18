@@ -166,6 +166,36 @@ final class AB_MCP_Sync_Attachment_Writer {
 	}
 
 	/**
+	 * The paths two attachments of the run name, each with the entry
+	 * numbers of the attachments that name it (rule of the seam, D4, asked
+	 * by AB_MCP_Sync_Push::plan(), which locks them).
+	 *
+	 * @param array $items The items of the plan by entry number.
+	 * @return array<string,int[]> Path => entry numbers.
+	 */
+	public static function shared_paths( array $items ) {
+		// The attachments of the run (branch 10): a path two of them name is
+		// shared (attachment:shared_path), both are locked; an attachment
+		// here whose new parent the run creates comes after that post (an
+		// order, a cycle locked); a new one hangs under it by a parent step
+		// after both (decision 16: the weak reference).
+		$by_path = array();
+		foreach ( $items as $n => $item ) {
+			foreach ( 'attachment' === $item['kind'] && isset( $item['files'] ) ? array_unique( $item['files'] ) : array() as $path ) {
+				$by_path[ $path ][] = $n;
+			}
+		}
+		$shared = array();
+		foreach ( $by_path as $path => $ns ) {
+			if ( count( $ns ) < 2 ) {
+				continue;
+			}
+			$shared[ $path ] = $ns;
+		}
+		return $shared;
+	}
+
+	/**
 	 * What a step writes for one attachment, from its line of the package of
 	 * objects and the item of the plan (see AB_MCP_Sync_Post_Writer::
 	 * target_of() for the fields): the row, the meta by key, the terms, the
