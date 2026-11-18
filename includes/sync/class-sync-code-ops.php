@@ -217,7 +217,7 @@ final class AB_MCP_Sync_Code_Ops {
 	/**
 	 * What the check of a run finds of a step of the code that is done
 	 * (AB_MCP_Sync_Engine::run_verify()): nothing of a step that staged a
-	 * unit, which changed nothing of the site (its stage is checked by its
+	 * unit, which counts() leaves out of the check (its stage is checked by its
 	 * swap, AB_MCP_Sync_Code_Swap). Of a swap, whether its unit is at its
 	 * target as the swap wrote it (G3 of GitHub Codex on #155): its journal
 	 * (AB_MCP_Sync_Code_Swap::journal_of()), the unit read whole now as the
@@ -237,23 +237,20 @@ final class AB_MCP_Sync_Code_Ops {
 	 */
 	public static function finding( array $step, array $item, $until ) {
 		$unit = $item['unit'];
-		if ( 'stage' === $unit['op'] ) {
-			return null;
-		}
 		$journal = AB_MCP_Sync_Code_Swap::journal_of( $unit, $step );
 		if ( null === $journal ) {
 			/* translators: 1: step number, 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
 			return sprintf( __( 'Step %1$d swapped the %2$s %3$s, but its journal does not read back as the swap wrote it (its form, its unit or its target), so whether the unit is at its target as the swap wrote it is not checked. Check the unit by hand in wp-admin, and make a new report (wp_site_diff) before the next takeover.', 'alphabridge-mcp' ), (int) $step['seq'], $unit['kind'], $unit['ref'] );
 		}
 		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $journal['target'] ), $unit['ref'], 'live', null === $until ? AB_MCP_Sync_Code_Swap::until() : $until, null === $until, $unit['kind'] );
-		if ( is_array( $read ) && true === $read['complete'] && is_string( $read['hash'] ) && hash_equals( $journal['new']['hash'], $read['hash'] ) ) {
+		if ( true === $read['complete'] && is_string( $read['hash'] ) && hash_equals( $journal['new']['hash'], $read['hash'] ) ) {
 			return null;
 		}
-		if ( is_array( $read ) && true === $read['stopped'] ) {
+		if ( true === $read['stopped'] ) {
 			return false;
 		}
 		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the folder or file of the unit (absolute path), 4: step number. */
-		return sprintf( __( 'The %1$s %2$s at %3$s is not the version step %4$d swapped in (missing, changed since the swap, or not readable whole within the time of one call). Check it in wp-admin, and make a new report (wp_site_diff) before the next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'], (int) $step['seq'] );
+		return sprintf( __( 'The %1$s %2$s at %3$s could not be confirmed as the version step %4$d swapped in: it is missing, changed since the swap, or not readable whole within the time of one call. Check it in wp-admin, and make a new report (wp_site_diff) before the next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'], (int) $step['seq'] );
 	}
 
 	/* ------------------------------------------------------------ stage */

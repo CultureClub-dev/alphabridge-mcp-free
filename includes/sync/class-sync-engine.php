@@ -2831,7 +2831,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		if ( is_array( $run['plan'] ) && array_key_exists( 'code', $run['plan'] ) ) {
 			/* translators: %d: number of units swapped. */
-			return sprintf( _n( 'Checked: %d unit swapped by this run hashes to the version its swap wrote (read whole now); the PHP probe passed and the log has no new line. The run is closed as done.', 'Checked: %d units swapped by this run hash to the versions their swaps wrote (read whole now); the PHP probe passed and the log has no new line. The run is closed as done.', $written, 'alphabridge-mcp' ), $written );
+			return sprintf( _n( 'Checked: %d unit swapped by this run hashes to the version its swap wrote (read whole now), and the PHP probe passed. The run is closed as done.', 'Checked: %d units swapped by this run hash to the versions their swaps wrote (read whole now), and the PHP probe passed. The run is closed as done.', $written, 'alphabridge-mcp' ), $written );
 		}
 		/* translators: %d: number of written objects. */
 		return sprintf( _n( 'Checked: %d written object hashes to its target; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', 'Checked: %d written objects hash to their targets; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', $written, 'alphabridge-mcp' ), $written );

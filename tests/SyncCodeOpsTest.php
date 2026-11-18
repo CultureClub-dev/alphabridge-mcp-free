@@ -38,6 +38,7 @@ use WP_Error;
 
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-code-ops.php';
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-code-plan.php';
+require_once dirname( __DIR__ ) . '/includes/sync/class-sync-engine.php';
 
 final class SyncCodeOpsTest extends TestCase {
 
@@ -158,6 +159,183 @@ final class SyncCodeOpsTest extends TestCase {
 		foreach ( $cases as $what => list( $run, $one, $want ) ) {
 			self::assertSame( $want, AB_MCP_Sync_Code_Ops::counts( $run, $one ), $what );
 		}
+	}
+
+	/**
+	 * Prüft: G3 of GitHub Codex on #155 (Astra F7, 2 to 4): the check of a run
+	 * confirms a swap done only where its unit at the target reads whole now
+	 * as the new version of its journal (journal_of(), as the way back reads
+	 * it), never against the old one. Unchanged, or the same bytes at a new
+	 * inode: no finding. A file changed at the same inode, the unit removed or
+	 * a file not readable: a finding that says it could not be confirmed,
+	 * never that it differs. A journal missing, not of its form, not read
+	 * whole or of another kind, unit or target: its own finding, the target
+	 * not judged. Sonst: a run closed as done whose units were changed or
+	 * removed after their swap («hash to the versions their swaps wrote»).
+	 */
+	public function testTheCheckOfARunConfirmsASwapDoneOnlyWhereItsUnitReadsWholeAsTheVersionItWrote(): void {
+		list( $step, $item, $target ) = self::swapped();
+		$found   = static fn( array $over = array() ) => AB_MCP_Sync_Code_Ops::finding( $over + $step, $item, null );
+		$journal = static fn( array $over ): array => array( 'parts' => $over + $step['parts'] );
+		$not     = 'The plugin ' . $item['unit']['ref'] . ' at ' . $target . ' could not be confirmed as the version step 3 swapped in: it is missing, changed since the swap, or not readable whole within the time of one call.';
+		$unknown = 'Step 3 swapped the plugin ' . $item['unit']['ref'] . ', but its journal does not read back as the swap wrote it';
+		try {
+			self::assertNull( $found(), 'Unchanged: confirmed.' );
+			self::assertStringStartsWith( $not, (string) $found( $journal( array( 'new' => $step['parts']['old'] ) ) ), 'Held against the new version of the journal, never the old one.' );
+			$ino = fileinode( $target );
+			rename( $target, $target . '.alt' );
+			self::unit_at( $target );
+			clearstatcache();
+			self::assertNotSame( $ino, fileinode( $target ), 'A new inode.' );
+			self::assertNull( $found(), 'The same bytes at a new inode: confirmed.' );
+			$ino = fileinode( $target );
+			$wrong = array(
+				'none'            => array( 'parts' => null ),
+				'not of its form' => $journal( array( 'since' => '1500' ) ),
+				'not read whole'  => array( 'unread' => array( 'parts' ) ),
+				'another kind'    => $journal( array( 'unit' => array( 'kind' => 'theme' ) + $step['parts']['unit'] ) ),
+				'another unit'    => $journal( array( 'unit' => array( 'ref' => 'shop' ) + $step['parts']['unit'] ) ),
+				'another target'  => $journal( array( 'target' => '/elsewhere/' . $item['unit']['ref'] ) ),
+			);
+			foreach ( $wrong as $what => $over ) {
+				self::assertStringStartsWith( $unknown, (string) $found( $over ), $what );
+			}
+			file_put_contents( $target . '/inc/a.php', "<?php // changed\n" );
+			clearstatcache();
+			self::assertSame( $ino, fileinode( $target ), 'The same inode.' );
+			self::assertStringStartsWith( $not, (string) $found(), 'A file changed at the same inode.' );
+			self::unit_at( $target );
+			self::assertNull( $found(), 'Back as it was.' );
+			chmod( $target . '/inc/a.php', 0 );
+			self::assertStringStartsWith( $not, (string) $found(), 'A file not readable: not confirmed.' );
+			chmod( $target . '/inc/a.php', 0644 );
+			rename( $target, $target . '.weg' );
+			self::assertStringStartsWith( $not, (string) $found(), 'The unit removed.' );
+		} finally {
+			foreach ( array( $target, $target . '.alt', $target . '.weg' ) as $path ) {
+				self::remove( $path );
+			}
+		}
+	}
+
+	/**
+	 * Prüft: Auflage c of the lead (23:26) on G3 (Astra F7, 3, 6 and 7): a
+	 * reading that is not the first work of its call has the rest of the call
+	 * and stops where it ends: false, no finding, and the check of the run
+	 * (written()) leaves the step for the next call (null). As the first work
+	 * of a call the unit has the time of a whole call from the moment it is
+	 * read (AB_MCP_Sync_Code_Swap::until(), as the swap had), however late in
+	 * the call, and is a finding only where it is not read whole in it.
+	 * Sonst: a unit its swap read whole a finding for the rest of a call, or a
+	 * unit too large for a whole call put off from call to call.
+	 */
+	public function testAUnitNotReadWithinTheRestOfACallIsLeftToTheNextAndAFindingOnlyAsItsFirstWork(): void {
+		list( $step, $item, $target ) = self::swapped();
+		$ref     = $item['unit']['ref'];
+		$run     = array( 'plan' => array( 'code' => self::code( array( 'units' => array( self::unit( array( 'ref' => $ref ) ), $item['unit'] ) ) ) ) );
+		$written = new \ReflectionMethod( \AB_MCP_Sync_Engine::class, 'written' );
+		$t       = 0.0;
+		$tick    = 10.0;
+		// The swap asks its clock at 1000 s, a call has 15 s (a limit of 30 s,
+		// not raised); the clock of the reading goes on by $tick at each look.
+		AB_MCP_Sync_Code_Swap::$clock   = static fn(): float => 1000.0;
+		\AB_MCP_Sync_Resources::$time   = static fn(): array => array( 'before' => 30, 'after' => 30 );
+		\AB_MCP_Sync_Env::$clock        = static function () use ( &$t, &$tick ): float {
+			return $t += $tick;
+		};
+		$at = static function ( float $from, float $by ) use ( &$t, &$tick ): void {
+			$t    = $from;
+			$tick = $by;
+		};
+		try {
+			$at( 990.0, 10.0 );
+			self::assertFalse( AB_MCP_Sync_Code_Ops::finding( $step, $item, 1015.0 ), 'The rest of the call (until 1015) ends within the reading: no finding.' );
+			$at( 990.0, 10.0 );
+			self::assertNull( $written->invoke( null, $run, $step, array(), array(), 1015.0 ), 'The check of the run leaves the step to the next call.' );
+			$at( 990.0, 0.001 );
+			self::assertNull( AB_MCP_Sync_Code_Ops::finding( $step, $item, 1015.0 ), 'The rest of the call is enough: confirmed.' );
+			$at( 990.0, 10.0 );
+			$first = $written->invoke( null, $run, $step, array(), array(), null );
+			self::assertSame( array( 0, 3 ), array( $first[0], $first[1]['seq'] ), 'As the first work of a call (until 1015) not read whole: a finding.' );
+			self::assertStringContainsString( 'or not readable whole within the time of one call', $first[1]['message'] );
+			// Late in a call: its rest (1015) is over, as first work the unit
+			// has a whole call from now (5000 + 15).
+			AB_MCP_Sync_Code_Swap::$clock = static fn(): float => 5000.0;
+			$at( 4990.0, 0.001 );
+			self::assertFalse( AB_MCP_Sync_Code_Ops::finding( $step, $item, 1015.0 ), 'The rest of the call is over.' );
+			$at( 4990.0, 0.001 );
+			self::assertNull( AB_MCP_Sync_Code_Ops::finding( $step, $item, null ), 'As the first work, a whole call from now: confirmed.' );
+		} finally {
+			AB_MCP_Sync_Code_Swap::$clock = null;
+			\AB_MCP_Sync_Resources::$time = null;
+			\AB_MCP_Sync_Env::$clock      = null;
+			self::remove( $target );
+		}
+	}
+
+	/**
+	 * A plugin swapped in for the check of its run (G3 of GitHub Codex on
+	 * #155): its folder at the place of the plugins, its swap step done with
+	 * the journal of the form of the row step.swap, its new version hashed
+	 * as it is there, its old one another hash.
+	 *
+	 * @return array{0:array,1:array,2:string} The step, item() of it, the target.
+	 */
+	private static function swapped(): array {
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
+		}
+		$ref    = 'ab-g3-' . bin2hex( random_bytes( 4 ) );
+		$target = (string) AB_MCP_Sync_Code_Stage::target( 'plugin', $ref );
+		self::unit_at( $target );
+		$tree = static fn( string $area, string $hash ): array => array(
+			'path' => '/store/' . $area . '/' . str_repeat( 'd', 32 ) . '/' . $ref,
+			'gid'  => str_repeat( 'd', 32 ),
+			'name' => $ref,
+			'hash' => $hash,
+			'form' => 'folder',
+			'dev'  => 1,
+			'ino'  => 2,
+		);
+		$new  = \AB_MCP_Sync_File_Manifest::unit( WP_PLUGIN_DIR, $ref, 'live', INF, true, 'plugin' );
+		$step = array(
+			'seq'   => 3,
+			'state' => 'done',
+			'parts' => array(
+				'unit'   => array(
+					'kind' => 'plugin',
+					'ref'  => $ref,
+					'op'   => 'swap',
+				),
+				'since'  => 1500,
+				'target' => $target,
+				'old'    => $tree( 'backups', str_repeat( 'c', 64 ) ),
+				'new'    => $tree( 'stage', (string) $new['hash'] ),
+				'active' => array(),
+			),
+		);
+		return array( $step, array( 'unit' => self::unit( array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2, 'ref' => $ref ) ) ), $target );
+	}
+
+	/** The two files of the plugin of swapped() at $target, made anew. */
+	private static function unit_at( string $target ): void {
+		if ( ! is_dir( $target . '/inc' ) ) {
+			mkdir( $target . '/inc', 0777, true );
+		}
+		file_put_contents( $target . '/' . basename( $target ) . '.php', "<?php\n/* Plugin Name: G3 */\n" );
+		file_put_contents( $target . '/inc/a.php', "<?php // a\n" );
+	}
+
+	/** A folder of a test removed with what is in it. */
+	private static function remove( string $path ): void {
+		if ( ! is_dir( $path ) ) {
+			return;
+		}
+		$it = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $path, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
+		foreach ( $it as $file ) {
+			$file->isDir() ? rmdir( $file->getPathname() ) : unlink( $file->getPathname() );
+		}
+		rmdir( $path );
 	}
 
 	/** A valid journal of a stage step. */
