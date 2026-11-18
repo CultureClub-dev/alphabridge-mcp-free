@@ -93,19 +93,11 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-run.php';
-require_once __DIR__ . '/class-sync-code-ops.php';
 require_once __DIR__ . '/class-sync-backup.php';
 require_once __DIR__ . '/class-sync-said.php';
 require_once __DIR__ . '/class-sync-guard.php';
 require_once __DIR__ . '/class-sync-resources.php';
-require_once __DIR__ . '/class-sync-post-writer.php';
-require_once __DIR__ . '/class-sync-term-writer.php';
-require_once __DIR__ . '/class-sync-attachment-writer.php';
-require_once __DIR__ . '/class-sync-menu-writer.php';
-require_once __DIR__ . '/class-sync-widget-area-writer.php';
-require_once __DIR__ . '/class-sync-css-writer.php';
 require_once __DIR__ . '/class-sync-write.php';
-require_once __DIR__ . '/class-sync-option-writer.php';
 require_once __DIR__ . '/class-sync-writers.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-anchor.php';
@@ -4057,9 +4049,21 @@ final class AB_MCP_Sync_Engine {
 	}
 }
 
-// The writers of this plugin: each kind of WRITERS whole, with its class, as
-// the file loads (as AB_MCP_Sync_Code_Ops admits its entrance); a refusal is
-// not answered here, SyncWritersTest holds all.
+// The write side of this plugin, loaded here with its registration (D5 of
+// the seam): the files of the writers, then each kind of WRITERS whole, with
+// its class, as the file loads; a refusal is not answered here,
+// SyncWritersTest holds all. Then the files of the code, whose last lines
+// admit the entrances of its forward way and of its planning (as
+// AB_MCP_Sync_Code_Ops admits the one of its way back); none asks writer().
+require_once __DIR__ . '/class-sync-post-writer.php';
+require_once __DIR__ . '/class-sync-term-writer.php';
+require_once __DIR__ . '/class-sync-attachment-writer.php';
+require_once __DIR__ . '/class-sync-menu-writer.php';
+require_once __DIR__ . '/class-sync-widget-area-writer.php';
+require_once __DIR__ . '/class-sync-css-writer.php';
+require_once __DIR__ . '/class-sync-option-writer.php';
 foreach ( AB_MCP_Sync_Engine::WRITERS as $ab_mcp_kind => $ab_mcp_writer ) {
 	AB_MCP_Sync_Writers::register( $ab_mcp_kind, AB_MCP_Sync_Writers::WHOLE, $ab_mcp_writer );
 }
+require_once __DIR__ . '/class-sync-code-ops.php';
+require_once __DIR__ . '/class-sync-code-plan.php';

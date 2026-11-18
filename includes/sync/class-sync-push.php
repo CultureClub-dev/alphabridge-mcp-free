@@ -70,7 +70,6 @@ require_once __DIR__ . '/class-sync-engine.php';
 require_once __DIR__ . '/class-sync-report.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-media.php';
-require_once __DIR__ . '/class-sync-code-plan.php';
 
 /**
  * Class AB_MCP_Sync_Push
