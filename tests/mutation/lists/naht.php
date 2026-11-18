@@ -127,7 +127,7 @@ return array(
 		'clause'  => 'verdict(): an entry of a kind without a writer is locked with the sentence of the core',
 		'file'    => $pu,
 		'search'  => "\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
-		'replace' => "\t\tif ( false ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
+		'replace' => "\t\t\$w = \$w ?? ( AB_MCP_Sync_Engine::WRITERS[ (string) \$entry['kind'] ] ?? null );\n\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
 		'run'     => $rule,
 		'expect'  => '/testAKindWithoutAWriterIsLockedWithTheSentenceOfTheCore/',
 	),
