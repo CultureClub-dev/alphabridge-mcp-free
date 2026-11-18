@@ -149,6 +149,18 @@ final class AB_MCP_Sync_Engine {
 	public static $probe = null;
 
 	/**
+	 * The one entrance of the forward way of the code (Z8b branch 5; D5 of
+	 * the seam): the name of the class AB_MCP_Sync_Code_Ops puts here as its
+	 * file loads (admit_code()), in the file of the entrance of the swap.
+	 * The core never calls the code by a name of its class; where nothing is
+	 * here, a step of a run of the code is refused and its check names it
+	 * (code_item()).
+	 *
+	 * @var string|null
+	 */
+	private static $code = null;
+
+	/**
 	 * The write side of each kind a run writes (contract A; branch 9): the
 	 * class whose static methods prepare, check, write, read back and put
 	 * back one object of the kind, with the same names for every kind
@@ -1033,6 +1045,37 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * Put the entrance of the forward way of the code, or take it away
+	 * (null): AB_MCP_Sync_Code_Ops as its file loads, nothing else.
+	 *
+	 * @param string|null $code The name of the class.
+	 */
+	public static function admit_code( $code ) {
+		self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;
+	}
+
+	/**
+	 * Whether a step is one of the code, and what the entrance of the
+	 * forward way answers for it (D5 of the seam), in one line as
+	 * AB_MCP_Sync_Code_Ops::item() decides it: with the entrance its
+	 * answer; without it null where the plan of the run holds no key code
+	 * (a run of the contents: the core goes on as before), else the refusal
+	 * with the text the core has for a kind no step writes: nothing staged
+	 * or swapped, and the check of the run names it.
+	 *
+	 * @param array $plan The plan of the run.
+	 * @param int   $seq  The step.
+	 * @return array|null|WP_Error
+	 */
+	private static function code_item( array $plan, $seq ) {
+		if ( null !== self::$code ) {
+			return call_user_func( array( self::$code, 'item' ), $plan, $seq );
+		}
+		/* translators: %s: kind of the object, as the tools name it (post, term, …). */
+		return array_key_exists( 'code', $plan ) ? new WP_Error( 'ab_mcp_sync_run_code', sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), 'code' ) ) : null;
+	}
+
+	/**
 	 * Phase 5: one write boundary (decision 17), under the lock of the call
 	 * (next()); the takeover lock of the object given back in every way.
 	 *
@@ -1043,12 +1086,12 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function run_write( array $run, array $step, array $ctx ) {
 		$plan = is_array( $run['plan'] ) ? $run['plan'] : array();
-		// A step of a run of the code (Z8b branch 5): its one entrance
-		// (AB_MCP_Sync_Code_Ops::run(), Z24), by the unit the plan names for
-		// it; a plan of the code that names none refuses (never an object).
-		$unit = AB_MCP_Sync_Code_Ops::item( $plan, $step['seq'] );
+		// A step of a run of the code (Z8b branch 5): its one entrance (run()
+		// of the class in $code, Z24; D5 of the seam), by the unit the plan
+		// names for it; without either it refuses (never an object).
+		$unit = self::code_item( $plan, $step['seq'] );
 		if ( null !== $unit ) {
-			return is_wp_error( $unit ) ? $unit : AB_MCP_Sync_Code_Ops::run( $run, $step, $unit );
+			return is_wp_error( $unit ) ? $unit : call_user_func( array( self::$code, 'run' ), $run, $step, $unit );
 		}
 		$item = null;
 		foreach ( isset( $plan['objects'] ) && is_array( $plan['objects'] ) ? $plan['objects'] : array() as $one ) {
@@ -2936,9 +2979,9 @@ final class AB_MCP_Sync_Engine {
 			/* translators: %d: step number. */
 			return array( 0, array( 'seq' => $one['seq'], 'message' => sprintf( __( 'The plan of this run does not read back, so step %d is judged neither as a step of the code nor as an object, and nothing of it counts as taken over. Check the site as it is in wp-admin; where the run is still open, abort it (wp_site_push action=abort).', 'alphabridge-mcp' ), $one['seq'] ) ) );
 		}
-		$unit = AB_MCP_Sync_Code_Ops::item( $run['plan'], $one['seq'] );
+		$unit = self::code_item( $run['plan'], $one['seq'] );
 		if ( null !== $unit ) {
-			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit );
+			$found = is_wp_error( $unit ) ? $unit->get_error_message() : call_user_func( array( self::$code, 'finding' ), $one, $unit );
 			return array( 0, null === $found ? null : array( 'seq' => $one['seq'], 'message' => $found ) );
 		}
 		$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
