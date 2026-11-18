@@ -645,6 +645,10 @@ e('a1-rueckweg', 'restored(): the old version is proved at the target again afte
 e('a1-weg-a', 'closed_checked(): the version close() proved is read again after close_mark() and discard_files(), before way (a) closes the run as checked (A1, G-5-24)', CS,
   "\t\t\t$closed = self::proved_now( $in, $journal, $which );", "\t\t\t$closed = true;", 'coderun', 'testWayAWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofClosesNoRun')
 
+# ------------------------------------------- B5 of the Codex round on aa7c8ba (Astra 18.11.2026, Q6 (b)): the short answer of an unclear step has the line of the instruction only where a mark gave one
+e('b5-ohne-anleitung', 'unclear(): the short answer names the file of the instruction only where a mark gave one; without a mark (put_mark() failed) its line is left out, so no «open the file» with an empty path (B5)', CS,
+  "\t\t\tif ( '' !== (string) $moved['guide'] ) {", "\t\t\tif ( true ) {", 'coderun', 'testASwapWithoutAMarkWhoseTimeRunsOutInTheSecondReadingOfItsProofNamesNoInstructionToOpen')
+
 # ------------------------------------------------ check and write
 src = {f: open(os.path.join(ROOT, f)).read() for f in VAR}
 errors = []

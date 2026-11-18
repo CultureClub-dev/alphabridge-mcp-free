@@ -1944,4 +1944,13 @@ return array(
 		'run'     => $it( 'SyncCodeRunTest', 'testWayAWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofClosesNoRun' ),
 		'expect'  => '/testWayAWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofClosesNoRun/',
 	),
+	array(
+		'id'      => 'tausch/b5-ohne-anleitung',
+		'clause'  => 'unclear(): the short answer names the file of the instruction only where a mark gave one; without a mark (put_mark() failed) its line is left out, so no «open the file» with an empty path (B5)',
+		'file'    => $cs,
+		'search'  => "\t\t\tif ( '' !== (string) \$moved['guide'] ) {",
+		'replace' => "\t\t\tif ( true ) {",
+		'run'     => $it( 'SyncCodeRunTest', 'testASwapWithoutAMarkWhoseTimeRunsOutInTheSecondReadingOfItsProofNamesNoInstructionToOpen' ),
+		'expect'  => '/testASwapWithoutAMarkWhoseTimeRunsOutInTheSecondReadingOfItsProofNamesNoInstructionToOpen/',
+	),
 );

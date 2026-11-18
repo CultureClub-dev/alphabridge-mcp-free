@@ -2108,6 +2108,78 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: B5 of the Codex round on aa7c8ba (Astra 18.11.2026, Q6 (b)):
+	 * put_mark() fails, so the swap has no mark and no file of an
+	 * instruction and moves nothing; then the time of the call runs out as
+	 * not_swapped() reads the proof of the old version again (the clock of
+	 * the budget, AB_MCP_Sync_Env::$clock, past the end once that reading
+	 * begins), with the old version unchanged at the target. The step is
+	 * unclear with the sentence of at_target(), and its answer is the short
+	 * one without the line of the instruction: the way back with the number
+	 * of the run, the target and the backup, and nothing else; no «open the
+	 * file» with an empty path. The way back it names goes: it proves the
+	 * old version at the target itself and is done.
+	 * Sonst: the answer would tell a person to open a file without a name
+	 * and to run the command its first lines point to.
+	 */
+	public function testASwapWithoutAMarkWhoseTimeRunsOutInTheSecondReadingOfItsProofNamesNoInstructionToOpen(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$old = self::digest( $target );
+		try {
+			$answer = self::swap_with(
+				$run_id,
+				array(
+					array(
+						'method' => 'put_mark',
+						'nth'    => 1,
+						'kind'   => 'return',
+						'value'  => new WP_Error( 'ab_it_mark', 'The mark refused.' ),
+					),
+					array(
+						'method' => 'lstat',
+						'kind'   => 'before',
+						'before' => static function (): void {
+							if ( self::within( 'proved_now' ) ) {
+								AB_MCP_Sync_Env::$clock = static fn(): float => microtime( true ) + 86400.0;
+							}
+						},
+					),
+				)
+			);
+		} finally {
+			AB_MCP_Sync_Env::$clock = null;
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		$says = $answer['next'];
+		$swap = self::step( $run_id, 3 );
+		self::assertSame( 'unclear', $swap['state'], $says );
+		self::assertSame( array( null, null ), array( $swap['result']['mark'], $swap['result']['guide'] ), 'No mark and no file of an instruction.' );
+		self::assertSame( $target, $swap['result']['target'] );
+		self::assertNotSame( '', (string) $swap['result']['backup'], 'The place of the backup is named.' );
+		self::assertSame(
+			'The version at ' . $target . " could not be proved as the old version of the swap (its device, inode or hash differ, or it could not be read whole within the time of this call). The step is unclear.\n"
+			. '1. To go back, call wp_site_revert action=plan with run_id ' . $run_id . ".\n"
+			. 'Target: ' . $target . "\n"
+			. 'Backup: ' . $swap['result']['backup'],
+			$says,
+			'The short answer without the line of the instruction: what happened, the way back with the number of the run, target and backup.'
+		);
+		self::assertStringNotContainsString( 'open the file', $says, 'No instruction to open where no mark gave one.' );
+		self::assertStringNotContainsString( '2. ', $says, 'No second way.' );
+		self::assertSame( $swap['result']['message'], $says, 'The journal holds the answer.' );
+		self::assertSame( 0, self::renames(), 'No rename.' );
+		clearstatcache();
+		self::assertSame( $old, self::digest( $target ), 'The old version at the target as it was.' );
+		AB_MCP_Test_Seam::restore_all();
+		$ways = self::ways_on( $run_id );
+		self::assertSame( 'ab_mcp_sync_run_not_interrupted', $ways['a'], json_encode( $ways ) );
+		self::assertSame( 'done', $ways['step']['state'] ?? null, json_encode( $ways ) );
+		self::assertStringStartsWith( 'The plugin ab-it-aktiv is in its old version at ' . $target . ', proved there', $ways['step']['result']['message'] );
+		clearstatcache();
+		self::assertSame( $old, self::digest( $target ), 'The old version at the target as it was.' );
+	}
+
+	/**
 	 * What A1 has another change do while a call of the swap holds the lock
 	 * past TIMEOUT (sequence of Astra, P1 (iii)): it takes the lock over
 	 * (its row another's, a time to come) and replaces the unit at the

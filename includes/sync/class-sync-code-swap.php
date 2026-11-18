@@ -1154,7 +1154,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @param mixed $swap What the swap is asked with, in the form of its row swap.prepare.
 	 * @return array|WP_Error next, the answer of the step as it ended (done; failed where
 	 *                        nothing was moved; unclear with the way back of the run and the
-	 *                        instruction of its mark, unclear()); a refusal
+	 *                        instruction of its mark where one was given, unclear()); a refusal
 	 *                        where nothing of the site changed and the step stays planned.
 	 */
 	public static function run( $swap ) {
@@ -1617,8 +1617,8 @@ final class AB_MCP_Sync_Code_Swap {
 			return self::unclear( $in, $plan, $moved, $closed->get_error_message(), $whole );
 		}
 		// The proof read again after close_mark() and discard_files(), before
-		// the end that names the new version at the target; after it only
-		// the database (A1, G-5-24).
+		// the end that names the new version at the target; what follows it
+		// reads the target no more (the window G-5-24 names; A1).
 		$again = self::proved_now( $in, $plan, 'new' );
 		if ( is_wp_error( $again ) ) {
 			return self::unclear( $in, $plan, $moved, $again->get_error_message(), $whole );
@@ -1928,7 +1928,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * a replacement. Where the old version did not go back, is not proved
 	 * at the target, or its mark did not close, the step is unclear: the
 	 * answer says what this call did and names the way back of the run and
-	 * the instruction of the mark, nothing of what lies where (unclear()).
+	 * the instruction of a mark given, nothing of what lies where (unclear()).
 	 *
 	 * @param array $in    The arguments.
 	 * @param array $plan  plan_of().
@@ -2001,12 +2001,12 @@ final class AB_MCP_Sync_Code_Swap {
 	 *   back of the run with its call, the instruction of the mark on the
 	 *   server for where the site answers no more (its first lines tell
 	 *   which of its commands fits, or that none does and what to do
-	 *   then), and the paths of the target, the
-	 *   backup and that instruction. No sentence on what lies at the target
-	 *   or in the backup or on the state of the mark, no command, and
-	 *   nothing is read for the answer: who puts back reads it, the way
-	 *   back of the run and the commands of the instruction, each before it
-	 *   moves anything.
+	 *   then), and the paths of the target, the backup and that instruction;
+	 *   where no mark gave one (put_mark() failed), its line is left out. No
+	 *   sentence on what lies at the target or in the backup or on the state
+	 *   of the mark, no command, and nothing is read for the answer: who puts
+	 *   back reads it, the way back of the run and the commands of the
+	 *   instruction, each before it moves anything.
 	 *
 	 * @param array  $in    The arguments.
 	 * @param array  $plan  plan_of().
@@ -2018,21 +2018,21 @@ final class AB_MCP_Sync_Code_Swap {
 	private static function unclear( array $in, array $plan, array $moved, $why, $whole = false ) {
 		if ( true !== $whole ) {
 			$by_hand = array();
-			$message = implode(
-				"\n",
-				array(
-					/* translators: %s: what happened (one or more whole sentences). */
-					sprintf( __( '%s The step is unclear.', 'alphabridge-mcp' ), $why ),
-					/* translators: %d: run number. */
-					sprintf( __( '1. To go back, call wp_site_revert action=plan with run_id %d.', 'alphabridge-mcp' ), $in['run_id'] ),
-					/* translators: %s: the instruction of the swap on the server (absolute path of a file). */
-					sprintf( __( '2. Where this site answers no request any more, or where 1. is refused on this site (wp_site_revert says why): in a shell on the server, open the file %s and run the command its first lines point to. The command contains checks; where it does not print OK, stop.', 'alphabridge-mcp' ), $moved['guide'] ),
-					/* translators: %s: the folder or file of the unit (absolute path). */
-					sprintf( __( 'Target: %s', 'alphabridge-mcp' ), $plan['target'] ),
-					/* translators: %s: the place of the backup of the old version (absolute path). */
-					sprintf( __( 'Backup: %s', 'alphabridge-mcp' ), $plan['old']['path'] ),
-				)
+			$lines   = array(
+				/* translators: %s: what happened (one or more whole sentences). */
+				sprintf( __( '%s The step is unclear.', 'alphabridge-mcp' ), $why ),
+				/* translators: %d: run number. */
+				sprintf( __( '1. To go back, call wp_site_revert action=plan with run_id %d.', 'alphabridge-mcp' ), $in['run_id'] ),
 			);
+			if ( '' !== (string) $moved['guide'] ) {
+				/* translators: %s: the instruction of the swap on the server (absolute path of a file). */
+				$lines[] = sprintf( __( '2. Where this site answers no request any more, or where 1. is refused on this site (wp_site_revert says why): in a shell on the server, open the file %s and run the command its first lines point to. The command contains checks; where it does not print OK, stop.', 'alphabridge-mcp' ), $moved['guide'] );
+			}
+			/* translators: %s: the folder or file of the unit (absolute path). */
+			$lines[] = sprintf( __( 'Target: %s', 'alphabridge-mcp' ), $plan['target'] );
+			/* translators: %s: the place of the backup of the old version (absolute path). */
+			$lines[] = sprintf( __( 'Backup: %s', 'alphabridge-mcp' ), $plan['old']['path'] );
+			$message = implode( "\n", $lines );
 		} else {
 			$by_hand = self::by_hand( $in, $plan );
 			/* translators: 1: what happened (one or more whole sentences), 2: run number. */

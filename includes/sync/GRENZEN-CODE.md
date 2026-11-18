@@ -1062,13 +1062,18 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   die Bereiche mit der Sperre `:638`–`:648`, `:1183`–`:1187`, `:2219`–`:2227`, `:2449`–`:2463`; der Beweis `close()`
   (`:1787`–`:1810`) mit `at_target()` (`:1825`) und `in_backup()` (`:1855`), seine zweite Lesung `proved_now()`
   (`:1883`) an `:1622`, `:1970`, `:2303` und `:2468`. `AB_MCP_Sync_Run::under_lock()`
-  (`includes/sync/class-sync-run.php:829`–`:852`). Zeilen am Stand der Behebung A1 (Teil H).
+  (`includes/sync/class-sync-run.php:829`–`:852`). Zeilen am Stand der Behebung A1 (Teil H); die Behebung B1 bis B6
+  vom 18.11. verschiebt in diesen Dateien keine Zeile.
 - **Quelle:** Fable-Prüfstelle «Lösch-, Überschreib- und Freigabestellen» vor dem Merge von Teil H, B1
   (`belege/fable-pruefstelle-ergebnis.md`); Entscheid der Steuerung vom 17.11. nach 21:02: jetzt als Grenze, mit dem
   Code als Posten vor dem ersten Release, das den Tausch enthält (unten). Codex-Runde auf `004988a` (Astra,
   `belege/codex-free-z5r-h-b1-ausgabe.txt`): A1 (P1, Fall (iii): ein `done` auf einem Beweis, den das Ziel nicht mehr
   hält) und B1 bis B6, hier eingearbeitet; Behebungszettel A1, Fassung 3 (`belege/z5r-a1-behebung-zettel.md`), mit
-  den Entscheiden der Steuerung nach 21:29 (Weg (ii) an allen Stellen) und nach 21:32 (die Frist).
+  den Entscheiden der Steuerung nach 21:29 (Weg (ii) an allen Stellen) und nach 21:32 (die Frist). Codex-Runde auf
+  `aa7c8ba` (Astra, `belege/codex-free-z5r-h-a1-antwort.txt`) und Behebungsauftrag der Lead vom 18.11.
+  (`belege/lead-auftrag-b1-b6-fable.md`): B1 bis B3 und B6 hier eingearbeitet, B5 in `unclear()`; das Restfenster
+  (A1 dieser Runde) bleibt nach dem Entscheid von Thomas vom 18.11.2026 («Option 1») als benannte Grenze stehen
+  (unten).
 - **Was:**
   - **Ab wann die 600 s laufen.**
     - Die Sperrzeile trägt die Zeit, zu der sie geschrieben wurde: beim ersten `take()` des Aufrufs über `create()`,
@@ -1137,7 +1142,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
          Lauf bleibt unterbrochen.
 
       Die Ablehnung von `proved_now()` hat den Code `code:proof_again`, nie `code:close_target`, auf den Weg (a) zu
-      `kept` ausweicht (`:2457`). `unclear()` (`:2018`) sagt keine Fassung am Ziel und braucht keine zweite Lesung.
+      `kept` ausweicht (`:2457`). Die eigenen Rahmensätze von `unclear()` (`:2018`) sagen keine Fassung am Ziel und
+      brauchen keine zweite Lesung. Den Satz seines Aufrufers gibt `unclear()` unverändert weiter; `after_renames()`
+      übergibt nach einem Fehler von `rebased()` «The new version is at the target and the mark of the swap is closed,
+      …» (`:1629`). Dieser Satz steht nach der zweiten Lesung (`:1622`) und fällt in das Restfenster unten.
       Weg (a) und Weg (b) kennen `unclear`: Der Rückweg nimmt einen Tausch-Schritt `begun`, `unclear` oder `done`
       (`class-sync-code-ops.php:168`); Weg (a) setzt `begun` auf `unclear` (Run `:1203`) und listet `unclear` (Run
       `:1440`). Tests: `SyncCodeRunTest::testASwapWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofIsNotDone`,
@@ -1146,20 +1154,51 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
       `::testWayAWhoseTargetIsReplacedUnderATakenOverLockAfterItsProofClosesNoRun`, je mit Weg (a) und Weg (b) danach;
       Gegenproben `tausch/a1-vorwaerts`, `tausch/a1-nicht-getauscht`, `tausch/a1-rueckweg`, `tausch/a1-weg-a`.
     - **Die Frist der zweiten Lesung.** Die Frist des Aufrufs ist `until()` (`:1135`) = jetzt + `budget`, mit
-      `budget = min( WORK_MAX, limit / 2 )` und `WORK_MAX` = 50 s (`includes/sync/class-sync-resources.php:62`,
-      `budget()` `:173`; ohne Limit `WORK_MAX`). Das Limit hebt der Aufruf, wo der Host es erlaubt, auf `WANTED_TIME` =
-      120 s (`:59`), sonst gilt das Limit des Hosts. `at_target()` liest höchstens bis `min( until, jetzt +
-      UNIT_BUDGET )` mit `UNIT_BUDGET` = 45 s (`includes/sync/class-sync-env.php:256`). Gemessen ist eine Lesung bei
+      `budget = max( 1, min( WORK_MAX, intdiv( limit, 2 ) ) )` in ganzen Sekunden, ohne Limit `WORK_MAX`, und
+      `WORK_MAX` = 50 s (`includes/sync/class-sync-resources.php:62`, `budget()` `:173`–`:179`). Das Limit hebt der
+      Aufruf, wo der Host es erlaubt, auf `WANTED_TIME` = 120 s (`:59`), sonst gilt das Limit des Hosts.
+      `at_target()` liest höchstens bis `min( until, jetzt + UNIT_BUDGET )` mit `UNIT_BUDGET` = 45 s
+      (`includes/sync/class-sync-env.php:256`). Gemessen ist eine Lesung bei
       WooCommerce 11.3.0 mit 5452 Dateien: 0,156–0,166 s (G-3-8, `:141`–`:143` dieser Datei); die zweite Lesung kostet
-      je festgeschriebenem Beweis eine solche Lesung mehr. Reicht die Frist nicht für die zweite Lesung, endet der
-      Schritt `unclear`, mit dem Satz von `at_target()`. Test:
-      `SyncCodeRunTest::testASwapWhoseTimeRunsOutInTheSecondReadingOfItsProofIsUnclearWithItsSentence`.
+      je festgeschriebenem Beweis eine solche Lesung mehr. Reicht die Frist nicht für die zweite Lesung, hängt das
+      Ende davon ab, in welchem Teil des Beweises sie abläuft und auf welchem Weg (`proved_now()`, `:1884`–`:1888`):
+      1. Sie läuft in `at_target()` ab (vorwärts, in `not_swapped()` oder auf dem Rückweg): Der Schritt endet
+         `unclear`, mit dem Satz von `at_target()`. Tests: vorwärts
+         `SyncCodeRunTest::testASwapWhoseTimeRunsOutInTheSecondReadingOfItsProofIsUnclearWithItsSentence`; in
+         `not_swapped()` ohne Marke
+         `::testASwapWithoutAMarkWhoseTimeRunsOutInTheSecondReadingOfItsProofNamesNoInstructionToOpen` (die kurze
+         Antwort hat dort keine Zeile der Anleitung, `:2027`; Gegenprobe `tausch/b5-ohne-anleitung`). Auf dem Rückweg
+         mit Fristmangel nicht getestet.
+      2. Vorwärts, bei der neuen Fassung, gelingt `at_target()`, und erst `in_backup()` scheitert (`:1886`): Der
+         Schritt endet `unclear`, mit dem Satz von `in_backup()` (`:1862`). Nicht getestet.
+      3. In Weg (a) endet in beiden Fällen kein Schritt: Die Ablehnung ist `code:checked` mit dem Satz des Beweises
+         (`:2475`), der Schritt bleibt `begun`, der Lauf unterbrochen. Mit Fristmangel nicht getestet.
   - **Was nicht geschützt ist (Restfenster nach A1):**
-    - Nach der zweiten Lesung folgen nur Aufrufe an die Datenbank: vorwärts `rebased()` →
-      `AB_MCP_Sync_Pairs::rebase()` (`includes/sync/class-sync-pairs.php:725`–`:793`) und `ended()`; in `not_swapped()`
-      und auf dem Rückweg nur `ended()`; in Weg (a) das Schliessen des Laufs (`AB_MCP_Sync_Run::close_checked_on()`).
+    - **Benannte Grenze: das Fenster zwischen der zweiten Lesung und dem Schreiben des Zustands.** Nach der zweiten
+      Lesung folgen bis zum Schreiben des Zustands noch Aufrufe. Keiner liest das Ziel oder fragt die Sperre:
+      - vorwärts in `after_renames()` nach `:1622`, in dieser Reihenfolge:
+        1. `rebased()` (`:1626`, `:1901`) → `AB_MCP_Sync_Pairs::rebase()`
+           (`includes/sync/class-sync-pairs.php:725`–`:793`): Datenbank, liest das Paar und schreibt es bedingt.
+        2. `by_hand()` (`:1631`, `:2103`) → `AB_MCP_Protected_Store::named_by_swap()`
+           (`includes/class-protected-store.php:3001`) → `root()` (`:660`) → `candidates()` (`:4151`), das
+           `wp_upload_dir()` ruft (`:4153`). WordPress wendet darin den Filter `upload_dir` an; dort läuft Code
+           anderer Plugins.
+        3. Die Sätze der Antwort über `__()` (`:1633`, `:1641`); `__()` wendet den Filter `gettext` an, auch dort
+           kann Code anderer Plugins laufen.
+        4. `ended()` (`:1642`, `:2069`) → `journal()` (`:294`–`:296`) → `AB_MCP_Sync_Run::update_step()`:
+           Datenbank, schreibt `done`, bedingt auf den Zustand `begun` des Schritts (Run `:780`–`:789`), nicht auf
+           das Ziel.
+        Scheitert `rebased()`, schreibt dasselbe `ended()` statt `done` den Zustand `unclear`, mit dem Satz «The
+        new version is at the target …» (`:1629`);
+      - in `not_swapped()` nach `:1970` nur `ended()` (`:1974`), auf dem Rückweg nach `:2303` nur `ended()` (`:2322`);
+      - in Weg (a) nach `:2468` das Schliessen des Laufs, `AB_MCP_Sync_Run::close_checked_on()` (Run `:1182`):
+        Datenbank.
+
       Hängt einer dieser Aufrufe so lange, dass ein anderer Aufruf die Sperre übernimmt und das Ziel ersetzt, ist ein
-      Zustand mit einer Aussage über das Ziel auf einem Beweis, den das Ziel nicht mehr hält, weiter möglich.
+      Zustand mit einer Aussage über das Ziel auf einem Beweis, den das Ziel nicht mehr hält, weiter möglich
+      (Codex-Runde auf `aa7c8ba`, A1). Dieses Fenster wird jetzt nicht geschlossen. Es wird im Posten «Sperre für
+      Änderungen» (unten) geschlossen, vor dem ersten Release, das den Tausch enthält. Quelle: Entscheid Thomas
+      18.11.2026 («Option 1»).
     - Der Beweis liest die Dateien einzeln; eine Datei, die nach ihrem Lesen ersetzt wird, sieht er nicht (wie G-5-10).
     - Was der erste Aufruf nach der Übernahme schreibt, schreibt er neben dem Übernehmer, an anderen Einheiten wie an
       derselben, im Speicher und an den Schnappschüssen, ohne Ausschluss.
@@ -1170,7 +1209,9 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
       nicht behauptet; die Bestätigung nach dieser Behebung fragt es.
 - **Posten (Entscheid der Steuerung):** «Sperre für Änderungen: Freigabe und `lock_held()` nur für die eigene Zeile;
   `touch()` im Tausch; `register_shutdown_function` vor `forget_active()` (B2)». Erledigt vor dem ersten Release, das den
-  Tausch enthält. Eigener Bauzettel, nicht Zweig 5. Vermerk aus A1: Sobald die Sperre ein Eigentum kennt, darf die
+  Tausch enthält. Eigener Bauzettel, nicht Zweig 5. Zum Posten gehört nach dem Entscheid von Thomas vom 18.11.2026
+  («Option 1») auch das Restfenster nach A1 (oben, «Was nicht geschützt ist», erster Punkt): Es wird dort
+  geschlossen. Vermerk aus A1: Sobald die Sperre ein Eigentum kennt, darf die
   zweite Lesung auf «nur bei Verlust der Sperre» verengt werden; das ist dann eine Beschleunigung, kein Teil der
   Zusage. Die Vorarbeit dazu liegt in `belege/sperre-posten-vorarbeit-a1-fassung2.md`.
 - **Trifft Normalfall:** nein. Es braucht einen Aufruf, der mit allem vor dem Tausch länger als 600 s dauert; das
