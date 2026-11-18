@@ -1054,6 +1054,15 @@ return array(
 		'expect'  => '/testAUnitThisSiteHasAsTheStagingSiteHasItAtItsStepIsDoneWithSameAndNothingIsStagedOrChanged/',
 	),
 	array(
+		'id'      => 'tausch/h-g2-group',
+		'clause'  => 'plan_of(): each swap puts the old version into a group of the backups of its own, bound to the run, so a plugin and a theme of one name never meet at one place (G2 of GitHub Codex on #155)',
+		'file'    => $cs,
+		'search'  => 'AB_MCP_Protected_Store::open( \'backups\', array( \'run_id\' => $in[\'run_id\'], \'label\' => \'swap-\' . $in[\'run_id\'] . \'-\' . $in[\'unit\'][\'seq\'] ) );',
+		'replace' => 'AB_MCP_Sync_Backup::group( $in[\'run_id\'] );',
+		'run'     => $it( 'SyncCodeRunTest', 'testAPluginAndAThemeOfTheSameNameAreSwappedInOneRunEachIntoABackupOfItsOwnAndBothGoBack' ),
+		'expect'  => '/testAPluginAndAThemeOfTheSameNameAreSwappedInOneRunEachIntoABackupOfItsOwnAndBothGoBack/',
+	),
+	array(
 		'id'      => 'tausch/d1b-rights-read-back',
 		'clause'  => 'given_rights(): the rights of the site count only where they read back as set, never as set by the answer of chmod() alone (Codex D1, finding 2)',
 		'file'    => $cs,

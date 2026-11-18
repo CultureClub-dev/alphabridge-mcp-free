@@ -116,7 +116,6 @@ require_once __DIR__ . '/class-sync-code-stage.php';
 require_once __DIR__ . '/class-sync-code-ops.php';
 require_once __DIR__ . '/class-sync-code-kind.php';
 require_once __DIR__ . '/class-sync-run.php';
-require_once __DIR__ . '/class-sync-backup.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once dirname( __DIR__ ) . '/undo/class-undo.php';
 
@@ -1144,7 +1143,7 @@ final class AB_MCP_Sync_Code_Swap {
 	/**
 	 * The swap of a unit in one call (plan E5 6 to 11 as Variante b keeps
 	 * them, 15.23): prepare() under the lock for changes; then the place of
-	 * the old version in the backups of the run (plan_of()), the time once
+	 * the old version in a group of the backups of its own (plan_of()), the time once
 	 * more, rename_marked(), OPcache for each PHP file replaced, close() and
 	 * the new bases of the files of its pair; the step ends with its journal
 	 * and result. The lock prepare() took is given back in every way. A unit
@@ -1261,9 +1260,12 @@ final class AB_MCP_Sync_Code_Swap {
 
 	/**
 	 * What the swap moves, read before anything is written: the place of the
-	 * old version in the backups of the run (AB_MCP_Sync_Backup::group(),
-	 * AB_MCP_Protected_Store::put_tree() without a source: the rules of a
-	 * tree, read from the target, whose hash is the one prepare() read);
+	 * old version in a group of the backups of its own, bound to the run and
+	 * opened for this swap (as restored() for the way back; G2 of GitHub
+	 * Codex on #155: in the one group of the run a plugin and a theme of one
+	 * name met at one place), AB_MCP_Protected_Store::put_tree() without a
+	 * source: the rules of a tree, read from the target, whose hash is the
+	 * one prepare() read;
 	 * the identity of the target and of the stage (form, device, inode);
 	 * and the main files of a plugin active now, for its mark.
 	 *
@@ -1276,7 +1278,7 @@ final class AB_MCP_Sync_Code_Swap {
 		$ref    = $in['unit']['ref'];
 		$target = $prepared['target'];
 		$name   = basename( $target );
-		$gid    = AB_MCP_Sync_Backup::group( $in['run_id'] );
+		$gid    = AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $in['run_id'], 'label' => 'swap-' . $in['run_id'] . '-' . $in['unit']['seq'] ) );
 		$place  = is_wp_error( $gid ) ? $gid : AB_MCP_Protected_Store::put_tree( 'backups', $gid, $name, $target );
 		if ( is_wp_error( $place ) ) {
 			$cause = $place->get_error_data();

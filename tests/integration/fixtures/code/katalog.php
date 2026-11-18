@@ -215,6 +215,13 @@ return array(
 			),
 			'start'     => '1.0.0',
 		),
+		'ab-it-inaktiv'        => array(
+			'fassungen' => array(
+				'1.0.0' => 'Ausgangsstand, inaktiv, Name wie das Plugin ab-it-inaktiv (Teil H, G2)',
+				'1.1.0' => 'neue Fassung, mit dem Plugin gleichen Namens in einem Lauf (G2)',
+			),
+			'start'     => '1.0.0',
+		),
 	),
 	// Active on both sites after start(); its options are the values F26
 	// compares (AB_MCP_IT_Code::theme_options()).

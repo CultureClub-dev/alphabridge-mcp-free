@@ -4438,7 +4438,8 @@ final class SyncCodeRunTest extends TestCase {
 	/**
 	 * Prüft: F36 (T3 2): where the journal of the swap cannot be written
 	 * (its first write, begun) or the place of the backup is not given
-	 * (put_tree() refuses: a tree of that name is there), there is no swap
+	 * (the group of the backups of the swap cannot be made: open() refuses,
+	 * since part H, G2, each swap opens its own), there is no swap
 	 * and no rename; the step stays planned, the answer names the way on,
 	 * the lock for changes is free, and the old version is at the target as
 	 * it was; in neither case is the note of the replacement written (it
@@ -4463,9 +4464,18 @@ final class SyncCodeRunTest extends TestCase {
 				'value'  => new WP_Error( 'ab_it_db', 'The database refused the write.' ),
 			);
 		} else {
-			$place = AB_MCP_Protected_Store::put_tree( 'backups', AB_MCP_Sync_Backup::group( $run_id ), basename( $target ), $target );
-			self::assertIsArray( $place, is_wp_error( $place ) ? $place->get_error_message() : '' );
-			self::assertTrue( mkdir( $place['path'], 0700 ), 'A tree of that name at the place of the backup.' );
+			AB_MCP_Test_Seam::install(
+				AB_MCP_Protected_Store::class,
+				'naht_protected_store',
+				new \AB_MCP_Protected_Store_Calls(),
+				array(
+					array(
+						'method' => 'mkdir',
+						'kind'   => 'return',
+						'value'  => false,
+					),
+				)
+			);
 		}
 		$refused = self::swap_with( $run_id, $faults );
 		self::assertInstanceOf( WP_Error::class, $refused );
@@ -5651,6 +5661,70 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed.' );
 		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
 		self::skipped_and_closed( $run_id, $before );
+	}
+
+	/**
+	 * Prüft: G2 of GitHub Codex on #155: a plugin and a theme of one name
+	 * (ab-it-inaktiv) chosen for one run are both swapped, each with its old
+	 * version in a group of the backups of its own, bound to the run
+	 * (label swap-<run>-<seq>), its tree named as the folder of its unit and
+	 * read back whole against its hash; the way back of the run puts both
+	 * old versions back. Sonst: the second swap found the place of the first
+	 * in the one group of the run (ab_mcp_store_tree_exists), and the run
+	 * stayed half applied.
+	 */
+	public function testAPluginAndAThemeOfTheSameNameAreSwappedInOneRunEachIntoABackupOfItsOwnAndBothGoBack(): void {
+		self::paired();
+		$old = array();
+		$new = array();
+		foreach ( array( 'plugin', 'theme' ) as $kind ) {
+			$old[ $kind ] = self::bytes_of( AB_MCP_IT_Code::path( 'a', $kind, 'ab-it-inaktiv' ) );
+			$new[ $kind ] = self::bytes_of( AB_MCP_IT_Code::put( 'b', $kind, 'ab-it-inaktiv', '1.1.0' ) );
+		}
+		list( $report, $units ) = self::report();
+		self::wporg();
+		list( , $run ) = self::begun(
+			array(
+				'action'    => 'plan',
+				'report_id' => $report['report_id'],
+				'select'    => array( (int) $units['plugin:ab-it-inaktiv']['n'], (int) $units['theme:ab-it-inaktiv']['n'] ),
+			)
+		);
+		$run_id = (int) $run['run_id'];
+		$plan   = AB_MCP_Sync_Run::get( $run_id )['plan'];
+		$swaps  = array();
+		foreach ( array( 3, 5 ) as $seq ) {
+			$unit                   = AB_MCP_Sync_Code_Ops::item( $plan, $seq )['unit'];
+			$swaps[ $unit['kind'] ] = $seq;
+		}
+		ksort( $swaps );
+		self::assertSame( array( 'plugin', 'theme' ), array_keys( $swaps ), 'Steps 3 and 5 swap the plugin and the theme.' );
+		$closed = null;
+		for ( $i = 0; $i < 40 && null === $closed; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			$closed = in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ? $answer : null;
+		}
+		self::assertSame( 'closed_done', is_array( $closed ) ? $closed['state'] : null, 'Both swapped, the run closed as done: ' . json_encode( self::step( $run_id, 7 )['result'] ) );
+		$groups = AB_MCP_Protected_Store::groups( 'backups' );
+		self::assertIsArray( $groups );
+		foreach ( $swaps as $kind => $seq ) {
+			$step    = self::step( $run_id, $seq );
+			$journal = $step['parts'];
+			$target  = AB_MCP_IT_Code::path( 'a', $kind, 'ab-it-inaktiv' );
+			self::assertSame( array( 'done', $target, 'ab-it-inaktiv' ), array( $step['state'], $journal['target'], $journal['old']['name'] ), "The $kind swapped, its tree named as its folder." );
+			$own = array_values( array_filter( $groups, static fn( $g ) => $journal['old']['gid'] === $g['gid'] ) );
+			self::assertSame( array( array( $run_id, 'swap-' . $run_id . '-' . $seq ) ), array_map( static fn( $g ) => array( (int) $g['run_id'], $g['label'] ), $own ), "The old $kind in a group of the backups of its own, bound to the run." );
+			$tree = AB_MCP_Protected_Store::tree( 'backups', $journal['old']['gid'], 'ab-it-inaktiv', $journal['old']['hash'] );
+			self::assertSame( $journal['old']['path'], is_array( $tree ) ? $tree['path'] : $tree->get_error_message(), "The old $kind whole in its backup." );
+			self::assertSame( array( $old[ $kind ], $new[ $kind ] ), array( self::bytes_of( $journal['old']['path'] ), self::bytes_of( $target ) ), "The old $kind in the backup, the new one at its target." );
+		}
+		self::assertNotSame( self::step( $run_id, 3 )['parts']['old']['gid'], self::step( $run_id, 5 )['parts']['old']['gid'], 'Two groups.' );
+		$way = self::way_back_of( $run_id );
+		self::assertSame( 'closed_reverted', $way['back']['state'], json_encode( $way['back'] ) );
+		foreach ( array( 'plugin', 'theme' ) as $kind ) {
+			self::assertSame( $old[ $kind ], self::bytes_of( AB_MCP_IT_Code::path( 'a', $kind, 'ab-it-inaktiv' ) ), "The old $kind back at its place." );
+		}
 	}
 
 	/**

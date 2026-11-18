@@ -350,6 +350,11 @@ e('h-g1-counts-stage', 'counts(): a stage done changed nothing of the site and i
 e('h-g1-engine-counts', 'run_verify(): the check goes over the steps counts() takes for objects written, never every write step of a run of the code (G1 of GitHub Codex on #155)', EN,
   "\t\t\tif ( AB_MCP_Sync_Code_Ops::counts( $run, $one ) ) {", "\t\t\tif ( 'write' === $one['op'] ) {", 'coderun', SAME)
 
+# Part H: G2 of GitHub Codex on #155 (a group of the backups for each swap)
+e('h-g2-group', 'plan_of(): each swap puts the old version into a group of the backups of its own, bound to the run, so a plugin and a theme of one name never meet at one place (G2 of GitHub Codex on #155)', CS,
+  "AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $in['run_id'], 'label' => 'swap-' . $in['run_id'] . '-' . $in['unit']['seq'] ) );",
+  "AB_MCP_Sync_Backup::group( $in['run_id'] );", 'coderun', 'testAPluginAndAThemeOfTheSameNameAreSwappedInOneRunEachIntoABackupOfItsOwnAndBothGoBack')
+
 # The Behebung of part D1 after the Codex round on 2b28314: the new decision points of findings 2, 3 and 4 (T6);
 # round 2 (the lead after the Codex round on de8caba): the rename without a reservation and the backup proved only by in_backup().
 RIGHTS = 'testANewVersionThatCannotTakeTheRightsOfTheSiteIsNotSwappedAndItsStepStaysPlanned'
