@@ -2125,6 +2125,24 @@ final class AB_MCP_Sync_Code_Swap {
 	/* -------------------------------------------------------- the way back */
 
 	/**
+	 * The journal of a swap step (row step.swap), the one reading of it: for
+	 * its way back (back()) and for the check of its run
+	 * (AB_MCP_Sync_Code_Ops::finding(); G3 of GitHub Codex on #155). Null
+	 * where it does not read in its form, or names another unit or target.
+	 *
+	 * @param array|null $unit The unit of the swap step (AB_MCP_Sync_Code_Ops::item()); null where it does not read so.
+	 * @param mixed      $swap The swap step as read now.
+	 * @return array|null
+	 */
+	public static function journal_of( $unit, $swap ) {
+		$journal = is_array( $unit ) && is_array( $swap ) && ( ! isset( $swap['unread'] ) || array() === $swap['unread'] ) ? AB_MCP_Store_Inputs::read( 'step.swap', $swap['parts'] ) : null;
+		if ( null === $journal || $unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {
+			return null;
+		}
+		return $journal;
+	}
+
+	/**
 	 * The way back of a swap (plan Z22, Z20b; N12), reached only through the
 	 * one entrance AB_MCP_Sync_Code_Ops::back(). plan and continue: the step
 	 * as the preview shows it, with each plugin it activates again or leaves
@@ -2144,8 +2162,8 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @return array|true|WP_Error
 	 */
 	public static function back( $at, array $run, array $step, $unit, $swap, $accept = false ) {
-		$journal = is_array( $unit ) && is_array( $swap ) && ( ! isset( $swap['unread'] ) || array() === $swap['unread'] ) ? AB_MCP_Store_Inputs::read( 'step.swap', $swap['parts'] ) : null;
-		if ( null === $journal || $unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {
+		$journal = self::journal_of( $unit, $swap );
+		if ( null === $journal ) {
 			// A step of the way back whose entry does not read back names
 			// none: the sentence names that step itself (rest of B4).
 			$what = 'plan' === $at ? array( 'forward_seq' => $step['seq'] ) : (array) $step['parts'];

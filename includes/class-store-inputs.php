@@ -984,7 +984,7 @@ final class AB_MCP_Store_Inputs {
 		),
 		'step.swap'                => array(
 			'consumer' => 'code',
-			'source'   => 'AB_MCP_Sync_Code_Swap::back(), from the journal of a swap step (steps.parts), as rename_marked() wrote it',
+			'source'   => 'AB_MCP_Sync_Code_Swap::journal_of() (for back() and AB_MCP_Sync_Code_Ops::finding()), from the journal of a swap step (steps.parts), as rename_marked() wrote it',
 			'field'    => 'the swap a step names: its unit, when it began, its target, the old and the new version, and the main files that ran at its begin; what its way back moves',
 			'form'     => array(
 				'type'   => 'record',

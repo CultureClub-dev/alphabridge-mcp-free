@@ -218,16 +218,42 @@ final class AB_MCP_Sync_Code_Ops {
 	 * What the check of a run finds of a step of the code that is done
 	 * (AB_MCP_Sync_Engine::run_verify()): nothing of a step that staged a
 	 * unit, which changed nothing of the site (its stage is checked by its
-	 * swap, AB_MCP_Sync_Code_Swap). Null for no finding, else a whole
-	 * sentence.
+	 * swap, AB_MCP_Sync_Code_Swap). Of a swap, whether its unit is at its
+	 * target as the swap wrote it (G3 of GitHub Codex on #155): its journal
+	 * (AB_MCP_Sync_Code_Swap::journal_of()), the unit read whole now as the
+	 * swap read it at its end (AB_MCP_Sync_File_Manifest::unit()) and its
+	 * hash held against the new version of the journal; the same bytes at a
+	 * new inode are that version. A reading that is not the first work of
+	 * its call has the rest of the call ($until) and stops where it ends:
+	 * false, no finding, and the next call reads it as its first work, with
+	 * the time of a whole call (AB_MCP_Sync_Code_Swap::until()); a unit not
+	 * read whole then is a finding (GRENZEN-CODE.md, G-5-25). Null for no
+	 * finding, else a whole sentence.
 	 *
-	 * @param array $step The step.
-	 * @param array $item item() of it.
-	 * @return string|null
+	 * @param array      $step  The step.
+	 * @param array      $item  item() of it.
+	 * @param float|null $until The end of the rest of the call; null where this is the first work of the call.
+	 * @return string|null|false
 	 */
-	public static function finding( array $step, array $item ) {
-		unset( $step, $item );
-		return null;
+	public static function finding( array $step, array $item, $until ) {
+		$unit = $item['unit'];
+		if ( 'stage' === $unit['op'] ) {
+			return null;
+		}
+		$journal = AB_MCP_Sync_Code_Swap::journal_of( $unit, $step );
+		if ( null === $journal ) {
+			/* translators: 1: step number, 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+			return sprintf( __( 'Step %1$d swapped the %2$s %3$s, but its journal does not read back as the swap wrote it (its form, its unit or its target), so whether the unit is at its target as the swap wrote it is not checked. Check the unit by hand in wp-admin, and make a new report (wp_site_diff) before the next takeover.', 'alphabridge-mcp' ), (int) $step['seq'], $unit['kind'], $unit['ref'] );
+		}
+		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $journal['target'] ), $unit['ref'], 'live', null === $until ? AB_MCP_Sync_Code_Swap::until() : $until, null === $until, $unit['kind'] );
+		if ( is_array( $read ) && true === $read['complete'] && is_string( $read['hash'] ) && hash_equals( $journal['new']['hash'], $read['hash'] ) ) {
+			return null;
+		}
+		if ( is_array( $read ) && true === $read['stopped'] ) {
+			return false;
+		}
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the folder or file of the unit (absolute path), 4: step number. */
+		return sprintf( __( 'The %1$s %2$s at %3$s is not the version step %4$d swapped in (missing, changed since the swap, or not readable whole within the time of one call). Check it in wp-admin, and make a new report (wp_site_diff) before the next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'], (int) $step['seq'] );
 	}
 
 	/* ------------------------------------------------------------ stage */

@@ -2653,27 +2653,20 @@ final class AB_MCP_Sync_Engine {
 		if ( 'hashes' === $result['stage'] ) {
 			$count = count( $writes );
 			for ( $i = (int) $result['cursor']; $i < $count; $i++ ) {
-				if ( $worked && $left() <= 0 ) {
+				// A step of the code whose unit is not read whole within the
+				// rest of this call (not its first work) is read by the next
+				// call (null; G3 of GitHub Codex on #155, GRENZEN-CODE.md).
+				$one  = $writes[ $i ];
+				$seen = $worked && $left() <= 0 ? null : self::written( $run, $one, $last, $ctx, $worked ? $started + self::$work : null );
+				if ( null === $seen ) {
 					$result['cursor'] = $i;
 					/* translators: 1: written objects checked so far, 2: all written objects. */
 					return $save( $result, sprintf( _n( 'The check of the run went over %1$d of %2$d written object within the budget of this call.', 'The check of the run went over %1$d of %2$d written objects within the budget of this call.', $count, 'alphabridge-mcp' ), $i, $count ) . ' Call action=next again to go on with it.' );
 				}
 				$worked = true;
-				$one    = $writes[ $i ];
 				++$result['writes'];
-				if ( 'done' !== $one['state'] ) {
-					$result['findings'][] = array(
-						'seq'     => (int) $one['seq'],
-						'message' => is_array( $one['result'] ) && isset( $one['result']['message'] )
-							/* translators: 1: step number, 2: its state, as the tools name it (failed, unclear, …), 3: the message of the step as its journal holds it (one or more whole sentences). */
-							? sprintf( __( 'Step %1$d is %2$s. %3$s', 'alphabridge-mcp' ), (int) $one['seq'], $one['state'], $one['result']['message'] )
-							/* translators: 1: step number, 2: its state, as the tools name it (failed, unclear, …). */
-							: sprintf( __( 'Step %1$d is %2$s: not written.', 'alphabridge-mcp' ), (int) $one['seq'], $one['state'] ),
-					);
-					continue;
-				}
-				++$result['written'];
-				list( $live_id, $finding ) = self::written( $run, $one, $last, $ctx );
+				$result['written']        += 'done' === $one['state'] ? 1 : 0;
+				list( $live_id, $finding ) = $seen;
 				if ( null !== $finding ) {
 					$result['findings'][] = $finding;
 				}
@@ -2806,11 +2799,7 @@ final class AB_MCP_Sync_Engine {
 		$writes_n          = (int) $result['writes'];
 		$qualified         = $writes_n > 0 && $written === $writes_n;
 		$state             = array() === $result['findings'] ? 'closed_done' : 'closed_findings';
-		$result['message'] = array() === $result['findings']
-			/* translators: %d: number of written objects. */
-			? sprintf( _n( 'Checked: %d written object hashes to its target; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', 'Checked: %d written objects hash to their targets; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', $written, 'alphabridge-mcp' ), $written )
-			/* translators: %d: number of findings. */
-			: sprintf( _n( 'Checked with %d finding; the run is closed with findings.', 'Checked with %d findings; the run is closed with findings.', count( $result['findings'] ), 'alphabridge-mcp' ), count( $result['findings'] ) );
+		$result['message'] = self::closing( $run, $result );
 		AB_MCP_Sync_Run::update_step( (int) $run['run_id'], (int) $step['seq'], array( 'state' => 'done', 'result' => $result ), 'planned' );
 		$moved = AB_MCP_Sync_Run::set_state( (int) $run['run_id'], 'open', $state, $qualified );
 		if ( is_wp_error( $moved ) ) {
@@ -2821,6 +2810,31 @@ final class AB_MCP_Sync_Engine {
 		// close pushes the first out.
 		AB_MCP_Protected_Store::cleanup();
 		return array( 'next' => $result['message'] . ' The way back for its pairs is wp_site_revert (action=plan with this run_id).' );
+	}
+
+	/**
+	 * The sentence that closes the check of a run (run_verify()): with its
+	 * findings counted, or what was checked. A run of the code (Z8b branch
+	 * 5, its plan as AB_MCP_Sync_Code_Ops::item() tells it) has no sample;
+	 * each unit it swapped was read whole against the version its swap wrote
+	 * (AB_MCP_Sync_Code_Ops::finding(); G3 of GitHub Codex on #155).
+	 *
+	 * @param array $run    The run.
+	 * @param array $result The result of the check.
+	 * @return string
+	 */
+	private static function closing( array $run, array $result ) {
+		$written = (int) $result['written'];
+		if ( array() !== $result['findings'] ) {
+			/* translators: %d: number of findings. */
+			return sprintf( _n( 'Checked with %d finding; the run is closed with findings.', 'Checked with %d findings; the run is closed with findings.', count( $result['findings'] ), 'alphabridge-mcp' ), count( $result['findings'] ) );
+		}
+		if ( is_array( $run['plan'] ) && array_key_exists( 'code', $run['plan'] ) ) {
+			/* translators: %d: number of units swapped. */
+			return sprintf( _n( 'Checked: %d unit swapped by this run hashes to the version its swap wrote (read whole now); the PHP probe passed and the log has no new line. The run is closed as done.', 'Checked: %d units swapped by this run hash to the versions their swaps wrote (read whole now); the PHP probe passed and the log has no new line. The run is closed as done.', $written, 'alphabridge-mcp' ), $written );
+		}
+		/* translators: %d: number of written objects. */
+		return sprintf( _n( 'Checked: %d written object hashes to its target; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', 'Checked: %d written objects hash to their targets; the sample shows its object, the probe passed and the log has no new line. The run is closed as done.', $written, 'alphabridge-mcp' ), $written );
 	}
 
 	/**
@@ -2879,20 +2893,35 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
-	 * What the check of the run finds of one written step (run_verify()): a
-	 * step of the contents against its target (the object hashed now, where
-	 * no later step of the run wrote it again); a step of a run of the code
-	 * (Z8b branch 5) by its own check (AB_MCP_Sync_Code_Ops::finding()),
-	 * told by the plan of the run and never judged as an object (the
-	 * pre-check of branch 5, V18).
+	 * What the check of the run finds of one write step (run_verify()): a
+	 * step not done by its state; a step of the contents against its target
+	 * (the object hashed now, where no later step of the run wrote it
+	 * again); a step of a run of the code (Z8b branch 5) by its own check
+	 * (AB_MCP_Sync_Code_Ops::finding()), told by the plan of the run and
+	 * never judged as an object (the pre-check of branch 5, V18).
 	 *
-	 * @param array $run  The run.
-	 * @param array $one  The step, done.
-	 * @param array $last The step that wrote each object last, by kind:ref.
-	 * @param array $ctx  context().
-	 * @return array The object here (0 for none), and the finding or null.
+	 * @param array      $run   The run.
+	 * @param array      $one   The step.
+	 * @param array      $last  The step that wrote each object last, by kind:ref.
+	 * @param array      $ctx   context().
+	 * @param float|null $until The end of the budget of the call; null where the step is the first work of the call.
+	 * @return array|null The object here (0 for none), and the finding or null; null where
+	 *                    the check of a step of the code did not end within $until.
 	 */
-	private static function written( array $run, array $one, array $last, array $ctx ) {
+	private static function written( array $run, array $one, array $last, array $ctx, $until ) {
+		if ( 'done' !== $one['state'] ) {
+			return array(
+				0,
+				array(
+					'seq'     => (int) $one['seq'],
+					'message' => is_array( $one['result'] ) && isset( $one['result']['message'] )
+						/* translators: 1: step number, 2: its state, as the tools name it (failed, unclear, …), 3: the message of the step as its journal holds it (one or more whole sentences). */
+						? sprintf( __( 'Step %1$d is %2$s. %3$s', 'alphabridge-mcp' ), (int) $one['seq'], $one['state'], $one['result']['message'] )
+						/* translators: 1: step number, 2: its state, as the tools name it (failed, unclear, …). */
+						: sprintf( __( 'Step %1$d is %2$s: not written.', 'alphabridge-mcp' ), (int) $one['seq'], $one['state'] ),
+				),
+			);
+		}
 		// A plan that does not read back is neither a plan of the code nor
 		// one of the contents: the step is judged as neither, never taken
 		// over (Z8b branch 5, the decision of the lead of 13.11. on 1a-2).
@@ -2902,8 +2931,8 @@ final class AB_MCP_Sync_Engine {
 		}
 		$unit = AB_MCP_Sync_Code_Ops::item( $run['plan'], $one['seq'] );
 		if ( null !== $unit ) {
-			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit );
-			return array( 0, null === $found ? null : array( 'seq' => $one['seq'], 'message' => $found ) );
+			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit, $until );
+			return false === $found ? null : array( 0, null === $found ? null : array( 'seq' => $one['seq'], 'message' => $found ) );
 		}
 		$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
 		$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
