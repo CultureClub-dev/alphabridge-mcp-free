@@ -11,7 +11,9 @@
  *   registered. The check before the first write asks the writer of the
  *   term for its rule planned_parent() before its loop and finds none; the
  *   loop then finds «No step of this version writes the kind term.», the run
- *   is aborted, nothing is written, no error.
+ *   is aborted, nothing is written, no error. planned_parents() itself, with
+ *   the entry of the run, gives the parent of the term with its writer and
+ *   nothing without it.
  * - (b) plan(): a new post and a new attachment under it (its weak parent),
  *   attachment not registered, all=true: the attachment is named as locked
  *   with «The kind attachment is not written by a run of this version.», not
@@ -21,7 +23,9 @@
  * - (c) order() and (d) term_depths(): a new category, a new page and a new
  *   post, term not registered: the category is locked, the page and the post
  *   keep the order they have beside it with every writer; no depth is set and
- *   plan() ends without an error (the same report).
+ *   plan() ends without an error (the same report). term_depths() itself,
+ *   before plan() removes the depths, gives the depth of the term with its
+ *   writer and nothing without it, the term among its items.
  *
  * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
@@ -44,11 +48,13 @@ use AB_MCP_Sync_Guard;
 use AB_MCP_Sync_Import;
 use AB_MCP_Sync_Push;
 use AB_MCP_Sync_Report;
+use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
 use AB_MCP_Sync_Writers;
 use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use ReflectionProperty;
 use RuntimeException;
 
@@ -362,7 +368,17 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 		$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
 		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
 		$before = AB_MCP_IT_Sites::rows( 'a', 'term_taxonomy', array( 'term_id' => (string) $news_a ) );
+		// The rule itself, with the entry of the run (A2 of Astra): the
+		// loaded writer of the term must not answer once it is unregistered.
+		$stored = AB_MCP_Sync_Run::get( (int) $run['run_id'] );
+		$lines  = AB_MCP_Sync_Engine::lines( $stored );
+		$ctx    = AB_MCP_Sync_Engine::context( $stored );
+		self::assertIsArray( $lines );
+		self::assertIsArray( $ctx );
+		$parents = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'planned_parents' );
+		self::assertSame( array( $news_a => 0 ), $parents->invoke( null, $stored['plan']['objects'], $lines, $ctx ), 'With its writer the parent of the term here (a root).' );
 		self::without( 'term' );
+		self::assertSame( array(), $parents->invoke( null, $stored['plan']['objects'], $lines, $ctx ), 'Without its writer no rule gives a parent.' );
 		$answer = null;
 		for ( $i = 0; $i < 6 && ! in_array( $answer['state'] ?? null, AB_MCP_Sync_Schema::CLOSED, true ); $i++ ) {
 			$answer = self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => (int) $run['run_id'] ) );
@@ -402,6 +418,10 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 		self::assertSame( array( array( (int) $bild['n'], 'attachment', 'The kind attachment is not written by a run of this version.', 'Z8d' ) ), array_values( array_map( static fn( $l ) => array( $l['n'], $l['kind'], $l['reason'], $l['stage'] ), $named ) ), 'Named, not refused.' );
 		self::assertSame( array( 'post:' . $entry['staging']['ref'] ), self::order_of( $all ) );
 		self::assertArrayNotHasKey( 'parent_later', $all['objects'][0] );
+		// plan() removes refs from every object. A weak parent (no. 3) gives
+		// refs or parent_later to the item of an attachment only, which
+		// without its writer is no item (skipped above); the parent step and
+		// the bytes of the reserve are checked below.
 		self::assertArrayNotHasKey( 'refs', $all['objects'][0] );
 		self::assertSame( array( 'check', 'write', 'post', 'verify' ), array_column( $all['steps'], 'op' ), 'No parent step.' );
 		self::assertSame( $alone['bytes'], $all['bytes'], 'The reserve of the backup counts the post alone.' );
@@ -421,7 +441,14 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 		$every   = AB_MCP_Sync_Push::plan( $args );
 		self::assertIsArray( $every, is_wp_error( $every ) ? $every->get_error_message() : '' );
 		self::assertSame( 'term:' . $topics['staging']['ref'], self::order_of( $every )[0], 'With its writer the term comes first.' );
+		// The rule itself, before plan() removes the depths (A1 of Astra),
+		// with the objects of this plan, the term among them.
+		$depths = new ReflectionMethod( AB_MCP_Sync_Push::class, 'term_depths' );
+		$items  = array_column( $every['objects'], null, 'n' );
+		$mapped = static fn( string $staging ): ?int => null;
+		self::assertSame( array( (int) $topics['n'] => 0 ), $depths->invoke( null, $items, $mapped ), 'With its writer the depth of the term (a root).' );
 		self::without( 'term' );
+		self::assertSame( array(), $depths->invoke( null, $items, $mapped ), 'Without its writer no rule gives a depth, not even for the term.' );
 		$bare = AB_MCP_Sync_Push::plan( $args );
 		self::assertIsArray( $bare, is_wp_error( $bare ) ? $bare->get_error_message() : '' );
 		self::assertSame( array( array( (int) $topics['n'], 'term', 'The kind term is not written by a run of this version.', 'Z8d' ) ), array_map( static fn( $l ) => array( $l['n'], $l['kind'], $l['reason'], $l['stage'] ), $bare['locked'] ) );
