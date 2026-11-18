@@ -764,3 +764,9 @@ final class AB_MCP_Sync_Code_Plan {
 		return new WP_Error( $code, $message );
 	}
 }
+
+// The one entrance of the planning of the code, in the file of the plan of
+// the code (D5 of the seam): where this file is not loaded, the core plans,
+// binds and shows no run of the code (AB_MCP_Sync_Push::code_plan()).
+require_once __DIR__ . '/class-sync-push.php';
+AB_MCP_Sync_Push::admit_code( 'AB_MCP_Sync_Code_Plan' );

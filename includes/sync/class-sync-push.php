@@ -128,6 +128,17 @@ final class AB_MCP_Sync_Push {
 	/** Seconds a run stays open at most without a step (its expires). */
 	const EXPIRES = 86400;
 
+	/**
+	 * The one entrance of the planning of the code (Z8b branch 5; D5 of the
+	 * seam): the name of the class AB_MCP_Sync_Code_Plan puts here as its
+	 * file loads (admit_code()). The core never calls the plan of the code by
+	 * a name of its class; where nothing is here, no run of the code is
+	 * planned, bound or shown (code_plan()).
+	 *
+	 * @var string|null
+	 */
+	private static $code = null;
+
 	/* ------------------------------------------------- the confirmation */
 
 	/**
@@ -370,8 +381,8 @@ final class AB_MCP_Sync_Push {
 		}
 		// A run of the code (Z8b branch 5; E19, Z30): where the selection
 		// names a plugin or a theme, the plan is the one of the code and holds
-		// no step of the contents (AB_MCP_Sync_Code_Plan::of(), called here alone).
-		$code = AB_MCP_Sync_Code_Plan::of( $found, $entries, $selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) );
+		// no step of the contents (of() of the entrance, asked here alone; D5).
+		$code = self::code_plan( 'of', array( $found, $entries, $selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) ) );
 		if ( null !== $code ) {
 			return $code;
 		}
@@ -949,6 +960,32 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
+	 * Put the entrance of the planning of the code, or take it away (null):
+	 * AB_MCP_Sync_Code_Plan as its file loads, nothing else.
+	 *
+	 * @param string|null $code The name of the class.
+	 */
+	public static function admit_code( $code ) {
+		self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;
+	}
+
+	/**
+	 * What the method $method of the entrance of the planning of the code
+	 * gives (D5 of the seam): its answer to $args where the entrance is here,
+	 * else $none, what the core holds without it. plan(), begin() and
+	 * shown() ask the plan of the code through it, each in the place of the
+	 * line that called AB_MCP_Sync_Code_Plan by its name before.
+	 *
+	 * @param string $method The name of the method.
+	 * @param array  $args   Its arguments.
+	 * @param mixed  $none   What holds where the entrance is not here.
+	 * @return mixed
+	 */
+	private static function code_plan( $method, array $args, $none = null ) {
+		return null === self::$code ? $none : call_user_func_array( array( self::$code, $method ), $args );
+	}
+
+	/**
 	 * What the rule $rule of the writers of the plan gives, a rule over all
 	 * its items (D4 of the seam): each writer of a kind and subtype of the
 	 * plan is asked once, through writer_rule(), where it has the rule; the
@@ -1315,8 +1352,9 @@ final class AB_MCP_Sync_Push {
 			// A run of the code keeps what it reads until its swaps (the
 			// packages of the environment of its report, its packages of code;
 			// Z8b branch 5, V20 of its pre-check): each binding checked, and a
-			// run that cannot keep them is not left open.
-			$bound = AB_MCP_Sync_Code_Plan::bind( $plan, (int) $run['run_id'] );
+			// run that cannot keep them is not left open; without the entrance
+			// it is refused as plan() refuses it then (D5).
+			$bound = self::code_plan( 'bind', array( $plan, (int) $run['run_id'] ), self::packages_refusal() );
 			if ( is_wp_error( $bound ) ) {
 				$closed = AB_MCP_Sync_Engine::abort( $run );
 				/* translators: 1: why (one or more whole sentences), 2: run number. */
@@ -1378,7 +1416,7 @@ final class AB_MCP_Sync_Push {
 				'phase'   => $step['phase'],
 				'depends' => $step['depends'],
 			);
-			$unit = AB_MCP_Sync_Code_Plan::step( $plan, $seq );
+			$unit = self::code_plan( 'step', array( $plan, $seq ) );
 			if ( null !== $unit ) {
 				$shown['unit'] = $unit;
 			}
@@ -1419,7 +1457,7 @@ final class AB_MCP_Sync_Push {
 			// A run of the code (Z8b branch 5, Z42): per unit the operation,
 			// the versions, the sentence on its routines and the paths that
 			// lie in the backup afterwards.
-			$out['units']  = AB_MCP_Sync_Code_Plan::shown( $plan );
+			$out['units']  = self::code_plan( 'shown', array( $plan ), array() );
 			$out['effect'] = __( 'Makes a run of the code: each plugin or theme named is staged in the protected store first (nothing of this site changes), then swapped in one call under the lock of AlphaBridge, with a probe of the site before and the old version kept whole in the backup. A plugin or theme new on this site is refused at its swap in this version (code:create_not_built). The run holds no step of the contents: make a new report (wp_site_diff) after it. Nothing is written by this call; the confirmed call makes the run.', 'alphabridge-mcp' );
 		}
 		if ( isset( $plan['existing_run'] ) ) {
