@@ -432,7 +432,8 @@ final class AB_MCP_Sync_Push {
 			// What its writer adds to the item of its kind by the rule
 			// plan_item() (D4 of the seam): an attachment its files, their
 			// bytes and its weak parent (branch 10), a menu the positions it
-			// takes (branch 11).
+			// takes (branch 11), a post the references and the name of its
+			// order (branch 9b).
 			$item = self::writer_rule( $item, 'plan_item', array( $item, $line ), $item );
 			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
 				if ( is_array( $ref ) && isset( $ref['space'], $ref['id'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) && 'strong' === ( $ref['strength'] ?? null ) ) {
@@ -442,15 +443,6 @@ final class AB_MCP_Sync_Push {
 						$item['parent_ref'] = (string) (int) $ref['id'];
 					}
 				}
-			}
-			if ( 'post' === $item['kind'] ) {
-				// The references the boundary asks by an id or a name, for the
-				// order (branch 9b, Codex round 1, B): reusable blocks and
-				// navigations by their ref, template parts by theme and slug,
-				// the template a page names; and the name of the object itself
-				// where another names it so.
-				$item['order_refs'] = AB_MCP_Sync_Post_Writer::order_refs( $line );
-				$item['order_name'] = AB_MCP_Sync_Post_Writer::order_name( $line );
 			}
 			$items[ $n ] = $item;
 		}

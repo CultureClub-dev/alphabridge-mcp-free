@@ -237,6 +237,26 @@ final class AB_MCP_Sync_Post_Writer {
 	}
 
 	/**
+	 * What the plan holds of a post beside what every kind has (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::plan()): the references and the
+	 * name of its order.
+	 *
+	 * @param array $item The item of the plan.
+	 * @param array $line Its line of the package of objects.
+	 * @return array The item.
+	 */
+	public static function plan_item( array $item, array $line ) {
+		// The references the boundary asks by an id or a name, for the
+		// order (branch 9b, Codex round 1, B): reusable blocks and
+		// navigations by their ref, template parts by theme and slug,
+		// the template a page names; and the name of the object itself
+		// where another names it so.
+		$item['order_refs'] = self::order_refs( $line );
+		$item['order_name'] = self::order_name( $line );
+		return $item;
+	}
+
+	/**
 	 * What a step writes for one object, from its line of the package of
 	 * objects and the item of the plan: the post row for wp_insert_post(),
 	 * the columns as they should be stored, the meta by key, the terms by
