@@ -971,17 +971,22 @@ final class AB_MCP_Sync_Push {
 	/**
 	 * What the method $method of the entrance of the planning of the code
 	 * gives (D5 of the seam): its answer to $args where the entrance is here,
-	 * else $none, what the core holds without it. plan(), begin() and
-	 * shown() ask the plan of the code through it, each in the place of the
-	 * line that called AB_MCP_Sync_Code_Plan by its name before.
+	 * else $none, what the core holds without it; a Closure there is called
+	 * only then, so what it makes (a refusal) is made only without the
+	 * entrance. plan(), begin() and shown() ask the plan of the code through
+	 * it, each in the place of the line that called AB_MCP_Sync_Code_Plan by
+	 * its name before.
 	 *
 	 * @param string $method The name of the method.
 	 * @param array  $args   Its arguments.
-	 * @param mixed  $none   What holds where the entrance is not here.
+	 * @param mixed  $none   What holds where the entrance is not here, or a Closure that gives it.
 	 * @return mixed
 	 */
 	private static function code_plan( $method, array $args, $none = null ) {
-		return null === self::$code ? $none : call_user_func_array( array( self::$code, $method ), $args );
+		if ( null === self::$code ) {
+			return $none instanceof Closure ? $none() : $none;
+		}
+		return call_user_func_array( array( self::$code, $method ), $args );
 	}
 
 	/**
@@ -1353,7 +1358,7 @@ final class AB_MCP_Sync_Push {
 			// Z8b branch 5, V20 of its pre-check): each binding checked, and a
 			// run that cannot keep them is not left open; without the entrance
 			// it is refused as plan() refuses it then (D5).
-			$bound = self::code_plan( 'bind', array( $plan, (int) $run['run_id'] ), self::packages_refusal() );
+			$bound = self::code_plan( 'bind', array( $plan, (int) $run['run_id'] ), static function () { return self::packages_refusal(); } );
 			if ( is_wp_error( $bound ) ) {
 				$closed = AB_MCP_Sync_Engine::abort( $run );
 				/* translators: 1: why (one or more whole sentences), 2: run number. */
