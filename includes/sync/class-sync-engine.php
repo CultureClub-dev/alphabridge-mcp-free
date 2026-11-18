@@ -106,6 +106,7 @@ require_once __DIR__ . '/class-sync-widget-area-writer.php';
 require_once __DIR__ . '/class-sync-css-writer.php';
 require_once __DIR__ . '/class-sync-write.php';
 require_once __DIR__ . '/class-sync-option-writer.php';
+require_once __DIR__ . '/class-sync-writers.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-anchor.php';
 require_once __DIR__ . '/class-sync-urls.php';
@@ -171,25 +172,41 @@ final class AB_MCP_Sync_Engine {
 	);
 
 	/**
-	 * The write side of a kind, or null where no step writes the kind.
+	 * The write side of a kind, or null where no step writes the kind: the
+	 * class registered for the subtype, else for the whole kind
+	 * (AB_MCP_Sync_Writers::of(), the seam); without a subtype the whole kind.
 	 *
-	 * @param string $kind Kind of the plan (post, term).
+	 * @param string      $kind    Kind of the plan (post, term).
+	 * @param string|null $subtype Subtype (a post type, a taxonomy, the name of an option), null for none.
 	 * @return string|null The class name.
 	 */
-	public static function writer( $kind ) {
-		$kind = (string) $kind;
-		return isset( self::WRITERS[ $kind ] ) ? self::WRITERS[ $kind ] : null;
+	public static function writer( $kind, $subtype = null ) {
+		return AB_MCP_Sync_Writers::of( $kind, (string) $subtype );
 	}
 
 	/**
 	 * The write side of the object of a journal (its kind), the post's for a
-	 * journal of branch 8 that names no other.
+	 * journal of branch 8 that names no other; by its subtype (subtype_in())
+	 * only where the whole kind has none, a kind registered by subtype.
 	 *
 	 * @param array $journal Journal.
 	 * @return string|null The class name.
 	 */
 	private static function writer_of( array $journal ) {
-		return self::writer( isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post' );
+		$kind = isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post';
+		return self::writer( $kind ) ?? self::writer( $kind, self::subtype_in( $journal ) );
+	}
+
+	/**
+	 * The subtype of the object of a journal as the core reads it (D3 of the
+	 * seam, as the writers' subtype_of()): its post type, else its taxonomy,
+	 * else its name; '' for none.
+	 *
+	 * @param array $journal Journal.
+	 * @return string
+	 */
+	private static function subtype_in( array $journal ) {
+		return (string) ( $journal['object']['identity']['post_type'] ?? $journal['object']['identity']['taxonomy'] ?? $journal['object']['identity']['name'] ?? '' );
 	}
 
 	/**
@@ -3972,4 +3989,11 @@ final class AB_MCP_Sync_Engine {
 	public static function now() {
 		return null !== self::$clock ? (float) call_user_func( self::$clock ) : microtime( true );
 	}
+}
+
+// The writers of this plugin: each kind of WRITERS whole, with its class, as
+// the file loads (as AB_MCP_Sync_Code_Ops admits its entrance); a refusal is
+// not answered here, SyncWritersTest holds all.
+foreach ( AB_MCP_Sync_Engine::WRITERS as $ab_mcp_kind => $ab_mcp_writer ) {
+	AB_MCP_Sync_Writers::register( $ab_mcp_kind, AB_MCP_Sync_Writers::WHOLE, $ab_mcp_writer );
 }

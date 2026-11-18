@@ -3,8 +3,9 @@
  * The registration of the write side (AB_MCP_Sync_Writers, the seam, first
  * step T1): U1 the contract as a table of cases, each a series of
  * registrations, each refusal with its code and nothing registered; U2 the
- * table of equality, the writers this plugin registers as the file loads
- * against AB_MCP_Sync_Engine::WRITERS, also in a fresh process.
+ * table of equality, the writers this plugin registers as the engine loads
+ * against AB_MCP_Sync_Engine::WRITERS, also in a fresh process, and
+ * AB_MCP_Sync_Engine::writer() with a subtype asking the registration (T2).
  *
  * The registrations made as the file loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
@@ -47,7 +48,7 @@ final class SyncWritersTest extends TestCase {
 	private const TW = 'AB_MCP_Sync_Term_Writer';
 	private const MW = 'AB_MCP_Sync_Menu_Writer';
 
-	/** @var array|null The table as the file registered it. */
+	/** @var array|null The table as the engine registered it. */
 	private $kept = null;
 
 	private static function table(): array {
@@ -137,24 +138,43 @@ final class SyncWritersTest extends TestCase {
 			foreach ( self::SUBTYPES as $subtype ) {
 				self::assertSame( $class, AB_MCP_Sync_Writers::of( $kind, $subtype ), $kind . ' ' . $subtype );
 				self::assertSame( AB_MCP_Sync_Engine::writer( $kind ), AB_MCP_Sync_Writers::of( $kind, $subtype ), $kind . ' ' . $subtype );
+				self::assertSame( $class, AB_MCP_Sync_Engine::writer( $kind, $subtype ), 'writer() with the subtype: ' . $kind . ' ' . $subtype );
+				self::assertSame( AB_MCP_Sync_Writers::of( $kind, $subtype ), AB_MCP_Sync_Engine::writer( $kind, $subtype ), $kind . ' ' . $subtype );
 			}
+			self::assertSame( $class, AB_MCP_Sync_Engine::writer( $kind ), 'writer() without a subtype: ' . $kind );
 			self::assertSame( AB_MCP_Sync_Engine::part_orders( array( $kind ) )[ $kind ], AB_MCP_Sync_Engine::part_order( AB_MCP_Sync_Writers::whole( $kind ) ), $kind );
 		}
 		foreach ( array( 'code', 'environment', 'no_such_kind' ) as $kind ) {
 			self::assertNull( AB_MCP_Sync_Engine::writer( $kind ), $kind );
 			self::assertNull( AB_MCP_Sync_Writers::whole( $kind ), $kind );
 			self::assertNull( AB_MCP_Sync_Writers::of( $kind, '' ), $kind );
+			foreach ( self::SUBTYPES as $subtype ) {
+				self::assertNull( AB_MCP_Sync_Engine::writer( $kind, $subtype ), $kind . ' ' . $subtype );
+			}
 		}
 	}
 
-	public function testAFreshProcessThatLoadsOnlyTheFileHasEveryKindWhole(): void {
+	public function testWriterAsksTheRegistrationBySubtype(): void {
+		self::assertTrue( AB_MCP_Sync_Writers::register( 'post', array( 'post', 'page' ), self::PW ) );
+		self::assertSame( self::PW, AB_MCP_Sync_Engine::writer( 'post', 'page' ) );
+		self::assertSame( self::PW, AB_MCP_Sync_Engine::writer( 'post', 'post' ) );
+		self::assertNull( AB_MCP_Sync_Engine::writer( 'post', 'wp_block' ), 'a subtype not registered' );
+		self::assertNull( AB_MCP_Sync_Engine::writer( 'post' ), 'no whole kind' );
+		self::assertNull( AB_MCP_Sync_Engine::writer( 'post', '' ), 'no whole kind' );
+		self::assertNull( AB_MCP_Sync_Engine::writer( 'term', 'category' ), 'a kind not registered' );
+	}
+
+	public function testAFreshProcessThatLoadsTheEngineHasEveryKindWhole(): void {
 		$root = dirname( __DIR__ );
-		$code = 'require ' . var_export( $root . '/tests/bootstrap.php', true ) . '; require ' . var_export( $root . '/includes/sync/class-sync-writers.php', true ) . ';'
-			. ' $out = array(); foreach ( ' . var_export( array_keys( self::CLASSES ), true ) . ' as $k ) { $out[ $k ] = AB_MCP_Sync_Writers::whole( $k ); }'
-			. ' echo json_encode( array( "whole" => $out, "engine" => class_exists( "AB_MCP_Sync_Engine", false ) ) );';
+		$code = 'require ' . var_export( $root . '/tests/bootstrap.php', true ) . '; require ' . var_export( $root . '/includes/sync/class-sync-engine.php', true ) . ';'
+			. ' echo json_encode( ( new ReflectionProperty( "AB_MCP_Sync_Writers", "writers" ) )->getValue() );';
 		$lines = array();
 		exec( escapeshellarg( PHP_BINARY ) . ' -r ' . escapeshellarg( $code ) . ' 2>&1', $lines, $status );
 		self::assertSame( 0, $status, implode( "\n", $lines ) );
-		self::assertSame( array( 'whole' => self::CLASSES, 'engine' => false ), json_decode( implode( "\n", $lines ), true ) );
+		$whole = array();
+		foreach ( self::CLASSES as $kind => $class ) {
+			$whole[ $kind ] = array( AB_MCP_Sync_Writers::WHOLE => $class );
+		}
+		self::assertSame( $whole, json_decode( implode( "\n", $lines ), true ), 'the eight kinds, each whole with its class, no other' );
 	}
 }

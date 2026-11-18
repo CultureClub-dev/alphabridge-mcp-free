@@ -26,8 +26,8 @@
  *   developer, not translated (as there).
  *
  * This plugin registers the eight kinds of AB_MCP_Sync_Engine::WRITERS, each
- * whole with the same class, at the end of this file as it loads (as
- * AB_MCP_Sync_Code_Ops admits its entrance).
+ * whole with the same class, at the end of class-sync-engine.php as it loads
+ * (as AB_MCP_Sync_Code_Ops admits its entrance).
  *
  * @package AlphaBridge_MCP
  */
@@ -135,21 +135,3 @@ final class AB_MCP_Sync_Writers {
 		return true;
 	}
 }
-
-// The writers of this plugin, each file loading what it needs; a refusal is
-// not answered here (as in AB_MCP_Sync_Code_Ops), SyncWritersTest holds all.
-require_once __DIR__ . '/class-sync-post-writer.php';
-require_once __DIR__ . '/class-sync-term-writer.php';
-require_once __DIR__ . '/class-sync-attachment-writer.php';
-require_once __DIR__ . '/class-sync-menu-writer.php';
-require_once __DIR__ . '/class-sync-widget-area-writer.php';
-require_once __DIR__ . '/class-sync-css-writer.php';
-require_once __DIR__ . '/class-sync-option-writer.php';
-AB_MCP_Sync_Writers::register( 'post', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Post_Writer' );
-AB_MCP_Sync_Writers::register( 'term', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Term_Writer' );
-AB_MCP_Sync_Writers::register( 'attachment', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Attachment_Writer' );
-AB_MCP_Sync_Writers::register( 'menu', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Menu_Writer' );
-AB_MCP_Sync_Writers::register( 'menu_item', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Menu_Item_Writer' );
-AB_MCP_Sync_Writers::register( 'widget_area', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Widget_Area_Writer' );
-AB_MCP_Sync_Writers::register( 'custom_css', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Css_Writer' );
-AB_MCP_Sync_Writers::register( 'option', AB_MCP_Sync_Writers::WHOLE, 'AB_MCP_Sync_Option_Writer' );
