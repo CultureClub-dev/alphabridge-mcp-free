@@ -1179,13 +1179,15 @@ final class AB_MCP_Sync_Push {
 			$left,
 			static function ( $a, $b ) use ( $items ) {
 				$rank = static function ( $n ) use ( $items ) {
-					$first = self::writer_rule( $items[ $n ], 'first_by_depth', array( $items[ $n ], $n ) );
+					if ( null !== ( $first = self::writer_rule( $items[ $n ], 'first_by_depth', array( $items[ $n ], $n ) ) ) ) {
+						return $first;
+					}
 					// The objects named by a name rather than an id (branch 9b): the
 					// template parts a template names by theme and slug, then the
 					// templates a page names by slug (page_template), then the rest.
 					$named = array_search( (string) ( $items[ $n ]['subtype'] ?? '' ), self::NAMED_FIRST, true );
 					$last  = in_array( (string) ( $items[ $n ]['subtype'] ?? '' ), self::LAST, true ) ? 1 : 0;
-					return $first ?? array( 1, false === $named ? count( self::NAMED_FIRST ) + $last : (int) $named, (int) $n );
+					return array( 1, false === $named ? count( self::NAMED_FIRST ) + $last : (int) $named, (int) $n );
 				};
 				return $rank( $a ) <=> $rank( $b );
 			}
