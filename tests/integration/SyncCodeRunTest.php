@@ -5650,10 +5650,106 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'stage' ), 'No group of the stage.' );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed.' );
 		self::assertSame( '1.1.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', 'ab-it-inaktiv' ) );
-		$closed = self::gated( 'wp_site_push', array( 'action' => 'abort', 'run_id' => $run_id ) );
-		self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_message() : '' );
-		self::assertNull( AB_MCP_Sync_Run::open_run(), 'The site is free.' );
-		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ) );
+		self::skipped_and_closed( $run_id, $before );
+	}
+
+	/**
+	 * Prüft: G1 of GitHub Codex on #155 with code that runs: a plugin planned
+	 * inactive (no accept) is activated and gets the files of the staging
+	 * site before its stage step; the stage is done with same, and its swap
+	 * is skipped without the release, which is asked only for code that is
+	 * swapped (ab_mcp_sync_code_not_released). Sonst: a unit with nothing to
+	 * swap stopped its run on a release it does not need.
+	 */
+	public function testAnActiveUnitTheSameAtItsStageIsSkippedWithoutItsRelease(): void {
+		$run_id = self::same_at_stage();
+		update_option( 'active_plugins', array_merge( (array) get_option( 'active_plugins' ), array( 'ab-it-inaktiv/ab-it-inaktiv.php' ) ) );
+		self::assertTrue( AB_MCP_Sync_Code_Swap::runs( 'plugin', 'ab-it-inaktiv' ), 'Its code runs now, and the plan holds no release for it.' );
+		$before = self::live_bytes( 'ab-it-inaktiv' );
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The stage step, done with same.' );
+		self::skipped_and_closed( $run_id, $before );
+	}
+
+	/**
+	 * Prüft: G1 of GitHub Codex on #155, the other side: a stage step done
+	 * without a journal whose result is not the same of this unit as stage()
+	 * writes it (same not strictly true, the same of another unit or kind, a
+	 * journal beside it) has not found the unit the same: the swap refuses as
+	 * before (ab_mcp_sync_code_journal) and stays planned. Sonst: a stage step
+	 * stage() did not end so could skip a swap that is due.
+	 */
+	#[DataProvider( 'not_same' )]
+	public function testAStageDoneWithoutTheSameOfThisUnitStillRefusesItsSwap( array $set ): void {
+		$run_id = self::same_at_stage();
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The stage step, done with same.' );
+		$set   += array( 'result' => self::step( $run_id, 2 )['result'] );
+		$saved  = AB_MCP_Sync_Run::update_step( $run_id, 2, $set, 'done' );
+		self::assertNotInstanceOf( WP_Error::class, $saved );
+		$refused = self::next( $run_id );
+		self::assertInstanceOf( WP_Error::class, $refused );
+		self::assertSame( array( 'ab_mcp_sync_code_journal', 'planned' ), array( $refused->get_error_code(), self::step( $run_id, 3 )['state'] ) );
+	}
+
+	/** A stage step done without a journal, but not with the same of this unit. */
+	public static function not_same(): array {
+		$same = array(
+			'message' => 'This site already has the plugin.',
+			'staged'  => array(
+				'kind' => 'plugin',
+				'ref'  => 'ab-it-inaktiv',
+			),
+			'same'    => true,
+		);
+		return array(
+			'same not strictly true'    => array( array( 'result' => array( 'same' => 1 ) + $same ) ),
+			'the same of another unit'  => array( array( 'result' => array( 'staged' => array( 'kind' => 'plugin', 'ref' => 'ab-it-aktiv' ) ) + $same ) ),
+			'the same of another kind'  => array( array( 'result' => array( 'staged' => array( 'kind' => 'theme', 'ref' => 'ab-it-inaktiv' ) ) + $same ) ),
+			'a journal beside the same' => array( array( 'parts' => array( 'unit' => array( 'kind' => 'plugin', 'ref' => 'ab-it-inaktiv', 'op' => 'stage' ) ) ) ),
+		);
+	}
+
+	/** A run of ab-it-inaktiv checked, the files of the staging site put on this site before its stage step. */
+	private static function same_at_stage(): int {
+		list( $args )  = self::changed( 'ab-it-inaktiv', '1.1.0' );
+		self::wporg();
+		list( , $run ) = self::begun( $args );
+		$run_id        = (int) $run['run_id'];
+		self::assertSame( 'done', self::next( $run_id )['step']['state'], 'The check of the run.' );
+		AB_MCP_IT_Code::put( 'a', 'plugin', 'ab-it-inaktiv', '1.1.0' );
+		return $run_id;
+	}
+
+	/**
+	 * After a stage step done with same (G1 of GitHub Codex on #155): the
+	 * swap is skipped as nothing to swap (no journal, no backup), and the
+	 * run closes as done without a finding, its check counting no object,
+	 * not qualified; nothing of the site changed, and its way back takes
+	 * no step of it.
+	 *
+	 * @param int   $run_id The run.
+	 * @param mixed $before The files of the unit before (live_bytes()).
+	 */
+	private static function skipped_and_closed( int $run_id, $before ): void {
+		$skipped = self::next( $run_id );
+		self::assertIsArray( $skipped, is_wp_error( $skipped ) ? $skipped->get_error_code() . ': ' . $skipped->get_error_message() : '' );
+		self::assertSame( array( 3, 'skipped' ), array( $skipped['step']['seq'], $skipped['step']['state'] ) );
+		self::assertStringContainsString( 'Skipped: when step 2 was to stage it, this site already had the plugin ab-it-inaktiv as the staging site has it (the same files), so there is nothing to swap and nothing of it changed.', $skipped['next'] );
+		self::assertStringContainsString( 'confirm its pair anew (wp_site_pairs)', $skipped['next'], 'With the way.' );
+		$swap = self::step( $run_id, 3 );
+		self::assertSame( array( null, true ), array( $swap['parts'], $swap['result']['same'] ), 'No journal of a swap; its result says same.' );
+		self::assertSame( array(), AB_MCP_Protected_Store::groups( 'backups' ), 'No group of the backups.' );
+		$closed = null;
+		for ( $i = 0; $i < 6 && null === $closed; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			$closed = in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ? $answer : null;
+		}
+		$check = self::step( $run_id, 5 )['result'];
+		self::assertSame( array( 'closed_done', array(), 0, 0 ), array( is_array( $closed ) ? $closed['state'] : null, $check['findings'], $check['written'], $check['writes'] ), 'Closed as done, no finding, no object counted: ' . json_encode( $check ) );
+		self::assertSame( 0, (int) AB_MCP_Sync_Run::get( $run_id )['forward_closed_at'], 'No qualified close: nothing was written.' );
+		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed.' );
+		$way = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
+		self::assertSame( 'ab_mcp_sync_revert_nothing', is_wp_error( $way ) ? $way->get_error_code() : json_encode( $way ), 'No step of the way back: the swap wrote nothing.' );
 	}
 
 	public function testAUnitFromAPackageOfCodePassesTheCheckOfTheRunAndIsStagedFromIt(): void {

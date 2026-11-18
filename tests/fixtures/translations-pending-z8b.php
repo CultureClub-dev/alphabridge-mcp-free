@@ -478,4 +478,5 @@ return array(
 	'(composed by an earlier build, not shown)',
 	"%d byte (no revision of the post holds it; the backup of the step does, while the backups of the run are kept)\0%d bytes (no revision of the post holds it; the backup of the step does, while the backups of the run are kept)",
 	'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run, while the backups of the run are kept.',
+	'Skipped: when step %3$d was to stage it, this site already had the %1$s %2$s as the staging site has it (the same files), so there is nothing to swap and nothing of it changed. Make a new report (wp_site_diff): where it still shows the unit as changed, confirm its pair anew (wp_site_pairs).',
 );

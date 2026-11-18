@@ -332,6 +332,24 @@ e('ops-ended-planned', 'ended(): a step ends only from planned, never over the s
 e('ops-journal-checked', 'stage(): only a journal that reads back in its form is saved, an answer of the stage not of it fails the step (Fable check 2, B1)', CO,
   "\t\t\tif ( null === self::staged( $journal ) ) {", "\t\t\tif ( false ) {", 'coderun', 'testAStageWhoseAnswerDoesNotReadAsAJournalFailsTheStepAndSavesNoJournal')
 
+# ------------------------------------------- part H: G1 of GitHub Codex on #155 (a stage done with same: its swap skipped, the run closes)
+NOTSAME = 'testAStageDoneWithoutTheSameOfThisUnitStillRefusesItsSwap'
+COUNTS = 'testTheCheckOfARunTakesNoStageDoneAndNoSwapSkippedAsTheSameForAnObject'
+e('h-g1-same', 'run(): a swap whose stage step found the unit the same is skipped as nothing to swap, never refused for a journal it cannot have (G1 of GitHub Codex on #155)', CO,
+  "\t\tif ( self::same( $run_id, $step, $item['unit'] ) ) {", "\t\tif ( false ) {", 'coderun', SAME)
+e('h-g1-same-strict', 'same(): only a result same strictly true is the same, never a value that reads as true (G1 of GitHub Codex on #155)', CO,
+  "&& true === ( $stage['result']['same'] ?? null )", "&& ! empty( $stage['result']['same'] )", 'coderun', NOTSAME)
+e('h-g1-same-unit', 'same(): only the same of this very unit, of its kind and name, skips its swap (G1 of GitHub Codex on #155)', CO,
+  " && array( 'kind' => $unit['kind'], 'ref' => $unit['ref'] ) === ( $stage['result']['staged'] ?? null );", ';', 'coderun', NOTSAME)
+e('h-g1-same-journal', 'same(): a stage step with a journal is no stage that found the unit the same (G1 of GitHub Codex on #155)', CO,
+  " && null === $stage['parts'] && is_array( $stage['result'] )", " && is_array( $stage['result'] )", 'coderun', NOTSAME)
+e('h-g1-counts-skipped', 'counts(): a swap skipped as the same is no object written, so it is no finding of the check (G1 of GitHub Codex on #155)', CO,
+  "\t\treturn ! ( 'skipped' === $step['state'] && is_array( $step['result'] ) && true === ( $step['result']['same'] ?? null ) );", "\t\treturn true;", 'ops', COUNTS)
+e('h-g1-counts-stage', 'counts(): a stage done changed nothing of the site and is no object written (Fable check 2, C4; G1 of GitHub Codex on #155)', CO,
+  "\t\t\treturn 'done' !== $step['state'];", "\t\t\treturn true;", 'ops', COUNTS)
+e('h-g1-engine-counts', 'run_verify(): the check goes over the steps counts() takes for objects written, never every write step of a run of the code (G1 of GitHub Codex on #155)', EN,
+  "\t\t\tif ( AB_MCP_Sync_Code_Ops::counts( $run, $one ) ) {", "\t\t\tif ( 'write' === $one['op'] ) {", 'coderun', SAME)
+
 # The Behebung of part D1 after the Codex round on 2b28314: the new decision points of findings 2, 3 and 4 (T6);
 # round 2 (the lead after the Codex round on de8caba): the rename without a reservation and the backup proved only by in_backup().
 RIGHTS = 'testANewVersionThatCannotTakeTheRightsOfTheSiteIsNotSwappedAndItsStepStaysPlanned'

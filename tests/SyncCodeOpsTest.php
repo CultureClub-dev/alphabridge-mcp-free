@@ -125,6 +125,41 @@ final class SyncCodeOpsTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Prüft: the check of a run takes for an object written every write step
+	 * of a run of the contents and of one whose plan does not read or names
+	 * no unit for it, but of the code neither a stage done (it changed
+	 * nothing of the site) nor a swap skipped as the same (G1 of GitHub Codex
+	 * on #155; Fable check 2, C4); a stage failed, a swap done and a swap
+	 * skipped for another reason are taken, a step that does not write is
+	 * not. Sonst: a run of units that were the same closed with a finding for
+	 * each, or counted its stages as objects hashed to their targets.
+	 */
+	public function testTheCheckOfARunTakesNoStageDoneAndNoSwapSkippedAsTheSameForAnObject(): void {
+		$code  = array( 'plan' => array( 'code' => self::code() ) );
+		$step  = static fn( int $seq, string $state, $result = null, string $op = 'write' ): array => array(
+			'seq'    => $seq,
+			'op'     => $op,
+			'state'  => $state,
+			'result' => $result,
+		);
+		$cases = array(
+			'a stage done'                     => array( $code, $step( 2, 'done', array( 'same' => true ) ), false ),
+			'a stage failed'                   => array( $code, $step( 2, 'failed' ), true ),
+			'a swap done'                      => array( $code, $step( 3, 'done' ), true ),
+			'a swap skipped as the same'       => array( $code, $step( 3, 'skipped', array( 'same' => true ) ), false ),
+			'a swap skipped, its stage failed' => array( $code, $step( 3, 'skipped', array( 'message' => 'Skipped: waits for step 2.' ) ), true ),
+			'a swap skipped, same not true'    => array( $code, $step( 3, 'skipped', array( 'same' => 1 ) ), true ),
+			'a step of the contents'           => array( array( 'plan' => array() ), $step( 2, 'done' ), true ),
+			'a plan that does not read back'   => array( array( 'plan' => null ), $step( 2, 'done' ), true ),
+			'a step no unit of the plan names' => array( $code, $step( 9, 'done' ), true ),
+			'a step that does not write'       => array( $code, $step( 4, 'done', null, 'post' ), false ),
+		);
+		foreach ( $cases as $what => list( $run, $one, $want ) ) {
+			self::assertSame( $want, AB_MCP_Sync_Code_Ops::counts( $run, $one ), $what );
+		}
+	}
+
 	/** A valid journal of a stage step. */
 	public static function journal( array $stage = array(), array $unit = array() ): array {
 		return array(

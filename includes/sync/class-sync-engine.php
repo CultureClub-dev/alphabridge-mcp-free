@@ -2630,7 +2630,7 @@ final class AB_MCP_Sync_Engine {
 		$writes = array();
 		$last   = array();
 		foreach ( $steps as $one ) {
-			if ( 'write' === $one['op'] ) {
+			if ( AB_MCP_Sync_Code_Ops::counts( $run, $one ) ) {
 				$writes[] = $one;
 				if ( 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 					// The last step that wrote an object holds its target: the
