@@ -1206,7 +1206,7 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     - Die Prüfung vor dem Push fand mit A1 eine Abfolge, die eine Kernzusage brach: ein `done` auf einem Beweis, den das
       Ziel nicht mehr hält. Die vier Stellen oben schliessen sie bis auf das Restfenster. Ob eine weitere Abfolge eine
       Kernzusage bricht (Code am Ziel ohne Sicherung der alten Fassung, ein Zustand, den kein Weg kennt), ist hier
-      nicht behauptet; die Bestätigung nach dieser Behebung fragt es.
+      nicht behauptet. Die Bestätigung auf `aa7c8ba` fand ausser dem Restfenster keine solche Abfolge.
 - **Posten (Entscheid der Steuerung):** «Sperre für Änderungen: Freigabe und `lock_held()` nur für die eigene Zeile;
   `touch()` im Tausch; `register_shutdown_function` vor `forget_active()` (B2)». Erledigt vor dem ersten Release, das den
   Tausch enthält. Eigener Bauzettel, nicht Zweig 5. Zum Posten gehört nach dem Entscheid von Thomas vom 18.11.2026
