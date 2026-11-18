@@ -7,7 +7,7 @@
  * against AB_MCP_Sync_Engine::WRITERS, also in a fresh process, and
  * AB_MCP_Sync_Engine::writer() with a subtype asking the registration (T2).
  *
- * The registrations made as the file loads are kept before each case and
+ * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
  *
  * @package AlphaBridge_MCP
@@ -152,6 +152,7 @@ final class SyncWritersTest extends TestCase {
 				self::assertNull( AB_MCP_Sync_Engine::writer( $kind, $subtype ), $kind . ' ' . $subtype );
 			}
 		}
+		self::assertSame( array( 'category', 'post_tag', 'post_format', 'wp_pattern_category', 'wp_theme', 'wp_template_part_area' ), array_values( array_unique( array_merge( ...array_map( static fn( $kind ) => defined( AB_MCP_Sync_Engine::writer( $kind ) . '::TAXONOMIES' ) ? constant( AB_MCP_Sync_Engine::writer( $kind ) . '::TAXONOMIES' ) : array(), array_keys( AB_MCP_Sync_Engine::WRITERS ) ) ) ) ), 'the taxonomies of the registered writers, in the order run_post() forms them (E4)' );
 	}
 
 	public function testWriterAsksTheRegistrationBySubtype(): void {

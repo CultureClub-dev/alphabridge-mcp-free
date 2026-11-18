@@ -6,8 +6,8 @@
  * subtype or none; one of a kind registered by subtype (here only, two
  * subtypes with different classes each) gives the class of its subtype as
  * the core reads it from the identity (post type, else taxonomy, else name),
- * also through writer( $kind, $subtype ), and none for a subtype missing,
- * unknown or empty.
+ * also through writer( $kind, $subtype ), and none, without a warning, for
+ * a subtype missing, unknown, empty or no string (T3, P4-B4).
  *
  * The registrations made as the engine loads are kept before each test and
  * put back after it (reflection), for the other tests of the process.
@@ -108,6 +108,8 @@ final class SyncWriterOfTest extends TestCase {
 			'no kind and no subtype'       => array( array( 'op' => 'update' ), '', null ),
 			'an unknown subtype'           => array( array( 'kind' => 'post', 'identity' => array( 'post_type' => 'wp_template' ) ), 'wp_template', null ),
 			'an empty subtype'             => array( array( 'kind' => 'post', 'identity' => array( 'post_type' => '', 'taxonomy' => 'category' ) ), '', null ),
+			'identity as a string'         => array( array( 'kind' => 'post', 'identity' => 'page' ), '', null ),
+			'post_type as an array'        => array( array( 'kind' => 'post', 'identity' => array( 'post_type' => array( 'page' ), 'taxonomy' => 'category' ) ), '', null ),
 		);
 	}
 

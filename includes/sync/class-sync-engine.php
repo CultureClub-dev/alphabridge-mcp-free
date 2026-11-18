@@ -201,13 +201,14 @@ final class AB_MCP_Sync_Engine {
 	/**
 	 * The subtype of the object of a journal as the core reads it (D3 of the
 	 * seam, as the writers' subtype_of()): its post type, else its taxonomy,
-	 * else its name; '' for none.
+	 * else its name; '' for none and for one that is no string.
 	 *
 	 * @param array $journal Journal.
 	 * @return string
 	 */
 	private static function subtype_in( array $journal ) {
-		return (string) ( $journal['object']['identity']['post_type'] ?? $journal['object']['identity']['taxonomy'] ?? $journal['object']['identity']['name'] ?? '' );
+		$subtype = $journal['object']['identity']['post_type'] ?? $journal['object']['identity']['taxonomy'] ?? $journal['object']['identity']['name'] ?? '';
+		return is_string( $subtype ) ? $subtype : '';
 	}
 
 	/**
