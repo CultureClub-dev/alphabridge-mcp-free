@@ -7,7 +7,9 @@
  * T2: writer() asks with the subtype, and the reader of the subtype of a
  * journal (fixed to post, fixed to ''); the check before the first write
  * asks the rule planned_parent() of a writer (N-c no. 1). T3: verdict()
- * locks a kind without a writer (n-verdict). Written by hand.
+ * locks a kind without a writer (n-verdict); plan() asks the rules
+ * made_in_posts() and weak_parent() of a writer (N-c no. 2 and 3). Written
+ * by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -17,7 +19,8 @@
  * whole as well. It is equivalent: a whole kind answers every subtype.
  *
  * Held by the unit suite (SyncWritersTest, SyncWriterOfTest, SyncPlanLockTest),
- * n-nc-854 by the integration suite (SyncContentTest).
+ * n-nc-854 by the integration suite (SyncContentTest), n-nc-539 and n-nc-545
+ * as well (SyncMediaTest).
  *
  * @package AlphaBridge_MCP
  */
@@ -26,6 +29,7 @@ $unit = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWritersTe
 $of   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWriterOfTest' );
 $rule = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanLockTest' );
 $swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncContentTest::testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell( |$)/' );
+$clip = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncMediaTest::testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack( |$)/' );
 
 $sw = 'includes/sync/class-sync-writers.php';
 $en = 'includes/sync/class-sync-engine.php';
@@ -130,5 +134,23 @@ return array(
 		'replace' => "\t\t\$w = \$w ?? ( AB_MCP_Sync_Engine::WRITERS[ (string) \$entry['kind'] ] ?? null );\n\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
 		'run'     => $rule,
 		'expect'  => '/testAKindWithoutAWriterIsLockedWithTheSentenceOfTheCore/',
+	),
+	array(
+		'id'      => 'naht/n-nc-539',
+		'clause'  => 'plan(): a new attachment counts as a parent the run creates by the rule made_in_posts() of its writer',
+		'file'    => $pu,
+		'search'  => "\t\treturn 'post' === \$item['kind'] || self::writer_rule( \$item, 'made_in_posts', array( \$item ), false );",
+		'replace' => "\t\treturn 'post' === \$item['kind'];",
+		'run'     => $clip,
+		'expect'  => '/testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack/',
+	),
+	array(
+		'id'      => 'naht/n-nc-545',
+		'clause'  => 'plan(): an attachment whose weak parent the run creates hangs under it by the rule weak_parent() of its writer',
+		'file'    => $pu,
+		'search'  => "self::writer_rule( \$item, 'weak_parent', array( \$item, \$n, \$made_posts ), array( \$item, array() ) );",
+		'replace' => "array( \$item, array() );",
+		'run'     => $clip,
+		'expect'  => '/testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack/',
 	),
 );

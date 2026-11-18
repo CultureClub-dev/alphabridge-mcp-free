@@ -15,8 +15,13 @@
  * the registration of this plugin at the end of the engine: without a writer
  * verdict() locks the kind, as the old ones made it fall into that lock.
  *
+ * Part 2a of T3 (the attachment: E7 and N-c no. 2 and 3): five successors
+ * of five old entries of medien.php, each in a rule of
+ * AB_MCP_Sync_Attachment_Writer.
+ *
  * Held by the unit suite (SyncRunTest), naht-nachfolger/vorlagen-theme-plan
- * by the integration suite (SyncTemplatesTest).
+ * by the integration suite (SyncTemplatesTest), the five of part 2a as well
+ * (SyncMediaTest).
  *
  * @package AlphaBridge_MCP
  */
@@ -165,5 +170,50 @@ return array(
 		'replace' => "\t\tif ( false ) {",
 		'run'     => $unit( 'SyncRunTest', 'testWhichEntryOfAReportIsAStepLockedOrNothing' ),
 		'expect'  => '/testWhichEntryOfAReportIsAStepLockedOrNothing/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/medien-plan-made-attachments',
+		'clause'  => 'plan(): a new attachment counts as a parent the run creates (a poster under its new video; GitHub Codex on free#140, P2) (Nachfolger von medien/plan-made-attachments)',
+		'file'    => $aw,
+		'search'  => "\tpublic static function made_in_posts( array \$item ) {\n\t\tunset( \$item );\n\t\treturn true;",
+		'replace' => "\tpublic static function made_in_posts( array \$item ) {\n\t\tunset( \$item );\n\t\treturn false;",
+		'run'     => $it( 'SyncMediaTest', 'testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack' ),
+		'expect'  => '/testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/medien-plan-parent-edge',
+		'clause'  => 'plan(): an attachment here comes after the new parent the run creates (Nachfolger von medien/plan-parent-edge)',
+		'file'    => $aw,
+		'search'  => "\t\t\t\$item['refs'][] = array( 'post', \$item['weak_parent'] );\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncMediaTest', 'testAChangedTitleAltTextDescriptionAndParentOfAnAttachmentGoOverAndBackWithoutAFile' ),
+		'expect'  => '/testAChangedTitleAltTextDescriptionAndParentOfAnAttachmentGoOverAndBackWithoutAFile/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/medien-plan-parent-later',
+		'clause'  => 'plan(): a new attachment under a post the run creates is made unattached first (Nachfolger von medien/plan-parent-later)',
+		'file'    => $aw,
+		'search'  => "\t\t\t\$item['parent_later'] = true;\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncMediaTest', 'testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles' ),
+		'expect'  => '/testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/medien-plan-weak-parent',
+		'clause'  => 'plan(): the weak parent of an attachment is read for its parent step (Nachfolger von medien/plan-weak-parent)',
+		'file'    => $aw,
+		'search'  => "\t\t\t\t\$item['weak_parent'] = (string) (int) \$ref['id'];\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncMediaTest', 'testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles' ),
+		'expect'  => '/testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/medien-plan-shared-paths',
+		'clause'  => 'plan(): two attachments of the plan naming one path are locked (Nachfolger von medien/plan-shared-paths)',
+		'file'    => $aw,
+		'search'  => "\t\t\tif ( count( \$ns ) < 2 ) {",
+		'replace' => "\t\t\tif ( true ) {",
+		'run'     => $it( 'SyncMediaTest', 'testWhatWouldReplaceShareOrLinkAFileOrIsOfATypeThisAccountMayNotUploadLocksBeforeAnythingIsWritten' ),
+		'expect'  => '/testWhatWouldReplaceShareOrLinkAFileOrIsOfATypeThisAccountMayNotUploadLocksBeforeAnythingIsWritten/',
 	),
 );
