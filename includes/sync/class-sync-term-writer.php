@@ -269,6 +269,20 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
+	 * The rank of a term in the order of the plan (rule of the seam, N-c
+	 * no. 5, asked by AB_MCP_Sync_Push::order()): before the objects of the
+	 * other kinds, by its depth in the tree the run leaves (0 where none is
+	 * set), then by its entry.
+	 *
+	 * @param array $item The item of the plan (depth).
+	 * @param int   $n    Its entry number.
+	 * @return int[]
+	 */
+	public static function first_by_depth( array $item, $n ) {
+		return array( 0, isset( $item['depth'] ) ? (int) $item['depth'] : 0, (int) $n );
+	}
+
+	/**
 	 * The parent a run gives a term of this site it updates, for the check
 	 * before the first write (rule N-c no. 1 of the seam, asked by
 	 * AB_MCP_Sync_Engine::planned_parents()): the parent here its target

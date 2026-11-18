@@ -1003,7 +1003,10 @@ final class AB_MCP_Sync_Push {
 
 	/**
 	 * The items in the order of their references: a target created in the
-	 * same run comes first (depends_on); a cycle is locked.
+	 * same run comes first (depends_on); a cycle is locked. The rank where
+	 * nothing else orders: what the rule first_by_depth() of the writer of
+	 * an item gives (a term, by its depth; N-c no. 5 of the seam), else the
+	 * rank of the core.
 	 *
 	 * @param array $items Items by entry number.
 	 * @return array{items:array,locked:array}|WP_Error
@@ -1176,15 +1179,13 @@ final class AB_MCP_Sync_Push {
 			$left,
 			static function ( $a, $b ) use ( $items ) {
 				$rank = static function ( $n ) use ( $items ) {
-					if ( 'term' === $items[ $n ]['kind'] ) {
-						return array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n );
-					}
+					$first = self::writer_rule( $items[ $n ], 'first_by_depth', array( $items[ $n ], $n ) );
 					// The objects named by a name rather than an id (branch 9b): the
 					// template parts a template names by theme and slug, then the
 					// templates a page names by slug (page_template), then the rest.
 					$named = array_search( (string) ( $items[ $n ]['subtype'] ?? '' ), self::NAMED_FIRST, true );
 					$last  = in_array( (string) ( $items[ $n ]['subtype'] ?? '' ), self::LAST, true ) ? 1 : 0;
-					return array( 1, false === $named ? count( self::NAMED_FIRST ) + $last : (int) $named, (int) $n );
+					return $first ?? array( 1, false === $named ? count( self::NAMED_FIRST ) + $last : (int) $named, (int) $n );
 				};
 				return $rank( $a ) <=> $rank( $b );
 			}
