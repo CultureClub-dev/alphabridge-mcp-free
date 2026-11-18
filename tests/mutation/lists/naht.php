@@ -9,8 +9,10 @@
  * asks the rule planned_parent() of a writer (N-c no. 1). T3: verdict()
  * locks a kind without a writer (n-verdict); plan() asks the rules
  * made_in_posts() and weak_parent() of a writer (N-c no. 2 and 3), and
- * absent_identity() (no. 4); order() asks first_by_depth() (no. 5). Written
- * by hand.
+ * absent_identity() (no. 4); order() asks first_by_depth() (no. 5);
+ * term_depths() asks depths() (no. 6 to 8), whose node, given parent and
+ * depth the counter-probes n-nc-1265, n-nc-1273 and n-nc-1288 change in the
+ * rule of the term writer. Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -25,6 +27,9 @@
  * (SyncPlanRulesTest): the test the build sheet named (SyncContentTest, a new
  * category with a new child and a new post in it) does not see it, as the
  * three depend on each other and their order follows from that alone.
+ * n-nc-1265, n-nc-1273 and n-nc-1288 by U4 as well: the tests the build sheet
+ * named (SyncContentTest, two categories that swap their places, and the new
+ * category with its child) do not see them.
  *
  * @package AlphaBridge_MCP
  */
@@ -39,6 +44,7 @@ $clip = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/p
 $sw = 'includes/sync/class-sync-writers.php';
 $en = 'includes/sync/class-sync-engine.php';
 $pu = 'includes/sync/class-sync-push.php';
+$tw = 'includes/sync/class-sync-term-writer.php';
 
 return array(
 	array(
@@ -175,5 +181,32 @@ return array(
 		'replace' => "\t\t\t\t\tif ( null !== ( \$first = null ) ) {",
 		'run'     => $nc,
 		'expect'  => '/testTheTermsComeFirstInTheOrderByTheirDepth/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1265',
+		'clause'  => 'depths(): a term the run updates is a node of this site, by the rule depths() of the term writer',
+		'file'    => $tw,
+		'search'  => "\t\t\t\t\$node_of[ (string) \$item['staging_ref'] ] = 'update' === \$item['op'] ? 'l:' . (int) \$item['live_ref'] : 'n:' . (string) \$item['staging_ref'];",
+		'replace' => "\t\t\t\t\$node_of[ (string) \$item['staging_ref'] ] = 'n:' . (string) \$item['staging_ref'];",
+		'run'     => $nc,
+		'expect'  => '/testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1273',
+		'clause'  => 'depths(): a term of the run stands under the parent the run gives it, by the rule depths() of the term writer',
+		'file'    => $tw,
+		'search'  => "\t\t\tif ( ! isset( \$item['parent_ref'] ) ) {",
+		'replace' => "\t\t\tif ( true ) {",
+		'run'     => $nc,
+		'expect'  => '/testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1288',
+		'clause'  => 'depths(): the depth of each term in the tree the run leaves, by the rule depths() of the term writer',
+		'file'    => $tw,
+		'search'  => "\t\t\t\$out[ \$n ] = \$depth;",
+		'replace' => "\t\t\t\$out[ \$n ] = 0;",
+		'run'     => $nc,
+		'expect'  => '/testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter/',
 	),
 );

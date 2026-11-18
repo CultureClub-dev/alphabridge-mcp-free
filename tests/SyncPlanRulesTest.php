@@ -10,7 +10,11 @@
  * made_in_posts(), no other kind); the parent a run gives a term here (no. 1,
  * P4-B2: AB_MCP_Sync_Term_Writer::planned_parent() gives null for a refused
  * line and for a parent the run makes first, else the parent's number, 0 as
- * well). With the writers this plugin registers.
+ * well). And the depth of each term in the tree the run leaves (no. 6 to 8:
+ * by the rule depths() of its writer through term_depths(), no other kind
+ * has one), the test the build sheet puts in the place of the integration
+ * tests it named for n-nc-1265, n-nc-1273 and n-nc-1288, which do not see
+ * them. With the writers this plugin registers.
  *
  * @package AlphaBridge_MCP
  */
@@ -27,6 +31,7 @@ use ReflectionMethod;
 use WP_Error;
 
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-push.php';
+require_once __DIR__ . '/sync-run-stubs.php';
 
 final class SyncPlanRulesTest extends TestCase {
 
@@ -77,6 +82,22 @@ final class SyncPlanRulesTest extends TestCase {
 			3 => array( 'depth' => 0 ) + self::item( 'term', 'category', '6' ),
 		);
 		self::assertSame( array( 3, 2, 1 ), array_keys( self::push( 'order', $items )['items'] ), 'The root, its child, then the page.' );
+	}
+
+	public function testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter(): void {
+		// Here 11 and 13 are roots, 12 is under 11. The run makes 5 under 12
+		// (staging 2, not in the run) and puts 11 (staging 1) under 13
+		// (staging 3): 5 stands under 12, 11 and 13 (depth 3), 11 under 13
+		// (depth 1). The page has no depth.
+		$GLOBALS['ab_test_parents'] = array( 11 => 0, 12 => 11, 13 => 0 );
+		$mapped                     = static fn( string $staging ): ?int => array( '1' => 11, '2' => 12, '3' => 13 )[ $staging ] ?? null;
+		$items                      = array(
+			1 => array( 'parent_ref' => '2' ) + self::item( 'term', 'category', '5' ),
+			2 => array( 'op' => 'update', 'live_ref' => '11', 'parent_ref' => '3' ) + self::item( 'term', 'category', '1' ),
+			3 => self::item( 'post', 'page', '9' ),
+		);
+		self::assertSame( array( 1 => 3, 2 => 1 ), self::push( 'term_depths', $items, $mapped ) );
+		unset( $GLOBALS['ab_test_parents'] );
 	}
 
 	#[DataProvider( 'kinds' )]
