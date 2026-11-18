@@ -105,6 +105,41 @@ final class AB_MCP_Sync_Menu_Writer {
 	}
 
 	/**
+	 * The menus of the run each menu of the plan comes after: those that
+	 * hold here a position it takes (rule of the seam, D4, asked by
+	 * AB_MCP_Sync_Push::plan() over all its items). Entry number => the
+	 * entry numbers of those menus; none where a menu takes no such position.
+	 *
+	 * @param array $items The items of the plan by entry number (kind, op, live_ref, takes).
+	 * @return array<int,int[]>
+	 */
+	public static function after_holders( array $items ) {
+		// The menus of the run (branch 11, Codex round 1, B2): the positions
+		// are fields of one row (decision 24), and a menu's form names them.
+		// A menu that takes a position another menu of the run holds here
+		// comes after that menu (an order, no dependency: order()), which
+		// gives the position up first; else its step would change that menu,
+		// whose step would find it changed since the plan.
+		$after = array();
+		$menus = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'menu' === $item['kind'] && 'update' === $item['op'] ) {
+				$menus[ (int) $item['live_ref'] ] = $n;
+			}
+		}
+		$held = array() === $menus ? array() : self::held_positions();
+		foreach ( $items as $n => $item ) {
+			foreach ( 'menu' === $item['kind'] && isset( $item['takes'] ) ? $item['takes'] : array() as $location ) {
+				$holder = isset( $held[ $location ] ) ? $held[ $location ] : null;
+				if ( null !== $holder && isset( $menus[ $holder ] ) && $menus[ $holder ] !== $n ) {
+					$after[ $n ][] = $menus[ $holder ];
+				}
+			}
+		}
+		return $after;
+	}
+
+	/**
 	 * The positions a line names for its menu (its form on the staging
 	 * site), names only, for the order of the plan (Codex round 1 of branch
 	 * 11, B2); none where the form names none.

@@ -454,26 +454,10 @@ final class AB_MCP_Sync_Push {
 			}
 			$items[ $n ] = $item;
 		}
-		// The menus of the run (branch 11, Codex round 1, B2): the positions
-		// are fields of one row (decision 24), and a menu's form names them.
-		// A menu that takes a position another menu of the run holds here
-		// comes after that menu (an order, no dependency: order()), which
-		// gives the position up first; else its step would change that menu,
-		// whose step would find it changed since the plan.
-		$menus = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'menu' === $item['kind'] && 'update' === $item['op'] ) {
-				$menus[ (int) $item['live_ref'] ] = $n;
-			}
-		}
-		$held = array() === $menus ? array() : AB_MCP_Sync_Menu_Writer::held_positions();
-		foreach ( $items as $n => $item ) {
-			foreach ( 'menu' === $item['kind'] && isset( $item['takes'] ) ? $item['takes'] : array() as $location ) {
-				$holder = isset( $held[ $location ] ) ? $held[ $location ] : null;
-				if ( null !== $holder && isset( $menus[ $holder ] ) && $menus[ $holder ] !== $n ) {
-					$items[ $n ]['menu_after'][] = $menus[ $holder ];
-				}
-			}
+		// The menus of the run a menu comes after (branch 11, B2), by the rule
+		// after_holders() of the writers of the plan (D4 of the seam).
+		foreach ( self::writers_rule( $items, 'after_holders', array( $items ) ) as $n => $after ) {
+			$items[ $n ]['menu_after'] = $after;
 		}
 		// A path two attachments of the run name, by the rule shared_paths()
 		// of the writer of the kind (D4 of the seam): both are locked here.
@@ -975,6 +959,32 @@ final class AB_MCP_Sync_Push {
 	private static function writer_rule( array $of, $rule, array $args, $none = null ) {
 		$w = AB_MCP_Sync_Engine::writer( (string) $of['kind'], (string) $of['subtype'] );
 		return null !== $w && self::has_rule( $w, $rule ) ? $w::$rule( ...$args ) : $none;
+	}
+
+	/**
+	 * What the rule $rule of the writers of the plan gives, a rule over all
+	 * its items (D4 of the seam): each writer of a kind and subtype of the
+	 * plan is asked once, through writer_rule(), where it has the rule; the
+	 * answers merged by their keys in the order of the plan (the first answer
+	 * for a key holds). None where no writer has the rule.
+	 *
+	 * @param array  $items The items of the plan by entry number.
+	 * @param string $rule  The name of the rule.
+	 * @param array  $args  The arguments of the rule.
+	 * @return array
+	 */
+	private static function writers_rule( array $items, $rule, array $args ) {
+		$out   = array();
+		$asked = array();
+		foreach ( $items as $item ) {
+			$w = AB_MCP_Sync_Engine::writer( (string) $item['kind'], (string) $item['subtype'] );
+			if ( null === $w || isset( $asked[ $w ] ) ) {
+				continue;
+			}
+			$asked[ $w ] = true;
+			$out        += self::writer_rule( $item, $rule, $args, array() );
+		}
+		return $out;
 	}
 
 	/**
