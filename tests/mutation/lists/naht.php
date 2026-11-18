@@ -6,7 +6,8 @@
  * plugin at the end of the engine (a kind struck out, two classes swapped).
  * T2: writer() asks with the subtype, and the reader of the subtype of a
  * journal (fixed to post, fixed to ''); the check before the first write
- * asks the rule planned_parent() of a writer (N-c no. 1). Written by hand.
+ * asks the rule planned_parent() of a writer (N-c no. 1). T3: verdict()
+ * locks a kind without a writer (n-verdict). Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -15,18 +16,20 @@
  * Not here either: writer_of() asking the subtype for a kind registered
  * whole as well. It is equivalent: a whole kind answers every subtype.
  *
- * Held by the unit suite (SyncWritersTest, SyncWriterOfTest), n-nc-854 by
- * the integration suite (SyncContentTest).
+ * Held by the unit suite (SyncWritersTest, SyncWriterOfTest, SyncPlanLockTest),
+ * n-nc-854 by the integration suite (SyncContentTest).
  *
  * @package AlphaBridge_MCP
  */
 
 $unit = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWritersTest' );
 $of   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWriterOfTest' );
+$rule = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanLockTest' );
 $swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncContentTest::testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell( |$)/' );
 
 $sw = 'includes/sync/class-sync-writers.php';
 $en = 'includes/sync/class-sync-engine.php';
+$pu = 'includes/sync/class-sync-push.php';
 
 return array(
 	array(
@@ -118,5 +121,14 @@ return array(
 		'replace' => "\t\t\tif ( true || 'update' !== ( isset( \$one['op'] ) ? (string) \$one['op'] : '' ) ) {",
 		'run'     => $swap,
 		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
+	),
+	array(
+		'id'      => 'naht/n-verdict',
+		'clause'  => 'verdict(): an entry of a kind without a writer is locked with the sentence of the core',
+		'file'    => $pu,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
+		'replace' => "\t\tif ( false ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
+		'run'     => $rule,
+		'expect'  => '/testAKindWithoutAWriterIsLockedWithTheSentenceOfTheCore/',
 	),
 );
