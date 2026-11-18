@@ -210,6 +210,33 @@ final class AB_MCP_Sync_Attachment_Writer {
 	}
 
 	/**
+	 * What the plan sets for an attachment whose parent, a weak reference,
+	 * the run creates (rule of the seam, N-c no. 3, asked by
+	 * AB_MCP_Sync_Push::plan()): one here comes after that post (a
+	 * reference, an order); a new one is made unattached and hangs under it
+	 * by a parent step after both (decision 16). The item, and its parent
+	 * step: its entry number => the entry of the parent, or none.
+	 *
+	 * @param array $item       The item of the plan.
+	 * @param int   $n          Its entry number.
+	 * @param array $made_posts The objects of the space of posts the run creates: staging ref => entry number.
+	 * @return array{0:array,1:array<int,int>} The item and its parent step.
+	 */
+	public static function weak_parent( array $item, $n, array $made_posts ) {
+		$later = array();
+		if ( ! isset( $item['weak_parent'], $made_posts[ $item['weak_parent'] ] ) || $made_posts[ $item['weak_parent'] ] === $n ) {
+			return array( $item, $later );
+		}
+		if ( 'update' === $item['op'] ) {
+			$item['refs'][] = array( 'post', $item['weak_parent'] );
+		} else {
+			$item['parent_later'] = true;
+			$later[ $n ]          = $made_posts[ $item['weak_parent'] ];
+		}
+		return array( $item, $later );
+	}
+
+	/**
 	 * What a step writes for one attachment, from its line of the package of
 	 * objects and the item of the plan (see AB_MCP_Sync_Post_Writer::
 	 * target_of() for the fields): the row, the meta by key, the terms, the

@@ -512,15 +512,8 @@ final class AB_MCP_Sync_Push {
 		}
 		$parents = array();
 		foreach ( $items as $n => $item ) {
-			if ( 'attachment' !== $item['kind'] || ! isset( $item['weak_parent'], $made_posts[ $item['weak_parent'] ] ) || $made_posts[ $item['weak_parent'] ] === $n ) {
-				continue;
-			}
-			if ( 'update' === $item['op'] ) {
-				$items[ $n ]['refs'][] = array( 'post', $item['weak_parent'] );
-			} else {
-				$items[ $n ]['parent_later'] = true;
-				$parents[ $n ]               = $made_posts[ $item['weak_parent'] ];
-			}
+			list( $items[ $n ], $later ) = self::writer_rule( $item, 'weak_parent', array( $item, $n, $made_posts ), array( $item, array() ) );
+			$parents                    += $later;
 		}
 		$refused = self::too_many( count( $items ) + count( $parents ) );
 		if ( null !== $refused ) {
