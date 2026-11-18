@@ -1001,6 +1001,24 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
+	 * What the rule $rule of the writer of an object gives for the plan (D4
+	 * and N-c of the seam): its answer to $args where the writer of the kind
+	 * and subtype of $of has the rule, else $none, what the core holds for a
+	 * kind without it. plan() asks the rules of the writers through it, each
+	 * in the place of the line that decided by the kind before.
+	 *
+	 * @param array  $of   An item of the plan, or a kind and a subtype.
+	 * @param string $rule The name of the rule.
+	 * @param array  $args The arguments of the rule.
+	 * @param mixed  $none What holds where the writer has no such rule.
+	 * @return mixed
+	 */
+	private static function writer_rule( array $of, $rule, array $args, $none = null ) {
+		$w = AB_MCP_Sync_Engine::writer( (string) $of['kind'], (string) $of['subtype'] );
+		return null !== $w && self::has_rule( $w, $rule ) ? $w::$rule( ...$args ) : $none;
+	}
+
+	/**
 	 * The items in the order of their references: a target created in the
 	 * same run comes first (depends_on); a cycle is locked.
 	 *
