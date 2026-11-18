@@ -714,7 +714,7 @@ final class AB_MCP_Sync_Revert {
 		if ( ! isset( $object['live_ref'] ) ) {
 			return 0;
 		}
-		$ref = AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer( isset( $object['kind'] ) ? (string) $object['kind'] : 'post' ), $object['live_ref'] );
+		$ref = AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer_of( array( 'object' => $object ) ), $object['live_ref'] );
 		return null === $ref ? 0 : $ref;
 	}
 

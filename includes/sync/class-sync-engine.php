@@ -187,12 +187,13 @@ final class AB_MCP_Sync_Engine {
 	/**
 	 * The write side of the object of a journal (its kind), the post's for a
 	 * journal of branch 8 that names no other; by its subtype (subtype_in())
-	 * only where the whole kind has none, a kind registered by subtype.
+	 * only where the whole kind has none, a kind registered by subtype. Also
+	 * for the way back (AB_MCP_Sync_Revert::live_ref_of()).
 	 *
 	 * @param array $journal Journal.
 	 * @return string|null The class name.
 	 */
-	private static function writer_of( array $journal ) {
+	public static function writer_of( array $journal ) {
 		$kind = isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post';
 		return self::writer( $kind ) ?? self::writer( $kind, self::subtype_in( $journal ) );
 	}
@@ -800,7 +801,7 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|null A finding (seq, object, message), or null.
 	 */
 	private static function check_item( array $item, array $lines, array $ctx ) {
-		$w = self::writer( $item['kind'] );
+		$w = self::writer( $item['kind'], $item['subtype'] ?? null );
 		if ( null === $w ) {
 			/* translators: %s: kind of the object, as the tools name it (post, term, …). */
 			return self::finding( $item, sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), $item['kind'] ) );
@@ -854,7 +855,8 @@ final class AB_MCP_Sync_Engine {
 
 	/**
 	 * The parents a run gives the terms of this site it writes: term here =>
-	 * the parent here its target names (AB_MCP_Sync_Term_Writer::target_of()),
+	 * the parent here its target names, by the rule planned_parent() of the
+	 * writer of its kind (AB_MCP_Sync_Term_Writer; N-c no. 1 of the seam),
 	 * for the check before the first write, which asks a loop of parents of
 	 * the state the run leaves (branch 9, Codex round 1, B4: two categories
 	 * that swap their places were locked against the state here). A term
@@ -868,22 +870,29 @@ final class AB_MCP_Sync_Engine {
 	private static function planned_parents( array $items, array $lines, array $ctx ) {
 		$out = array();
 		foreach ( $items as $one ) {
-			if ( 'term' !== ( isset( $one['kind'] ) ? (string) $one['kind'] : '' ) || 'update' !== ( isset( $one['op'] ) ? (string) $one['op'] : '' ) ) {
+			$w = self::writer( isset( $one['kind'] ) ? (string) $one['kind'] : '' );
+			if ( ! self::has_rule( $w, 'planned_parent' ) || 'update' !== ( isset( $one['op'] ) ? (string) $one['op'] : '' ) ) {
 				continue;
 			}
-			$line = self::line_of( $one, $lines );
-			if ( is_wp_error( $line ) ) {
-				continue;
+			$parent = $w::planned_parent( $one, self::line_of( $one, $lines ), $ctx );
+			if ( null !== $parent ) {
+				$out[ (int) $one['live_ref'] ] = $parent;
 			}
-			$prepared = AB_MCP_Sync_Term_Writer::target_of( $line, $one, $ctx );
-			// A parent the run makes first has no id here yet: the term counts
-			// as it is here (fail closed; the boundary asks it again).
-			if ( is_wp_error( $prepared ) || ! empty( $prepared['pending'] ) ) {
-				continue;
-			}
-			$out[ (int) $one['live_ref'] ] = (int) $prepared['args']['parent'];
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether the writer of a kind has a rule of the plan (N-c of the seam):
+	 * the core asks the rule where its writer has it, else its other branch
+	 * holds.
+	 *
+	 * @param string|null $w    writer().
+	 * @param string      $rule Name of the rule (planned_parent).
+	 * @return bool
+	 */
+	private static function has_rule( $w, $rule ) {
+		return null !== $w && method_exists( $w, $rule );
 	}
 
 	/**
@@ -1078,7 +1087,7 @@ final class AB_MCP_Sync_Engine {
 				return self::fail_step( $run_id, $seq, 'planned', $item->get_error_message() );
 			}
 		}
-		$w       = self::writer( $item['kind'] );
+		$w       = self::writer( $item['kind'], $item['subtype'] );
 		$live_id = 'update' === $item['op'] ? self::live_of( $w, $item['live_ref'] ) : null;
 		$before  = null;
 		if ( null === $w ) {
@@ -2601,7 +2610,16 @@ final class AB_MCP_Sync_Engine {
 			$w                 = self::writer( $kind );
 			$result['objects'][ 'post' === $kind ? (string) $id : $kind . ':' . $id ] = $w::post_write( $id );
 		}
-		foreach ( array_unique( array_merge( AB_MCP_Sync_Post_Writer::TAXONOMIES, AB_MCP_Sync_Term_Writer::TAXONOMIES ) ) as $taxonomy ) {
+		// The taxonomies of the writers registered for the kinds of WRITERS
+		// (E4 of the seam).
+		$taxonomies = array();
+		foreach ( array_keys( self::WRITERS ) as $kind ) {
+			$w = self::writer( $kind );
+			if ( null !== $w && defined( $w . '::TAXONOMIES' ) ) {
+				$taxonomies = array_merge( $taxonomies, $w::TAXONOMIES );
+			}
+		}
+		foreach ( array_unique( $taxonomies ) as $taxonomy ) {
 			clean_term_cache( array(), $taxonomy, true );
 		}
 		unset( $result['cursor'] );

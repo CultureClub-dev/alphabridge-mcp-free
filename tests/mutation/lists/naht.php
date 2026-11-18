@@ -5,7 +5,8 @@
  * stage, no class loaded, whole and by subtype at once) and the list of this
  * plugin at the end of the engine (a kind struck out, two classes swapped).
  * T2: writer() asks with the subtype, and the reader of the subtype of a
- * journal (fixed to post, fixed to ''). Written by hand.
+ * journal (fixed to post, fixed to ''); the check before the first write
+ * asks the rule planned_parent() of a writer (N-c no. 1). Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -14,13 +15,15 @@
  * Not here either: writer_of() asking the subtype for a kind registered
  * whole as well. It is equivalent: a whole kind answers every subtype.
  *
- * Held by the unit suite (SyncWritersTest, SyncWriterOfTest).
+ * Held by the unit suite (SyncWritersTest, SyncWriterOfTest), n-nc-854 by
+ * the integration suite (SyncContentTest).
  *
  * @package AlphaBridge_MCP
  */
 
 $unit = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWritersTest' );
 $of   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWriterOfTest' );
+$swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncContentTest::testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell( |$)/' );
 
 $sw = 'includes/sync/class-sync-writers.php';
 $en = 'includes/sync/class-sync-engine.php';
@@ -106,5 +109,14 @@ return array(
 		'replace' => "\t\treturn '';",
 		'run'     => $of,
 		'expect'  => '/testAJournalOfAKindRegisteredBySubtypeGivesTheClassOfItsSubtype/',
+	),
+	array(
+		'id'      => 'naht/n-nc-854',
+		'clause'  => 'planned_parents(): the check asks the rule planned_parent() of the writer of the kind',
+		'file'    => $en,
+		'search'  => "\t\t\tif ( ! self::has_rule( \$w, 'planned_parent' ) || 'update' !== ( isset( \$one['op'] ) ? (string) \$one['op'] : '' ) ) {",
+		'replace' => "\t\t\tif ( true || 'update' !== ( isset( \$one['op'] ) ? (string) \$one['op'] : '' ) ) {",
+		'run'     => $swap,
+		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
 	),
 );

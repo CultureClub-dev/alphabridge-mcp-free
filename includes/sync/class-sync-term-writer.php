@@ -222,6 +222,31 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
+	 * The parent a run gives a term of this site it updates, for the check
+	 * before the first write (rule N-c no. 1 of the seam, asked by
+	 * AB_MCP_Sync_Engine::planned_parents()): the parent here its target
+	 * names; null where its line or its target is refused, or where the run
+	 * makes the parent first.
+	 *
+	 * @param array          $one  The item of the plan (an update).
+	 * @param array|WP_Error $line Its line of the package.
+	 * @param array          $ctx  context(), with pending.
+	 * @return int|null
+	 */
+	public static function planned_parent( array $one, $line, array $ctx ) {
+		if ( is_wp_error( $line ) ) {
+			return null;
+		}
+		$prepared = self::target_of( $line, $one, $ctx );
+		// A parent the run makes first has no id here yet: the term counts
+		// as it is here (fail closed; the boundary asks it again).
+		if ( is_wp_error( $prepared ) || ! empty( $prepared['pending'] ) ) {
+			return null;
+		}
+		return (int) $prepared['args']['parent'];
+	}
+
+	/**
 	 * The checks before the first part (decision 17, step 4): the rights of
 	 * the account, the group, the parent, the slug, the sanitizers ahead,
 	 * the rights per meta key.

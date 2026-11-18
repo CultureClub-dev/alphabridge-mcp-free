@@ -671,7 +671,7 @@ final class AB_MCP_Sync_Push {
 			// not the staging side: reserved from them, uncompressed, as the
 			// store counts them (AB_MCP_Sync_Backup::size_of(); GitHub Codex
 			// round 6 on free#137, P2). A new object leaves a small mark.
-			$w       = AB_MCP_Sync_Engine::writer( $item['kind'] );
+			$w       = AB_MCP_Sync_Engine::writer( $item['kind'], $item['subtype'] );
 			$live_id = 'update' === $item['op'] && isset( $item['live_ref'] ) ? AB_MCP_Sync_Engine::live_of( $w, $item['live_ref'] ) : 0;
 			$current = AB_MCP_Sync_Engine::is_ref( $live_id ) && null !== $w ? $w::current( $live_id ) : null;
 			if ( is_wp_error( $current ) ) {
