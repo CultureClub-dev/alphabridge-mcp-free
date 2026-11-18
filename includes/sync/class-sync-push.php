@@ -429,29 +429,11 @@ final class AB_MCP_Sync_Push {
 			}
 			$item['size'] = isset( $line['size'] ) ? (int) $line['size'] : 0;
 			$item['refs'] = array();
-			if ( 'attachment' === $item['kind'] ) {
-				// The bytes of the files it may lay besides its rows (decision 8:
-				// the new media files are booked, with their temporary copies):
-				// of an attachment here only those its list here does not name
-				// (a file at a path it names is never written over); and its file
-				// list for the paths two objects of the run would share (branch 10).
-				$listed = 'update' === $item['op'] ? AB_MCP_Sync_Media::paths_of( (int) $item['live_ref'] ) : array();
-				$item['files'] = array();
-				foreach ( isset( $line['form']['files'] ) && is_array( $line['form']['files'] ) ? $line['form']['files'] : array() as $file ) {
-					if ( is_array( $file ) && isset( $file['path'], $file['size'] ) && is_string( $file['path'] ) ) {
-						$item['files'][] = $file['path'];
-						if ( null === $listed || ! in_array( $file['path'], $listed, true ) ) {
-							$item['size'] += (int) $file['size'];
-						}
-					}
-				}
-			}
+			// What its writer adds to the item of its kind by the rule
+			// plan_item() (D4 of the seam): an attachment its files, their
+			// bytes and its weak parent (branch 10).
+			$item = self::writer_rule( $item, 'plan_item', array( $item, $line ), $item );
 			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
-				if ( 'attachment' === $item['kind'] && is_array( $ref ) && 'weak' === ( $ref['strength'] ?? null ) && 'post' === ( $ref['space'] ?? null ) && 'post_parent' === ( $ref['at'] ?? null ) && isset( $ref['id'] ) ) {
-					// The parent of an attachment, a weak reference (decision 16).
-					$item['weak_parent'] = (string) (int) $ref['id'];
-					continue;
-				}
 				if ( is_array( $ref ) && isset( $ref['space'], $ref['id'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) && 'strong' === ( $ref['strength'] ?? null ) ) {
 					$item['refs'][] = array( (string) $ref['space'], (string) (int) $ref['id'] );
 					if ( 'term' === $item['kind'] && 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
