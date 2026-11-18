@@ -90,6 +90,21 @@ final class AB_MCP_Sync_Menu_Writer {
 	}
 
 	/**
+	 * What the plan holds of a menu beside what every kind has (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::plan()): the positions it takes.
+	 *
+	 * @param array $item The item of the plan.
+	 * @param array $line Its line of the package of objects (form).
+	 * @return array The item.
+	 */
+	public static function plan_item( array $item, array $line ) {
+		// The positions it takes (its form on the staging site), for the
+		// order of the menus (branch 11, Codex round 1, B2).
+		$item['takes'] = self::line_positions( $line );
+		return $item;
+	}
+
+	/**
 	 * The positions a line names for its menu (its form on the staging
 	 * site), names only, for the order of the plan (Codex round 1 of branch
 	 * 11, B2); none where the form names none.
