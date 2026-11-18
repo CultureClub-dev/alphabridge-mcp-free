@@ -373,7 +373,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'sanitize_term'             => array( 1, 'sanitizer_refusal(): the sanitizers ahead, as wp_insert_term() and wp_update_term() run them (decision 17).' ),
 			'wp_cache_delete'           => array( 1, 'post_write(): the meta cache of the written term.' ),
 			'wp_find_hierarchy_loop'    => array( 1, 'loop(): the loop of parents wp_update_term() would break (wp_check_term_hierarchy_for_loops()), read before anything is written; the parents through wp_get_term_taxonomy_parent_id().' ),
-			'wp_get_term_taxonomy_parent_id' => array( 1, 'loop(): the parent here of a term the run does not move, beside the parents it gives the terms it writes (Codex round 1 on branch 9, B4); read for the check of a loop, never compared with the staging site.' ),
+			'wp_get_term_taxonomy_parent_id' => array( 2, 'loop(): the parent here of a term the run does not move, beside the parents it gives the terms it writes (Codex round 1 on branch 9, B4); read for the check of a loop, never compared with the staging site. term_depths(): the parent here of a term the run does not write, for the depth of the terms of the run in the tree it leaves, which orders their steps (Codex rounds 1 and 2 on branch 9, B4); read for the order, never compared with the staging site.' ),
 			'wp_insert_term'            => array( 1, 'write_row(): the way forward of a new term (decision 17).' ),
 			'wp_slash'                  => array( 6, 'sanitizer_refusal(), write_row() and restore_row(): the slashing wp_insert_term() and wp_update_term() expect of the name and the description.' ),
 			'wp_unique_term_slug'       => array( 1, 'precheck(): the slug WordPress would store for a new term, read before anything is written.' ),
@@ -461,7 +461,6 @@ final class SyncSafeCallsTest extends TestCase {
 			'_n' => array( 1, 'plan(): the same texts where a count decides the form, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 			'_x' => array( 1, 'preview(): the word compared for the environment of the report, in the language of the site: the person sees the preview (AB_MCP_Confirm_Token); no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
-			'wp_get_term_taxonomy_parent_id' => array( 1, 'term_depths(): the parent here of a term the run does not write, for the depth of the terms of the run in the tree it leaves, which orders their steps (Codex rounds 1 and 2 on branch 9, B4); read for the order, never compared with the staging site.' ),
 		),
 		'class-sync-pairs-tool.php' => array(
 			'__' => array( 48, 'the refusals and the preview of wp_site_pairs and of «Discard» on the page «Staging», in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),

@@ -1123,7 +1123,7 @@ return array(
 	array(
 		'id'      => 'inhalte/push-depth-given',
 		'clause'  => 'term_depths(): a term of the run stands under the parent the run gives it when the run writes that parent too',
-		'file'    => $pu,
+		'file'    => $tw,
 		'search'  => "\t\t\t\t\$given[ \$node ] = \$node_of[ (string) \$item['parent_ref'] ];",
 		'replace' => "\t\t\t\t\$given[ \$node ] = false;",
 		'run'     => $unit( 'SyncRunTest', 'testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown' ),
@@ -1132,7 +1132,7 @@ return array(
 	array(
 		'id'      => 'inhalte/push-depth-mapped',
 		'clause'  => 'term_depths(): else under its parent by the pair',
-		'file'    => $pu,
+		'file'    => $tw,
 		'search'  => "\t\t\t\t\$given[ \$node ] = null === \$here ? false : 'l:' . (int) \$here;",
 		'replace' => "\t\t\t\t\$given[ \$node ] = false;",
 		'run'     => $unit( 'SyncRunTest', 'testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown' ),
@@ -1141,7 +1141,7 @@ return array(
 	array(
 		'id'      => 'inhalte/push-depth-live-parent',
 		'clause'  => 'term_depths(): a term the run does not write stands under its parent here',
-		'file'    => $pu,
+		'file'    => $tw,
 		'search'  => "\t\t\t\t\t\$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( \$at, 2 ), \$taxonomy );",
 		'replace' => "\t\t\t\t\t\$parent = 0;",
 		'run'     => $unit( 'SyncRunTest', 'testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown' ),

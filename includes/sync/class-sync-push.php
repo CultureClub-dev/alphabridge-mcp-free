@@ -1233,70 +1233,16 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
-	 * The depth of each term the run writes in the tree it leaves: every
-	 * term here with its parent here, the terms of the run with the parent
-	 * they are given (the parent of the staging site, by the run when it
-	 * writes that parent too, else by its pair); a new term stands as a node
-	 * of its own until its step made it. 0 for a root; a parent without a
-	 * pair, or a loop (which the check locks, term:parent), ends the walk.
+	 * What the rule depths() of the writers of the plan gives, for the order
+	 * (N-c no. 6 to 8 of the seam): the depth of each term the run writes in
+	 * the tree it leaves; none where no writer of the plan has the rule.
 	 *
 	 * @param array    $items  The items of the plan (kind, op, staging_ref, live_ref, subtype, parent_ref).
 	 * @param callable $mapped Staging id of a term => its id here, or null.
 	 * @return array<int,int> n => depth, for the terms.
 	 */
 	private static function term_depths( array $items, callable $mapped ) {
-		$node_of = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'term' === $item['kind'] ) {
-				$node_of[ (string) $item['staging_ref'] ] = 'update' === $item['op'] ? 'l:' . (int) $item['live_ref'] : 'n:' . (string) $item['staging_ref'];
-			}
-		}
-		// The parent each term of the run is given: a node, null for none (a
-		// root), false where it has no counterpart here.
-		$given = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'term' !== $item['kind'] ) {
-				continue;
-			}
-			$node = $node_of[ (string) $item['staging_ref'] ];
-			if ( ! isset( $item['parent_ref'] ) ) {
-				$given[ $node ] = null;
-			} elseif ( isset( $node_of[ (string) $item['parent_ref'] ] ) ) {
-				$given[ $node ] = $node_of[ (string) $item['parent_ref'] ];
-			} else {
-				$here           = $mapped( (string) $item['parent_ref'] );
-				$given[ $node ] = null === $here ? false : 'l:' . (int) $here;
-			}
-		}
-		$out = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'term' !== $item['kind'] ) {
-				continue;
-			}
-			$taxonomy = isset( $item['subtype'] ) ? (string) $item['subtype'] : '';
-			$at       = $node_of[ (string) $item['staging_ref'] ];
-			$seen     = array( $at => true );
-			$depth    = 0;
-			while ( $depth <= self::MAX_OBJECTS ) {
-				if ( array_key_exists( $at, $given ) ) {
-					$up = $given[ $at ];
-				} elseif ( 0 === strpos( $at, 'l:' ) ) {
-					// A term the run does not write: its parent here.
-					$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( $at, 2 ), $taxonomy );
-					$up     = $parent > 0 ? 'l:' . $parent : null;
-				} else {
-					$up = null;
-				}
-				if ( ! is_string( $up ) || isset( $seen[ $up ] ) ) {
-					break;
-				}
-				$seen[ $up ] = true;
-				$at          = $up;
-				++$depth;
-			}
-			$out[ $n ] = $depth;
-		}
-		return $out;
+		return self::writers_rule( $items, 'depths', array( $items, $mapped ) );
 	}
 
 	/**
