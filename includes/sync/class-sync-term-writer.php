@@ -240,6 +240,23 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
+	 * What the plan holds of a term from one of its strong references (rule
+	 * of the seam, D4, asked by AB_MCP_Sync_Push::plan() for each strong
+	 * reference of the line of an item): the parent the reference names.
+	 *
+	 * @param array $item The item of the plan.
+	 * @param array $ref  A strong reference of its line (space, id, at).
+	 * @return array The item.
+	 */
+	public static function strong_parent( array $item, array $ref ) {
+		if ( 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
+			// The parent of a term, for the order (order()).
+			$item['parent_ref'] = (string) (int) $ref['id'];
+		}
+		return $item;
+	}
+
+	/**
 	 * The parent a run gives a term of this site it updates, for the check
 	 * before the first write (rule N-c no. 1 of the seam, asked by
 	 * AB_MCP_Sync_Engine::planned_parents()): the parent here its target

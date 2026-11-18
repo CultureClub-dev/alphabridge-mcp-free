@@ -438,10 +438,7 @@ final class AB_MCP_Sync_Push {
 			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
 				if ( is_array( $ref ) && isset( $ref['space'], $ref['id'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) && 'strong' === ( $ref['strength'] ?? null ) ) {
 					$item['refs'][] = array( (string) $ref['space'], (string) (int) $ref['id'] );
-					if ( 'term' === $item['kind'] && 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
-						// The parent of a term, for the order (order()).
-						$item['parent_ref'] = (string) (int) $ref['id'];
-					}
+					$item           = self::writer_rule( $item, 'strong_parent', array( $item, $ref ), $item );
 				}
 			}
 			$items[ $n ] = $item;
