@@ -609,9 +609,7 @@ final class AB_MCP_Sync_Push {
 			if ( is_wp_error( $current ) ) {
 				return $current;
 			}
-			$absent = 'term' === $item['kind']
-				? array( 'taxonomy' => (string) ( $item['subtype'] ?? '' ), 'slug' => (string) $item['staging_ref'] )
-				: array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' );
+			$absent = self::absent_identity( $item );
 			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => $absent ) );
 		}
 		$depends_of = array();
@@ -987,6 +985,20 @@ final class AB_MCP_Sync_Push {
 	 */
 	private static function made_in_posts( array $item ) {
 		return 'post' === $item['kind'] || self::writer_rule( $item, 'made_in_posts', array( $item ), false );
+	}
+
+	/**
+	 * The identity of an object of the plan that is not here, for the
+	 * reserve of its backup (N-c no. 4 of the seam): what the rule
+	 * absent_identity() of its writer gives (a term: its taxonomy and slug),
+	 * else the form of a post, which the core holds for every kind without
+	 * the rule.
+	 *
+	 * @param array $item The item of the plan (kind, subtype, staging_ref).
+	 * @return array
+	 */
+	private static function absent_identity( array $item ) {
+		return self::writer_rule( $item, 'absent_identity', array( $item ), array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' ) );
 	}
 
 	/**

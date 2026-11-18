@@ -257,6 +257,18 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
+	 * The identity of a term of the plan that is not here, for the reserve
+	 * of its backup (rule of the seam, N-c no. 4, asked by
+	 * AB_MCP_Sync_Push::plan()): its taxonomy and its slug.
+	 *
+	 * @param array $item The item of the plan (subtype, staging_ref).
+	 * @return array
+	 */
+	public static function absent_identity( array $item ) {
+		return array( 'taxonomy' => (string) ( $item['subtype'] ?? '' ), 'slug' => (string) $item['staging_ref'] );
+	}
+
+	/**
 	 * The parent a run gives a term of this site it updates, for the check
 	 * before the first write (rule N-c no. 1 of the seam, asked by
 	 * AB_MCP_Sync_Engine::planned_parents()): the parent here its target
