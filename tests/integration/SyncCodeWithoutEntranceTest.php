@@ -23,6 +23,10 @@
  *   had run them. The check closes the run with that text as the finding of
  *   each step, no error; written() itself gives it without the entrance and
  *   the finding of the code (none) with it.
+ * - (d) with the entrance of the planning, as this plugin puts it, begin()
+ *   of a run of the code makes no refusal (no ab_mcp_sync_push_packages
+ *   through the action wp_error_added, its text never through the filter
+ *   gettext), and the run begins as before.
  *
  * The way back without the entrance holds SyncCodeRunTest (with the place of
  * AB_MCP_Sync_Revert emptied). The entrances are put back after each case.
@@ -471,5 +475,43 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		self::assertSame( 'closed_findings', $closed['state'] );
 		$found = self::findings( $run_id );
 		self::assertSame( array( array( self::NONE ), array( self::NONE ) ), array( $found[2] ?? null, $found[3] ?? null ) );
+	}
+
+	/**
+	 * Prüft: (d) with the entrance of the planning (as this plugin puts it)
+	 * begin() of a run of the code makes no refusal: no WP_Error
+	 * ab_mcp_sync_push_packages through the action wp_error_added, the text
+	 * of packages_refusal() never through the filter gettext; the run
+	 * begins and its check runs as before. The refusal is made only without
+	 * the entrance (a).
+	 * Sonst: every run of the code that begins makes and drops a refusal,
+	 * with the hooks of WordPress on it (the lead on 7ae8e08, Nachtrag 2).
+	 */
+	public function testWithTheEntranceOfThePlanningARunOfTheCodeBeginsWithoutMakingTheRefusal(): void {
+		$args    = self::changed();
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+		$made  = array();
+		$said  = array();
+		$added = static function ( $code ) use ( &$made ) {
+			$made[] = (string) $code;
+		};
+		$text  = static function ( $translation, $text ) use ( &$said ) {
+			$said[] = (string) $text;
+			return $translation;
+		};
+		add_action( 'wp_error_added', $added );
+		add_filter( 'gettext', $text, 10, 2 );
+		try {
+			$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		} finally {
+			remove_action( 'wp_error_added', $added );
+			remove_filter( 'gettext', $text, 10 );
+		}
+		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_code() . ': ' . $run->get_error_message() : '' );
+		self::assertSame( 'open', $run['state'], 'The run begins.' );
+		self::assertNotContains( 'ab_mcp_sync_push_packages', $made, 'No refusal of the packages is made.' );
+		self::assertSame( array(), preg_grep( '/^A run writes from packages of objects of the staging site/', $said ), 'Its text is never asked for.' );
+		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'], 'The check of the run, as before.' );
 	}
 }
