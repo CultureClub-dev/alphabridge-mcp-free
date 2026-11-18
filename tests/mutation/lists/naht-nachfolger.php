@@ -19,9 +19,15 @@
  * of five old entries of medien.php, each in a rule of
  * AB_MCP_Sync_Attachment_Writer.
  *
+ * Part 2b of T3 (menu, post and term: E7, the parent of a term, N-c no. 5):
+ * four successors of four old entries of struktur.php and inhalte.php, two
+ * in rules of AB_MCP_Sync_Menu_Writer, two in rules of
+ * AB_MCP_Sync_Term_Writer.
+ *
  * Held by the unit suite (SyncRunTest), naht-nachfolger/vorlagen-theme-plan
  * by the integration suite (SyncTemplatesTest), the five of part 2a as well
- * (SyncMediaTest).
+ * (SyncMediaTest), of part 2b the two of the menus (SyncStructureTest) and
+ * the parent of a term (SyncContentTest).
  *
  * @package AlphaBridge_MCP
  */
@@ -215,5 +221,41 @@ return array(
 		'replace' => "\t\t\tif ( true ) {",
 		'run'     => $it( 'SyncMediaTest', 'testWhatWouldReplaceShareOrLinkAFileOrIsOfATypeThisAccountMayNotUploadLocksBeforeAnythingIsWritten' ),
 		'expect'  => '/testWhatWouldReplaceShareOrLinkAFileOrIsOfATypeThisAccountMayNotUploadLocksBeforeAnythingIsWritten/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/struktur-b2-takes',
+		'clause'  => 'plan(): the positions a menu takes, from its form (B2) (Nachfolger von struktur/b2-takes)',
+		'file'    => $mw,
+		'search'  => "\t\t\$item['takes'] = self::line_positions( \$line );",
+		'replace' => "/* removed */",
+		'run'     => $it( 'SyncStructureTest', 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked' ),
+		'expect'  => '/testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/struktur-b2-holder',
+		'clause'  => 'plan(): a menu after the menu of the run that holds a position it takes (B2) (Nachfolger von struktur/b2-holder)',
+		'file'    => $mw,
+		'search'  => "\t\t\t\tif ( null !== \$holder && isset( \$menus[ \$holder ] ) && \$menus[ \$holder ] !== \$n ) {",
+		'replace' => "\t\t\t\tif ( false ) {",
+		'run'     => $it( 'SyncStructureTest', 'testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked' ),
+		'expect'  => '/testAMenuThatTakesThePositionOfAnotherMenuOfTheRunGoesAfterItAndAnExchangeIsLocked/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/inhalte-push-order-depth',
+		'clause'  => 'order(): the terms by their depth in the tree the run leaves, ancestors first (Codex rounds 1 and 2, B4) (Nachfolger von inhalte/push-order-depth)',
+		'file'    => $tw,
+		'search'  => "\t\treturn array( 0, isset( \$item['depth'] ) ? (int) \$item['depth'] : 0, (int) \$n );",
+		'replace' => "\t\treturn array( 0, 0, (int) \$n );",
+		'run'     => $unit( 'SyncRunTest', 'testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown' ),
+		'expect'  => '/testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/inhalte-push-parent-ref',
+		'clause'  => 'plan(): the parent of a term from its references, for the order (Nachfolger von inhalte/push-parent-ref)',
+		'file'    => $tw,
+		'search'  => "\t\t\t\$item['parent_ref'] = (string) (int) \$ref['id'];\n",
+		'replace' => "/* removed */\n",
+		'run'     => $it( 'SyncContentTest', 'testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell' ),
+		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
 	),
 );

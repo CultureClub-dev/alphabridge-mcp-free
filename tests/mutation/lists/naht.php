@@ -8,7 +8,8 @@
  * journal (fixed to post, fixed to ''); the check before the first write
  * asks the rule planned_parent() of a writer (N-c no. 1). T3: verdict()
  * locks a kind without a writer (n-verdict); plan() asks the rules
- * made_in_posts() and weak_parent() of a writer (N-c no. 2 and 3). Written
+ * made_in_posts() and weak_parent() of a writer (N-c no. 2 and 3), and
+ * absent_identity() (no. 4); order() asks first_by_depth() (no. 5). Written
  * by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
@@ -18,9 +19,12 @@
  * Not here either: writer_of() asking the subtype for a kind registered
  * whole as well. It is equivalent: a whole kind answers every subtype.
  *
- * Held by the unit suite (SyncWritersTest, SyncWriterOfTest, SyncPlanLockTest),
- * n-nc-854 by the integration suite (SyncContentTest), n-nc-539 and n-nc-545
- * as well (SyncMediaTest).
+ * Held by the unit suite (SyncWritersTest, SyncWriterOfTest, SyncPlanLockTest,
+ * SyncPlanRulesTest), n-nc-854 by the integration suite (SyncContentTest),
+ * n-nc-539 and n-nc-545 as well (SyncMediaTest). n-nc-1197 by U4
+ * (SyncPlanRulesTest): the test the build sheet named (SyncContentTest, a new
+ * category with a new child and a new post in it) does not see it, as the
+ * three depend on each other and their order follows from that alone.
  *
  * @package AlphaBridge_MCP
  */
@@ -28,6 +32,7 @@
 $unit = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWritersTest' );
 $of   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWriterOfTest' );
 $rule = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanLockTest' );
+$nc   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanRulesTest' );
 $swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncContentTest::testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell( |$)/' );
 $clip = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncMediaTest::testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack( |$)/' );
 
@@ -152,5 +157,23 @@ return array(
 		'replace' => "array( \$item, array() );",
 		'run'     => $clip,
 		'expect'  => '/testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack/',
+	),
+	array(
+		'id'      => 'naht/n-nc-680',
+		'clause'  => 'plan(): the identity of a term that is not here, for the reserve of its backup, by the rule absent_identity() of its writer',
+		'file'    => $pu,
+		'search'  => "\t\treturn self::writer_rule( \$item, 'absent_identity', array( \$item ), array( 'post_type' => (string) ( \$item['subtype'] ?? '' ), 'post_name' => (string) \$item['staging_ref'], 'theme' => '' ) );",
+		'replace' => "\t\treturn array( 'post_type' => (string) ( \$item['subtype'] ?? '' ), 'post_name' => (string) \$item['staging_ref'], 'theme' => '' );",
+		'run'     => $nc,
+		'expect'  => '/testTheIdentityOfAnObjectThatIsNotHereIsByTheRuleOfATermElseTheFormOfAPost/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1197',
+		'clause'  => 'order(): the terms first, by their depth, by the rule first_by_depth() of their writer',
+		'file'    => $pu,
+		'search'  => "\t\t\t\t\t\$first = self::writer_rule( \$items[ \$n ], 'first_by_depth', array( \$items[ \$n ], \$n ) );",
+		'replace' => "\t\t\t\t\t\$first = null;",
+		'run'     => $nc,
+		'expect'  => '/testTheTermsComeFirstInTheOrderByTheirDepth/',
 	),
 );
