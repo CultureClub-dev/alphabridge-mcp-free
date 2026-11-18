@@ -196,6 +196,20 @@ final class AB_MCP_Sync_Attachment_Writer {
 	}
 
 	/**
+	 * Whether an attachment is an object of the space of posts, a parent
+	 * another attachment may hang under (rule of the seam, N-c no. 2, asked
+	 * by AB_MCP_Sync_Push::plan()): it is; the poster image of a new video
+	 * hangs under the video (GitHub Codex on free#140, P2).
+	 *
+	 * @param array $item The item of the plan.
+	 * @return bool
+	 */
+	public static function made_in_posts( array $item ) {
+		unset( $item );
+		return true;
+	}
+
+	/**
 	 * What a step writes for one attachment, from its line of the package of
 	 * objects and the item of the plan (see AB_MCP_Sync_Post_Writer::
 	 * target_of() for the fields): the row, the meta by key, the terms, the

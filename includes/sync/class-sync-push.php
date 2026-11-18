@@ -506,7 +506,7 @@ final class AB_MCP_Sync_Push {
 		// the weak one makes no cycle; GitHub Codex on free#140, P2).
 		$made_posts = array();
 		foreach ( $items as $n => $item ) {
-			if ( in_array( $item['kind'], array( 'post', 'attachment' ), true ) && 'create' === $item['op'] ) {
+			if ( self::made_in_posts( $item ) && 'create' === $item['op'] ) {
 				$made_posts[ (string) $item['staging_ref'] ] = $n;
 			}
 		}
@@ -986,6 +986,19 @@ final class AB_MCP_Sync_Push {
 	private static function writer_rule( array $of, $rule, array $args, $none = null ) {
 		$w = AB_MCP_Sync_Engine::writer( (string) $of['kind'], (string) $of['subtype'] );
 		return null !== $w && self::has_rule( $w, $rule ) ? $w::$rule( ...$args ) : $none;
+	}
+
+	/**
+	 * Whether an item is an object of the space of posts, a parent an
+	 * attachment may hang under (N-c no. 2 of the seam): a post, a kind of
+	 * this plugin, or an object whose writer says so by its rule
+	 * made_in_posts() (an attachment).
+	 *
+	 * @param array $item The item of the plan.
+	 * @return bool
+	 */
+	private static function made_in_posts( array $item ) {
+		return 'post' === $item['kind'] || self::writer_rule( $item, 'made_in_posts', array( $item ), false );
 	}
 
 	/**
