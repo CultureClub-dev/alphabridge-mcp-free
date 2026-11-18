@@ -70,6 +70,26 @@ final class AB_MCP_Sync_Menu_Writer {
 	/* ------------------------------------------------------------ prepare */
 
 	/**
+	 * The lock of the plan for an entry of a menu, or null (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		// The structure of the site (branch 11): no choice «as draft»; a
+		// widget area or a core option is changed, never made by a run (the
+		// additional CSS is locked to be made in the report already).
+		if ( $as_draft ) {
+			/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */
+			return $lock( sprintf( __( 'A %s has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ), (string) $entry['kind'] ) );
+		}
+		return null;
+	}
+
+	/**
 	 * The positions a line names for its menu (its form on the staging
 	 * site), names only, for the order of the plan (Codex round 1 of branch
 	 * 11, B2); none where the form names none.

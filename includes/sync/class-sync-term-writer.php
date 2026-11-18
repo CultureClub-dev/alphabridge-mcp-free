@@ -222,6 +222,24 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
+	 * The lock of the plan for an entry of a term, or null (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		unset( $as_draft );
+		if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), self::TAXONOMIES, true ) ) {
+			/* translators: 1: the taxonomies the engine writes, separated by commas, 2: the taxonomy of the entry. */
+			return $lock( sprintf( __( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', 'alphabridge-mcp' ), implode( ', ', self::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+		}
+		return null;
+	}
+
+	/**
 	 * The parent a run gives a term of this site it updates, for the check
 	 * before the first write (rule N-c no. 1 of the seam, asked by
 	 * AB_MCP_Sync_Engine::planned_parents()): the parent here its target

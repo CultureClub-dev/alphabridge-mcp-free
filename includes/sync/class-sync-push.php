@@ -951,47 +951,16 @@ final class AB_MCP_Sync_Push {
 			/* translators: %s: the action of the entry, as the report names it (keep, …). */
 			return $lock( sprintf( __( 'The report says %s for this entry: a takeover writes nothing for it.', 'alphabridge-mcp' ), $action ) );
 		}
-		if ( 'term' === $entry['kind'] ) {
-			if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Term_Writer::TAXONOMIES, true ) ) {
-				/* translators: 1: the taxonomies the engine writes, separated by commas, 2: the taxonomy of the entry. */
-				return $lock( sprintf( __( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', 'alphabridge-mcp' ), implode( ', ', AB_MCP_Sync_Term_Writer::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
-			}
-		} elseif ( 'attachment' === $entry['kind'] ) {
-			// An attachment with its files (branch 10): no choice «as draft».
-			if ( $as_draft ) {
-				return $lock( __( 'An attachment has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ) );
-			}
-		} elseif ( in_array( $entry['kind'], self::STRUCTURE, true ) ) {
-			// The structure of the site (branch 11): no choice «as draft»; a
-			// widget area or a core option is changed, never made by a run (the
-			// additional CSS is locked to be made in the report already).
-			if ( $as_draft ) {
-				/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */
-				return $lock( sprintf( __( 'A %s has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ), (string) $entry['kind'] ) );
-			}
-			if ( 'create' === $action && in_array( $entry['kind'], array( 'widget_area', 'option', 'custom_css' ), true ) ) {
-				$held = AB_MCP_Sync_Kinds::lock( (string) $entry['kind'], 'create' );
-				return $lock( sprintf( '%1$s (%2$s)', AB_MCP_Sync_Said::text( (string) $held['reason'] ), (string) $held['key'] ), (string) $held['stage'] );
-			}
-		} elseif ( 'post' !== $entry['kind'] ) {
+		// The kind as the registration of the writers has it (D4 of the seam):
+		// without a writer locked; with one, the lock its rule plan_lock() gives.
+		$w = AB_MCP_Sync_Engine::writer( (string) $entry['kind'], (string) ( $entry['subtype'] ?? '' ) );
+		if ( null === $w ) {
 			/* translators: %s: kind of the object, as the tools name it. */
 			return $lock( sprintf( __( 'The kind %s is not written by a run of this version.', 'alphabridge-mcp' ), (string) $entry['kind'] ), 'Z8d' );
-		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
-			/* translators: 1: the post types the engine writes, separated by commas, 2: the post type of the entry. */
-			return $lock( sprintf( __( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', 'alphabridge-mcp' ), implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
-		} elseif ( in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::THEMED, true ) ) {
-			// A template, a template part or the global styles of a theme that
-			// is not the active one here (branch 9b): a staging site keeps the
-			// rows of every theme it tried, so the plan names them locked with
-			// the way (all leaves them out) rather than the check before the
-			// first write ending the run for them; the check and the boundary
-			// ask it again (AB_MCP_Sync_Post_Writer::theme_refusal()).
-			$theme = isset( $entry['staging']['identity']['theme'] ) && is_string( $entry['staging']['identity']['theme'] ) ? $entry['staging']['identity']['theme'] : '';
-			$other = AB_MCP_Sync_Post_Writer::inactive_theme_detail( (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $theme );
-			if ( null !== $other ) {
-				$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );
-				return $lock( sprintf( '%1$s (post:theme_mismatch) %2$s', AB_MCP_Sync_Said::text( (string) $held['reason'] ), $other ), (string) $held['stage'] );
-			}
+		}
+		$held = self::has_rule( $w, 'plan_lock' ) ? $w::plan_lock( $entry, $as_draft, $lock ) : null;
+		if ( null !== $held ) {
+			return $held;
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
 		if ( '' === $staging ) {
@@ -1017,6 +986,18 @@ final class AB_MCP_Sync_Push {
 				'action'      => $action,
 			),
 		);
+	}
+
+	/**
+	 * Whether the writer of a kind has the rule $rule for the plan (D4 of
+	 * the seam), as AB_MCP_Sync_Engine::has_rule() for the engine.
+	 *
+	 * @param string $w    The writer (AB_MCP_Sync_Engine::writer()).
+	 * @param string $rule The name of the rule.
+	 * @return bool
+	 */
+	private static function has_rule( $w, $rule ) {
+		return method_exists( $w, $rule );
 	}
 
 	/**

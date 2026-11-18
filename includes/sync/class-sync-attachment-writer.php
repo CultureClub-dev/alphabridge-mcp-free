@@ -113,6 +113,24 @@ final class AB_MCP_Sync_Attachment_Writer {
 	/* ------------------------------------------------------------ prepare */
 
 	/**
+	 * The lock of the plan for an entry of an attachment, or null (rule of
+	 * the seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		unset( $entry );
+		// An attachment with its files (branch 10): no choice «as draft».
+		if ( $as_draft ) {
+			return $lock( __( 'An attachment has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ) );
+		}
+		return null;
+	}
+
+	/**
 	 * What a step writes for one attachment, from its line of the package of
 	 * objects and the item of the plan (see AB_MCP_Sync_Post_Writer::
 	 * target_of() for the fields): the row, the meta by key, the terms, the
