@@ -24,6 +24,11 @@
  * in rules of AB_MCP_Sync_Menu_Writer, two in rules of
  * AB_MCP_Sync_Term_Writer.
  *
+ * T4 (the forward entrance of the code, B5): two successors of the two
+ * entries of tausch.php on run_write() of the engine, whose lines changed
+ * with the entrance; their test is the one of the old entries
+ * (SyncCodeRunTest).
+ *
  * Held by the unit suite (SyncRunTest), naht-nachfolger/vorlagen-theme-plan
  * by the integration suite (SyncTemplatesTest), the five of part 2a as well
  * (SyncMediaTest), of part 2b the two of the menus (SyncStructureTest) and
@@ -257,5 +262,23 @@ return array(
 		'replace' => "/* removed */\n",
 		'run'     => $it( 'SyncContentTest', 'testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell' ),
 		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/tausch-engine-code-plan-code',
+		'clause'  => 'run_write(): a plan of the code that does not read is never taken for a plan of the contents (Nachfolger von tausch/engine-code-plan-code)',
+		'file'    => $en,
+		'search'  => "\t\tif ( null !== \$unit ) {\n\t\t\treturn is_wp_error( \$unit ) ? \$unit : call_user_func( array( self::\$code, 'run' ), \$run, \$step, \$unit );",
+		'replace' => "\t\tif ( is_array( \$unit ) ) {\n\t\t\treturn is_wp_error( \$unit ) ? \$unit : call_user_func( array( self::\$code, 'run' ), \$run, \$step, \$unit );",
+		'run'     => $it( 'SyncCodeRunTest', 'testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing' ),
+		'expect'  => '/testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing/',
+	),
+	array(
+		'id'      => 'naht-nachfolger/tausch-engine-code-plan-refused',
+		'clause'  => 'run_write(): a plan of the code that does not read refuses its step with the reason and the way (Nachfolger von tausch/engine-code-plan-refused)',
+		'file'    => $en,
+		'search'  => "\t\tif ( null !== \$unit ) {\n\t\t\treturn is_wp_error( \$unit ) ? \$unit : call_user_func( array( self::\$code, 'run' ), \$run, \$step, \$unit );",
+		'replace' => "\t\tif ( null !== \$unit ) {\n\t\t\treturn call_user_func( array( self::\$code, 'run' ), \$run, \$step, \$unit );",
+		'run'     => $it( 'SyncCodeRunTest', 'testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing' ),
+		'expect'  => '/testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing/',
 	),
 );

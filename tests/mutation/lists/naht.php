@@ -12,7 +12,9 @@
  * absent_identity() (no. 4); order() asks first_by_depth() (no. 5);
  * term_depths() asks depths() (no. 6 to 8), whose node, given parent and
  * depth the counter-probes n-nc-1265, n-nc-1273 and n-nc-1288 change in the
- * rule of the term writer. Written by hand.
+ * rule of the term writer. T4: run_write() and written() ask the forward
+ * entrance of the engine (n-code-vor, n-code-pruefung), plan() the one of the
+ * planning in Push (n-plan-code). Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -29,7 +31,8 @@
  * three depend on each other and their order follows from that alone.
  * n-nc-1265, n-nc-1273 and n-nc-1288 by U4 as well: the tests the build sheet
  * named (SyncContentTest, two categories that swap their places, and the new
- * category with its child) do not see them.
+ * category with its child) do not see them. The three of T4 by I4
+ * (SyncCodeWithoutEntranceTest), the only test that empties those entrances.
  *
  * @package AlphaBridge_MCP
  */
@@ -40,6 +43,7 @@ $rule = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanLockT
 $nc   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanRulesTest' );
 $swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncContentTest::testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell( |$)/' );
 $clip = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncMediaTest::testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack( |$)/' );
+$i4   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncCodeWithoutEntranceTest::' . $test . '( |$)/' );
 
 $sw = 'includes/sync/class-sync-writers.php';
 $en = 'includes/sync/class-sync-engine.php';
@@ -208,5 +212,32 @@ return array(
 		'replace' => "\t\t\t\$out[ \$n ] = 0;",
 		'run'     => $nc,
 		'expect'  => '/testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter/',
+	),
+	array(
+		'id'      => 'naht/n-code-vor',
+		'clause'  => 'run_write(): a step of the code by the forward entrance of the engine, its stage failed without it',
+		'file'    => $en,
+		'search'  => "\t\t\$unit = self::code_item( \$plan, \$step['seq'] );\n\t\tif ( is_string( \$unit ) ) {\n\t\t\treturn self::fail_step( (int) \$run['run_id'], (int) \$step['seq'], 'planned', \$unit );\n\t\t}\n\t\tif ( null !== \$unit ) {\n\t\t\treturn is_wp_error( \$unit ) ? \$unit : call_user_func( array( self::\$code, 'run' ), \$run, \$step, \$unit );",
+		'replace' => "\t\t\$unit = AB_MCP_Sync_Code_Ops::item( \$plan, \$step['seq'] );\n\t\tif ( null !== \$unit ) {\n\t\t\treturn is_wp_error( \$unit ) ? \$unit : AB_MCP_Sync_Code_Ops::run( \$run, \$step, \$unit );",
+		'run'     => $i4( 'testWithoutTheForwardEntranceAStepOfTheCodeFailsAndNothingIsStagedOrSwapped' ),
+		'expect'  => '/testWithoutTheForwardEntranceAStepOfTheCodeFailsAndNothingIsStagedOrSwapped/',
+	),
+	array(
+		'id'      => 'naht/n-code-pruefung',
+		'clause'  => 'written(): the check of a step of the code by the forward entrance of the engine, a finding without it',
+		'file'    => $en,
+		'search'  => "\t\t\$unit = self::code_item( \$run['plan'], \$one['seq'] );\n\t\tif ( null !== \$unit ) {\n\t\t\t\$found = is_wp_error( \$unit ) ? \$unit->get_error_message() : ( is_string( \$unit ) ? \$unit : call_user_func( array( self::\$code, 'finding' ), \$one, \$unit ) );",
+		'replace' => "\t\t\$unit = AB_MCP_Sync_Code_Ops::item( \$run['plan'], \$one['seq'] );\n\t\tif ( null !== \$unit ) {\n\t\t\t\$found = is_wp_error( \$unit ) ? \$unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( \$one, \$unit );",
+		'run'     => $i4( 'testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings' ),
+		'expect'  => '/testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings/',
+	),
+	array(
+		'id'      => 'naht/n-plan-code',
+		'clause'  => 'plan(): a plan of the code only by the entrance of the planning, none without it',
+		'file'    => $pu,
+		'search'  => "\t\t\$code = self::code_plan( 'of', array( \$found, \$entries, \$selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) ) );",
+		'replace' => "\t\t\$code = AB_MCP_Sync_Code_Plan::of( \$found, \$entries, \$selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) );",
+		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
+		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
 	),
 );
