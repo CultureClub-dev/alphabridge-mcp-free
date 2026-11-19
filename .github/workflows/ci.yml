@@ -176,7 +176,12 @@ jobs:
     # take the 13 minutes more is not measured yet; the step «Time of each
     # class of the integration suite» below prints it from the next run on.
     # Same runner, no new jobs; before 35 (19:03-22:36 on free#141).
-    timeout-minutes: 55
+    # 70: on free#155 the job took 43:13 at 63a3e27 (run 44154377078) and
+    # 50:09 at f69155e (run 44249774571, 2545 tests); at 7871bf6 (run
+    # 44429982611, attempt 1) the suite reached 2501 of 2559 tests after
+    # 53:51 and the job stopped at 55. Second raise on this PR (35, 55, 70);
+    # a further one splits the job or speeds up its slowest classes instead.
+    timeout-minutes: 70
     services:
       mariadb:
         image: mariadb:11.4
