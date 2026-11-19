@@ -81,8 +81,8 @@
  * OPCACHE (invalidate(), Z13): the one wrapper of
  * AB_MCP_Own_Files::invalidate_opcache() in the swap; only invalidated or
  * not_active let it go on, in the form of its row swap.opcache. After the
- * swap and after its way back, for each PHP file of the old and of the new
- * version under its path at the target (invalidated()).
+ * swap and after its way back, for each PHP file that lies at the target
+ * then (invalidated(); GRENZEN-CODE.md, G-5-26).
  *
  * THE CALLS TO THE OUTSIDE (plan 8.3, branch 5: rename(), the journal and
  * the mark of the swap, the note of the replacement, OPcache, the test
@@ -345,7 +345,7 @@ final class AB_MCP_Sync_Code_Swap {
 	/**
 	 * Seconds a swap keeps beyond twice its test requests before (E5 2): the
 	 * place of the backup, the journal, the mark and the note, the two
-	 * renames, OPcache of each file replaced and the readings of close(). A
+	 * renames, OPcache of each PHP file there and the readings of close(). A
 	 * named start value without a measurement; the measurement of branch 5
 	 * (part G of the rest) names the real durations.
 	 */
@@ -1144,7 +1144,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 * The swap of a unit in one call (plan E5 6 to 11 as Variante b keeps
 	 * them, 15.23): prepare() under the lock for changes; then the place of
 	 * the old version in a group of the backups of its own (plan_of()), the time once
-	 * more, rename_marked(), OPcache for each PHP file replaced, close() and
+	 * more, rename_marked(), OPcache for each PHP file at the target, close() and
 	 * the new bases of the files of its pair; the step ends with its journal
 	 * and result. The lock prepare() took is given back in every way. A unit
 	 * made new is not swapped. Before prepare() the rights of E10 for the
@@ -1589,7 +1589,7 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * After the two renames: OPcache for each PHP file replaced, close(),
+	 * After the two renames: OPcache for each PHP file at the target, close(),
 	 * the new bases of the files of the pair (E5 11), the step done. A
 	 * failure on the way ends the step unclear (15.23 «zu 2»: the way back
 	 * of the run puts the old version back; the way by hand is the
@@ -1604,7 +1604,7 @@ final class AB_MCP_Sync_Code_Swap {
 	 */
 	private static function after_renames( array $in, array $prepared, array $plan, array $moved ) {
 		$unit    = $in['unit'];
-		$opcache = self::invalidated( $plan, array( $plan['old']['path'], $plan['target'] ), $in['until'] );
+		$opcache = self::invalidated( $plan['target'], $in['until'] );
 		if ( is_wp_error( $opcache ) ) {
 			// Whatever is put back or left, OPcache is to be cleared at the
 			// host (the lead on D2a 4). close() was not reached, so nothing
@@ -1666,32 +1666,28 @@ final class AB_MCP_Sync_Code_Swap {
 	}
 
 	/**
-	 * OPcache for each PHP file replaced (E5 8, Z13): every PHP file below
-	 * each of the roots, each by its path at the target, through
-	 * invalidate(): after the swap the old version (now in the backup) and
-	 * the new one (now at the target); after its way back the old version
-	 * at the target and the new one where restored() moved it. The paths,
-	 * sorted; the error where one is not invalidated or not_active, or the
-	 * files below a root could not all be listed (php_paths()).
+	 * OPcache for each PHP file at the target (E5 8, Z13): every PHP file
+	 * that lies below the target now, through invalidate(): after the swap
+	 * the new version, after its way back the old one. A PHP file only the
+	 * version moved away has gets no call (its path at the target is gone;
+	 * its entry stays until OPcache is reset, GRENZEN-CODE.md, G-5-26). The
+	 * paths, sorted; the error where one is not invalidated or not_active,
+	 * or the files below the target could not all be listed (php_paths()).
 	 *
-	 * @param array    $plan  plan_of(), or the journal of the swap.
-	 * @param string[] $roots The folders or files whose PHP files were at the target or are now.
-	 * @param float    $until When the call has to be over.
+	 * @param string $target The folder or file of the unit.
+	 * @param float  $until  When the call has to be over.
 	 * @return string[]|WP_Error
 	 */
-	private static function invalidated( array $plan, array $roots, $until ) {
-		$paths = array();
-		foreach ( $roots as $root ) {
-			$found = self::php_paths( $root, $until );
-			if ( null === $found ) {
-				/* translators: %s: a folder (absolute path). */
-				return new WP_Error( 'code:opcache_files', sprintf( __( 'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file replaced, and this site may still run the code it had before.', 'alphabridge-mcp' ), $root ) );
-			}
-			foreach ( $found as $rel ) {
-				$paths[ '' === $rel ? $plan['target'] : $plan['target'] . '/' . $rel ] = true;
-			}
+	private static function invalidated( $target, $until ) {
+		$found = self::php_paths( $target, $until );
+		if ( null === $found ) {
+			/* translators: %s: a folder (absolute path). */
+			return new WP_Error( 'code:opcache_files', sprintf( __( 'The PHP files in %s could not all be listed (a folder or an entry not read, an entry neither a folder nor a file, or the time of this call over), so OPcache was not cleared for each file replaced, and this site may still run the code it had before.', 'alphabridge-mcp' ), $target ) );
 		}
-		$paths = array_keys( $paths );
+		$paths = array();
+		foreach ( $found as $rel ) {
+			$paths[] = '' === $rel ? $target : $target . '/' . $rel;
+		}
 		sort( $paths, SORT_STRING );
 		foreach ( $paths as $path ) {
 			$done = self::invalidate( $path );
@@ -2290,7 +2286,7 @@ final class AB_MCP_Sync_Code_Swap {
 			return $begun;
 		}
 		$moved   = self::moved_back( $in, $journal, $slot );
-		$opcache = isset( $moved['fault'] ) ? array() : self::invalidated( $journal, $moved['moved'], $in['until'] );
+		$opcache = isset( $moved['fault'] ) || ! $moved['moved'] ? array() : self::invalidated( $journal['target'], $in['until'] );
 		if ( is_wp_error( $opcache ) ) {
 			$moved['fault'] = $opcache->get_error_message() . ' ' . __( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now.', 'alphabridge-mcp' );
 		}
@@ -2368,12 +2364,12 @@ final class AB_MCP_Sync_Code_Swap {
 	 * @param array      $in   The step of the way back: run_id, unit (kind, ref, seq), until.
 	 * @param array      $plan The journal of the swap.
 	 * @param array|null $slot The place of the new version (put_tree(), taken before the step began); null where the target was empty.
-	 * @return array moved (the roots for OPcache) and place (of the new version), or fault (what happened in this call).
+	 * @return array moved (whether the old version was put back now: then OPcache for the target) and place (of the new version), or fault (what happened in this call).
 	 */
 	private static function moved_back( array $in, array $plan, $slot ) {
 		$new = null === $slot ? true : self::at_target( $in, $plan, 'new' );
 		if ( true !== $new ) {
-			return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => array() ) : array( 'fault' => $new->get_error_message() );
+			return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => false ) : array( 'fault' => $new->get_error_message() );
 		}
 		$intact = self::in_backup( $plan['old'], $in['until'] );
 		if ( true !== $intact ) {
@@ -2381,7 +2377,7 @@ final class AB_MCP_Sync_Code_Swap {
 		}
 		$failed = array( 'fault' => __( 'A rename of the way back failed (rename() failed, or the place was not free).', 'alphabridge-mcp' ) );
 		if ( null === $slot ) {
-			return self::move( $plan['old']['path'], $plan['target'] ) ? array( 'moved' => array( $plan['target'] ) ) : $failed;
+			return self::move( $plan['old']['path'], $plan['target'] ) ? array( 'moved' => true ) : $failed;
 		}
 		if ( ! self::move( $plan['target'], $slot['path'] ) ) {
 			return $failed;
@@ -2390,7 +2386,7 @@ final class AB_MCP_Sync_Code_Swap {
 			return self::move( $slot['path'], $plan['target'] ) ? $failed : $failed + array( 'place' => $slot['path'] );
 		}
 		return array(
-			'moved' => array( $slot['path'], $plan['target'] ),
+			'moved' => true,
 			'place' => $slot['path'],
 		);
 	}

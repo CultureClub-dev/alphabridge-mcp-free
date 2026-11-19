@@ -264,7 +264,7 @@ final class AB_MCP_Sync_Code_Kind implements AB_MCP_Sync_Kind {
 
 	/** {@inheritdoc} */
 	public function post_write( array $parts ) {
-		return $this->no_way( 'post_write', 'The swap clears OPcache for every file it replaced (AB_MCP_Sync_Code_Swap::invalidate()).' );
+		return $this->no_way( 'post_write', 'The swap clears OPcache for every PHP file at the target (AB_MCP_Sync_Code_Swap::invalidate()).' );
 	}
 
 	/** {@inheritdoc} */

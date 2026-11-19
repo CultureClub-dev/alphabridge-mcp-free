@@ -550,7 +550,8 @@ final class SyncCodeRunTest extends TestCase {
 	 * accept (released with accept, where it is not as runs has it),
 	 * packages (a callable given the report and the arguments of the plan
 	 * that returns the package ids of code the run is given; then
-	 * wordpress.org offers nothing).
+	 * wordpress.org offers nothing), here (the version this site has before,
+	 * as AB_MCP_IT_Code::fassung() reads it: null for one no fixture has).
 	 *
 	 * @return array{0:int,1:array,2:string} The run, the unit of step 3, its target.
 	 */
@@ -564,11 +565,12 @@ final class SyncCodeRunTest extends TestCase {
 			'packages'  => null,
 			'ref'       => '',
 			'live_base' => array(),
+			'here'      => '1.0.0',
 		);
 		$slug                 = $case['slug'];
 		list( $args, $entry, , , $report ) = self::changed( $slug, $case['version'], array(), $case['then'], $case['ref'], $case['live_base'] );
 		$target               = AB_MCP_IT_Code::path( 'a', 'plugin', $slug );
-		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ) );
+		self::assertSame( $case['here'], AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ) );
 		$main = AB_MCP_IT_Code::unit( 'plugin', $slug )['main'][0];
 		self::assertSame( $case['runs'], in_array( $main, self::active(), true ), 'The plugin runs here, or not, as the case has it.' );
 		self::wporg( null === $case['packages'] ? null : array() );
@@ -596,7 +598,7 @@ final class SyncCodeRunTest extends TestCase {
 			$ready = 'done' === $answer['step']['state'] ? $answer : null;
 		}
 		self::assertIsArray( $ready, 'The stage is ready for its swap.' );
-		self::assertSame( '1.0.0', AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ), 'Staged, nothing of the site changed.' );
+		self::assertSame( $case['here'], AB_MCP_IT_Code::fassung( 'a', 'plugin', $slug ), 'Staged, nothing of the site changed.' );
 		return array( $run_id, $unit, $target );
 	}
 
@@ -1844,6 +1846,111 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertStringContainsString( 'Have OPcache of this site cleared at the host, or PHP restarted (PHP-FPM or the web server), so that PHP runs the files that are at the target now. The step of the way back is unclear', $says );
 		self::assertStringEndsWith( "\nTarget: " . $target . "\nBackup: " . $backup, $says );
 		self::assertStringNotContainsString( 'is in its old version', $says );
+	}
+
+	/**
+	 * Prüft: finding 4623266599 (option A, Thomas 19.11.2026) with OPcache
+	 * itself, not its stand-in: step 3, or the step of its way back, runs in
+	 * a process of its own on site A with OPcache on (with_opcache()). One
+	 * version has four PHP files the other lacks, .php and .inc, each once
+	 * never loaded and once loaded before the step (opcache_compile_file());
+	 * the main file both versions have is in the cache before the step. The
+	 * step ends done, opcache counts the PHP files that lie at the target,
+	 * and the main file is out of the cache: OPcache was cleared, not only
+	 * answered for. The limit G-5-26 is held, not a fault: a loaded file the
+	 * target no longer has stays in the cache (where PHP finds it under its
+	 * old path: from 8.1.25, 8.2.12 and 8.3.0).
+	 * Sonst: a swap or a way back whose renames went through would end
+	 * unclear only because one version has PHP files the other lacks, or
+	 * end done with the code of before still in OPcache. Never skipped:
+	 * without OPcache in the child the test fails.
+	 */
+	#[DataProvider( 'opcache_ways' )]
+	public function testWithOpcacheOnAStepEndsDoneWhereOneVersionHasPhpFilesTheOtherLacks( bool $back ): void {
+		$put = static function ( string $dir, string $sub ): void {
+			self::assertTrue( mkdir( $dir . '/' . $sub ) );
+			foreach ( array( 'geladen.inc', 'geladen.php', 'nie.inc', 'nie.php' ) as $name ) {
+				self::assertNotFalse( file_put_contents( $dir . '/' . $sub . '/' . $name, "<?php\n// $sub/$name\n" ) );
+			}
+		};
+		// Only in the old version: on both sites before they are paired. Only
+		// in the new one: on staging, beside its version 2.0.0, which comes
+		// as a package of code (wordpress.org does not have these files).
+		$put( AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-aktiv' ), 'alt' );
+		$put( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-aktiv' ), 'alt' );
+		$code = static function ( array $report ): array {
+			self::clear_b();
+			return array( self::relayed( array( 'purpose' => 'code', 'report_hash' => $report['report_hash'], 'refs' => array( array( 'kind' => 'plugin', 'ref' => 'ab-it-aktiv' ) ) ) )[0] );
+		};
+		list( $run_id, , $target ) = self::ready_to_swap( null, array( 'then' => static fn( string $at ) => $put( $at, 'neu' ), 'packages' => $code, 'here' => null ) );
+		$id = $run_id;
+		if ( $back ) {
+			// The swap in this process, then its way back planned.
+			self::next( $run_id );
+			self::assertSame( 'done', self::step( $run_id, 3 )['state'], 'The swap before its way back.' );
+			$id = self::planned_back( $run_id );
+		}
+		$gone   = $target . ( $back ? '/neu' : '/alt' );
+		$loaded = array( $target . '/ab-it-aktiv.php', $gone . '/geladen.inc', $gone . '/geladen.php' );
+		$cached = array(
+			'call' => 'array_map',
+			'args' => array( 'opcache_is_script_cached', $loaded ),
+		);
+		$got    = self::with_opcache(
+			array(
+				array( 'call' => 'array_map', 'args' => array( 'opcache_compile_file', $loaded ) ),
+				array( 'call' => 'opcache_get_status', 'args' => array( false ), 'as' => 'status' ),
+				array( 'call' => 'phpversion', 'as' => 'php' ),
+				$cached + array( 'as' => 'before' ),
+				array( 'call' => 'AB_MCP_Sync_Run::get', 'args' => array( $id ), 'as' => 'run', 'expect' => 'result' ),
+				array( 'call' => 'AB_MCP_Sync_Engine::next', 'args' => array( '$run' ), 'as' => 'next' ),
+				$cached + array( 'as' => 'after' ),
+			)
+		);
+		$said   = sprintf( 'opcache_enabled %s, PHP_VERSION %s', var_export( $got['status']['opcache_enabled'] ?? null, true ), $got['php'] );
+		self::assertTrue( $got['status']['opcache_enabled'] ?? null, 'OPcache is on in the child, or the test proves nothing: ' . $said );
+		self::assertSame( array( true, true, true ), $got['before'], 'The main file and the two loaded files are in the cache before the step.' );
+		$step = $back ? self::back_step( $id ) : self::step( $run_id, 3 );
+		self::assertSame( 'done', $step['state'], $said . '; the step ends ' . $step['state'] . ': ' . ( $step['result']['message'] ?? json_encode( $got['next'] ) ) );
+		$php = count( array_filter( array_keys( self::bytes_of( $target ) ), array( AB_MCP_Sync_Code_Stage::class, 'is_php' ) ) );
+		self::assertSame( array( $back ? 5 : 6, $php ), array( $php, $step['result']['opcache'] ), 'opcache counts the PHP files that lie at the target now.' );
+		self::assertFalse( $got['after'][0], 'The main file is out of the cache: OPcache was cleared for it (' . $said . ').' );
+		if ( version_compare( $got['php'], '8.3.0', '>=' ) || version_compare( $got['php'], version_compare( $got['php'], '8.2.0', '<' ) ? '8.1.25' : '8.2.12', '>=' ) ) {
+			self::assertSame( array( true, true ), array_slice( $got['after'], 1 ), 'G-5-26: a loaded file the target no longer has stays in the cache until OPcache is reset.' );
+		}
+	}
+
+	/** The step of the swap, and the step of its way back. */
+	public static function opcache_ways(): array {
+		return array(
+			'the swap'     => array( false ),
+			'its way back' => array( true ),
+		);
+	}
+
+	/**
+	 * Calls on site A in a process of its own with OPcache on: the switches
+	 * go to the child with -d, as opcache.enable_cli cannot be set at run
+	 * time. file_update_protection=0, or PHP does not cache a file just
+	 * written; validate_timestamps=0 is the case the clearing counts for; no
+	 * file cache, so no bytecode goes from one process to the next.
+	 *
+	 * @return array The results of the calls by their names.
+	 */
+	private static function with_opcache( array $calls ): array {
+		$command = AB_MCP_IT_Process::child_command( 'a' );
+		$ini     = array( 'opcache.enable=1', 'opcache.enable_cli=1', 'opcache.file_update_protection=0', 'opcache.validate_timestamps=0', 'opcache.file_cache=' );
+		foreach ( extension_loaded( 'Zend OPcache' ) ? $ini : array_merge( $ini, array( 'zend_extension=opcache' ) ) as $one ) {
+			array_splice( $command, 1, 0, array( '-d', $one ) );
+		}
+		$plan   = array(
+			'require' => array( AB_MCP_DIR . 'includes/sync/class-sync-revert.php' ),
+			'calls'   => $calls,
+		);
+		$run    = AB_MCP_IT_Process::run( $command, (string) json_encode( $plan ) );
+		$result = AB_MCP_IT_Process::result( $run );
+		self::assertTrue( 0 === $run['exit'] && null !== $result, 'The child ran its plan to its end: ' . substr( $run['stdout'] . "\n" . $run['stderr'], -2000 ) );
+		return $result['results'];
 	}
 
 	/**
