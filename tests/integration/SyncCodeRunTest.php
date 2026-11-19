@@ -51,6 +51,7 @@ use AB_MCP_Sync_Code_Plan;
 use AB_MCP_Sync_Code_Stage;
 use AB_MCP_Sync_Code_Stage_Calls;
 use AB_MCP_Sync_Code_Swap;
+use AB_MCP_Sync_Engine;
 use AB_MCP_Sync_Env;
 use AB_MCP_Sync_File_Manifest;
 use AB_MCP_Sync_Guard;
@@ -5820,10 +5821,151 @@ final class SyncCodeRunTest extends TestCase {
 		}
 		$check = self::step( $run_id, 5 )['result'];
 		self::assertSame( array( 'closed_done', array(), 0, 0 ), array( is_array( $closed ) ? $closed['state'] : null, $check['findings'], $check['written'], $check['writes'] ), 'Closed as done, no finding, no object counted: ' . json_encode( $check ) );
+		self::assertStringStartsWith( 'Checked: 0 units swapped by this run hash to the versions their swaps wrote (read whole now), and the PHP probe passed.', $check['message'], 'The sentence of a run of the code, without a sample (G3).' );
 		self::assertSame( 0, (int) AB_MCP_Sync_Run::get( $run_id )['forward_closed_at'], 'No qualified close: nothing was written.' );
 		self::assertSame( $before, self::live_bytes( 'ab-it-inaktiv' ), 'Nothing of the site changed.' );
 		$way = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) );
 		self::assertSame( 'ab_mcp_sync_revert_nothing', is_wp_error( $way ) ? $way->get_error_code() : json_encode( $way ), 'No step of the way back: the swap wrote nothing.' );
+	}
+
+	/**
+	 * Prüft: G3 of GitHub Codex on #155 (Astra F7, 1 and 10): the check of a
+	 * run of the code reads each unit swapped whole at its target against the
+	 * new version of its journal: a plugin of a folder, a plugin of one file
+	 * and a theme, unchanged, close the run as done with the sentence of a run
+	 * of the code (one unit, no sample); with a file changed after the swap
+	 * the run closes with the finding of that step, which says the unit could
+	 * not be confirmed. Sonst: a run closed as done whose units were edited
+	 * after their swap.
+	 */
+	#[DataProvider( 'after_the_swap' )]
+	public function testTheCheckOfARunReadsEachUnitSwappedWholeAgainstTheVersionItsSwapWrote( string $kind, bool $change ): void {
+		list( $run_id, $unit, $target ) = self::swapped_one( $kind );
+		if ( $change ) {
+			file_put_contents( is_dir( $target ) ? glob( $target . '/*.php' )[0] : $target, "\n// changed after the swap\n", FILE_APPEND );
+		}
+		$check = self::checked_to_close( $run_id, 5 );
+		if ( ! $change ) {
+			self::assertSame( array( 'closed_done', array(), 1, 1 ), array( $check['state'], $check['findings'], $check['written'], $check['writes'] ), json_encode( $check ) );
+			self::assertStringStartsWith( 'Checked: 1 unit swapped by this run hashes to the version its swap wrote (read whole now), and the PHP probe passed. The run is closed as done.', $check['message'] );
+			return;
+		}
+		self::assertSame( array( 'closed_findings', array( 3 ) ), array( $check['state'], array_column( $check['findings'], 'seq' ) ), json_encode( $check ) );
+		self::assertStringStartsWith( sprintf( 'The %1$s %2$s at %3$s could not be confirmed as the version step 3 swapped in: it is missing, changed since the swap, or not readable whole within the time of one call.', $unit['kind'], $unit['ref'], $target ), $check['findings'][0]['message'] );
+		self::assertStringStartsWith( 'Checked with 1 finding; the run is closed with findings.', $check['message'] );
+	}
+
+	/** A plugin of a folder, a plugin of one file, a theme; unchanged or changed after its swap. */
+	public static function after_the_swap(): array {
+		$cases = array();
+		foreach ( array( 'a plugin of a folder' => 'plugin', 'a plugin of one file' => 'file', 'a theme' => 'theme' ) as $what => $kind ) {
+			$cases[ $what . ', unchanged' ] = array( $kind, false );
+			$cases[ $what . ', changed' ]   = array( $kind, true );
+		}
+		return $cases;
+	}
+
+	/**
+	 * Prüft: G3 of GitHub Codex on #155 with Auflage c of the lead (Astra F7,
+	 * 6 and 8): two units swapped, the second not read within the rest of the
+	 * call (the clock of the engine stands, so the rest of the call lies before
+	 * the clock of the reading): the check keeps its cursor on it without a
+	 * finding and without counting it, and the next call reads it as its first
+	 * work and closes the run as done, both counted once. Sonst: a unit its
+	 * swap read whole a finding for the rest of a call, or counted twice.
+	 */
+	public function testTheCheckOfARunReadsAUnitNotReadWithinTheRestOfACallInTheNextAndClosesDone(): void {
+		$run_id = self::both_to_check();
+		AB_MCP_Sync_Engine::$clock = static fn(): float => 1000.0;
+		try {
+			$first = self::next( $run_id );
+			self::assertIsArray( $first, is_wp_error( $first ) ? $first->get_error_message() : '' );
+			$result = self::step( $run_id, 7 )['result'];
+			self::assertSame( array( 'planned', 1, array(), 1, 1 ), array( self::step( $run_id, 7 )['state'], $result['cursor'], $result['findings'], $result['written'], $result['writes'] ), json_encode( $result ) );
+			self::assertStringContainsString( 'The check of the run went over 1 of 2 written objects within the budget of this call.', $first['next'] );
+			$check = self::checked_to_close( $run_id, 7 );
+		} finally {
+			AB_MCP_Sync_Engine::$clock = null;
+		}
+		self::assertSame( array( 'closed_done', array(), 2, 2 ), array( $check['state'], $check['findings'], $check['written'], $check['writes'] ), json_encode( $check ) );
+		self::assertStringStartsWith( 'Checked: 2 units swapped by this run hash to the versions their swaps wrote (read whole now), and the PHP probe passed.', $check['message'] );
+	}
+
+	/**
+	 * Prüft: G3 of GitHub Codex on #155 with Auflage c (Astra F7, 8): a unit
+	 * not read whole as the first work of a call, within the time of a whole
+	 * call (the clock of the swap at 1000 s, a call of 15 s, the clock of the
+	 * reading 10 s on at each look), is a finding once, and the next unit is
+	 * read in the same call: the run closes with that one finding. Sonst: a
+	 * unit too large for a call put off from call to call, or holding up the
+	 * units after it.
+	 */
+	public function testAUnitNotReadWholeAsTheFirstWorkOfACallIsOneFindingAndTheNextIsReadAfterIt(): void {
+		$run_id = self::both_to_check();
+		$t      = 990.0;
+		AB_MCP_Sync_Code_Swap::$clock  = static fn(): float => 1000.0;
+		\AB_MCP_Sync_Resources::$time  = static fn(): array => array( 'before' => 30, 'after' => 30 );
+		AB_MCP_Sync_Env::$clock        = static function () use ( &$t ): float {
+			return $t += 10.0;
+		};
+		try {
+			$check = self::checked_to_close( $run_id, 7 );
+		} finally {
+			\AB_MCP_Sync_Resources::$time = null;
+		}
+		self::assertSame( array( 'closed_findings', array( 3 ), 2, 2 ), array( $check['state'], array_column( $check['findings'], 'seq' ), $check['written'], $check['writes'] ), json_encode( $check ) );
+		self::assertStringContainsString( 'could not be confirmed as the version step 3 swapped in', $check['findings'][0]['message'] );
+	}
+
+	/** A run of one unit swapped (step 3): plugin of a folder (inactive), plugin of one file (a package of code) or theme. */
+	private static function swapped_one( string $kind ): array {
+		if ( 'theme' === $kind ) {
+			list( $run_id, $unit, $target ) = self::ready_to_swap_of( 'theme' );
+		} else {
+			$file = array(
+				'slug'     => 'ab-it-einzeln',
+				'ref'      => 'ab-it-einzeln.php',
+				'version'  => '1.1.0',
+				'packages' => static fn( array $report ): array => array( self::relayed( array( 'purpose' => 'code', 'report_hash' => $report['report_hash'], 'refs' => array( array( 'kind' => 'plugin', 'ref' => 'ab-it-einzeln.php' ) ) ) )[0] ),
+			);
+			list( $run_id, $unit, $target ) = self::ready_to_swap( null, 'file' === $kind ? $file : array( 'slug' => 'ab-it-inaktiv', 'version' => '1.1.0', 'runs' => false ) );
+		}
+		$swap = self::next( $run_id );
+		self::assertSame( array( 3, 'done' ), is_array( $swap ) ? array( $swap['step']['seq'], $swap['step']['state'] ) : $swap->get_error_message() );
+		return array( $run_id, $unit, $target );
+	}
+
+	/** A run of the plugin and the theme ab-it-inaktiv (as G2), each swapped, its caches done: the check (step 7) is next. */
+	private static function both_to_check(): int {
+		self::paired();
+		foreach ( array( 'plugin', 'theme' ) as $kind ) {
+			AB_MCP_IT_Code::put( 'b', $kind, 'ab-it-inaktiv', '1.1.0' );
+		}
+		list( $report, $units ) = self::report();
+		self::wporg();
+		list( , $run ) = self::begun(
+			array(
+				'action'    => 'plan',
+				'report_id' => $report['report_id'],
+				'select'    => array( (int) $units['plugin:ab-it-inaktiv']['n'], (int) $units['theme:ab-it-inaktiv']['n'] ),
+			)
+		);
+		$run_id = (int) $run['run_id'];
+		for ( $i = 0; $i < 40 && 'done' !== self::step( $run_id, 6 )['state']; $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		}
+		self::assertSame( array( 'done', 'done', 'planned' ), array( self::step( $run_id, 3 )['state'], self::step( $run_id, 5 )['state'], self::step( $run_id, 7 )['state'] ), 'Both swapped, the check next.' );
+		return $run_id;
+	}
+
+	/** The run led on until it is closed: the result of its check (step $seq) with the state of the run. */
+	private static function checked_to_close( int $run_id, int $seq ): array {
+		for ( $i = 0; $i < 12 && ! in_array( AB_MCP_Sync_Run::get( $run_id )['state'], AB_MCP_Sync_Schema::CLOSED, true ); $i++ ) {
+			$answer = self::next( $run_id );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		}
+		return array( 'state' => AB_MCP_Sync_Run::get( $run_id )['state'] ) + self::step( $run_id, $seq )['result'];
 	}
 
 	public function testAUnitFromAPackageOfCodePassesTheCheckOfTheRunAndIsStagedFromIt(): void {

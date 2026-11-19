@@ -355,6 +355,29 @@ e('h-g2-group', 'plan_of(): each swap puts the old version into a group of the b
   "AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $in['run_id'], 'label' => 'swap-' . $in['run_id'] . '-' . $in['unit']['seq'] ) );",
   "AB_MCP_Sync_Backup::group( $in['run_id'] );", 'coderun', 'testAPluginAndAThemeOfTheSameNameAreSwappedInOneRunEachIntoABackupOfItsOwnAndBothGoBack')
 
+# Part H: G3 of GitHub Codex on #155 (the check of a run reads each unit swapped) with Auflage c of the lead (23:26)
+CONF = 'testTheCheckOfARunConfirmsASwapDoneOnlyWhereItsUnitReadsWholeAsTheVersionItWrote'
+REST = 'testAUnitNotReadWithinTheRestOfACallIsLeftToTheNextAndAFindingOnlyAsItsFirstWork'
+CURSOR = 'testTheCheckOfARunReadsAUnitNotReadWithinTheRestOfACallInTheNextAndClosesDone'
+e('h-g3-journal', 'finding(): a swap whose journal does not read is a finding of its own, its target never judged (G3 of GitHub Codex on #155)', CO,
+  "\t\tif ( null === $journal ) {\n\t\t\t/* translators: 1: step number,", "\t\tif ( false ) {\n\t\t\t/* translators: 1: step number,", 'ops', CONF)
+e('h-g3-hash', 'finding(): a unit is confirmed only against the new version of its journal, never the old one (G3 of GitHub Codex on #155)', CO,
+  "hash_equals( $journal['new']['hash'], $read['hash'] )", "hash_equals( $journal['old']['hash'], $read['hash'] )", 'ops', CONF)
+e('h-g3-deadline', 'finding(): a reading that is not the first work of its call ends with the rest of the call (Auflage c of the lead on G3)', CO,
+  "null === $until ? AB_MCP_Sync_Code_Swap::until() : $until,", "null === $until ? AB_MCP_Sync_Code_Swap::until() : $until + 3600,", 'ops', REST)
+e('h-g3-full', 'finding(): the first work of a call has the time of a whole call from now, as the swap had (AB_MCP_Sync_Code_Swap::until(); Auflage c of the lead on G3)', CO,
+  "null === $until ? AB_MCP_Sync_Code_Swap::until() : $until,", "null === $until ? 1015.0 : $until,", 'ops', REST)
+e('h-g3-first', 'finding(): the first work of a call that does not end in time is too large, a finding, never stopped for the next call (Auflage c of the lead on G3)', CO,
+  ", null === $until, $unit['kind'] );", ", false, $unit['kind'] );", 'coderun', 'testAUnitNotReadWholeAsTheFirstWorkOfACallIsOneFindingAndTheNextIsReadAfterIt')
+e('h-g3-stopped', 'finding(): a reading stopped by the end of the rest of the call is no finding (Auflage c of the lead on G3)', CO,
+  "\t\tif ( true === $read['stopped'] ) {", "\t\tif ( false ) {", 'ops', REST)
+e('h-g3-written', 'written(): a step of the code whose reading stopped is left to the next call, never taken as checked (Auflage c of the lead on G3)', EN,
+  "return false === $found ? null : array(", "return false === $found ? array( 0, null ) : array(", 'ops', REST)
+e('h-g3-cursor', 'run_verify(): a step not checked within the rest of the call keeps the cursor on it, uncounted, for the next call (Auflage c of the lead on G3)', EN,
+  "\t\t\t\tif ( null === $seen ) {", "\t\t\t\tif ( $worked && $left() <= 0 ) {", 'coderun', CURSOR)
+e('h-g3-code-satz', 'closing(): a run of the code closes with its own sentence, the units read whole, no sample (G3 of GitHub Codex on #155)', EN,
+  "\t\tif ( is_array( $run['plan'] ) && array_key_exists( 'code', $run['plan'] ) ) {", "\t\tif ( false ) {", 'coderun', CURSOR)
+
 # The Behebung of part D1 after the Codex round on 2b28314: the new decision points of findings 2, 3 and 4 (T6);
 # round 2 (the lead after the Codex round on de8caba): the rename without a reservation and the backup proved only by in_backup().
 RIGHTS = 'testANewVersionThatCannotTakeTheRightsOfTheSiteIsNotSwappedAndItsStepStaysPlanned'
@@ -511,9 +534,9 @@ e('e-continuation', 'continuation(): a step of the way back of the code is shown
   "\t\t\tif ( false ) {\n\t\t\t\tif ( is_wp_error( $code ) ) {", 'coderun', E_NO)
 e('e-plan-schrieb', 'Ops::back(): a swap planned, skipped or failed wrote nothing and is no step of the way back (Teil E)', CO,
   "array( 'begun', 'unclear', 'done' )", "array( 'begun', 'unclear', 'done', 'failed' )", 'coderun', 'testASwapThatFailedWithNothingMovedIsNoStepOfTheWayBack')
-e('e-journal-einheit', 'Tausch::back(): a journal of the form of step.swap that names another unit is not known (Teil E)', CS,
+e('e-journal-einheit', 'Tausch::journal_of() for back() and finding(): a journal of the form of step.swap that names another unit is not known (Teil E)', CS,
   "$unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || ", '', 'inputs', E_ROW)
-e('e-journal-ziel', 'Tausch::back(): a journal of the form of step.swap that names another target than that of the unit here is not known (Teil E)', CS,
+e('e-journal-ziel', 'Tausch::journal_of() for back() and finding(): a journal of the form of step.swap that names another target than that of the unit here is not known (Teil E)', CS,
   " || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {", ' ) {', 'inputs', E_ROW)
 e('e-rechte', 'restore(): the rights of the operation of the unit before the first write of the way back; a refusal leaves the step planned (Z26, question 5 of Teil E)', CS,
   "\t\tif ( true !== $rights ) {\n\t\t\t$data = ",

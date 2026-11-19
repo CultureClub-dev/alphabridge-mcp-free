@@ -326,8 +326,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     `not_staged()` (`class-sync-code-ops.php`) beendet den Schritt mit `failed` und hängt «The run goes on
     with the next step (action=next).» an. Ein neuer Versuch für diese Einheit geht auch hier nur über einen neuen
     Lauf. Folgeposten für Teil 2: `run_verify()` hängt beim Schliessen eines Laufs «The way back for its pairs is
-    wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2823`), auch bei einem Code-Lauf, von
-    dem kein Schritt etwas geschrieben hat; für Code-Läufe trennen. Nach dem Code gelesen, ohne eigenen Test.
+    wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2812`), auch bei einem Code-Lauf, von
+    dem kein Schritt etwas geschrieben hat. Seit Teil H (G3 von GitHub Codex auf #155) hat ein Code-Lauf einen
+    eigenen Schlusssatz (`closing()`, ohne Stichprobe); der angehängte Satz zum Rückweg bleibt für beide Arten.
+    Nach dem Code gelesen, ohne eigenen Test.
     **Trifft Normalfall:** nein.
   - B (kein Normalfall, keine Kernzusage): `read_entry()` gibt auch für einen formgerechten Eintrag eines anderen
     Bereichs null (`sidecar()`, Zustand `other`: der Eintrag nennt selbst einen anderen Bereich als den, in dem er
@@ -910,15 +912,18 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     Standard-Theme; der Tausch hält das nicht auf. Der Rückweg stellt den Wechsel nicht zurück (das Journal hält für
     ein Theme kein `active`, G-5-15); seine Antwort nennt ein Theme, das der Aufruf als nicht laufend liest, mit dem
     Weg in wp-admin, ohne einen Wechsel zu behaupten.
-  - **Plugin, kein Vergleich am Ende:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach, meldet der
-    Tausch es nicht; er vergleicht am Ende nichts. Die Deaktivierungshaken des Plugins laufen dabei nicht. Der nächste
+  - **Plugin, kein Aktivierungsvergleich am Ende:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach,
+    meldet der Tausch es nicht; er vergleicht am Ende keine Aktivierung. Die Prüfung des Laufs liest seit Teil H (G3
+    von GitHub Codex auf #155) jede getauschte Einheit ganz und vergleicht ihren Hash mit der neuen Fassung des
+    Journals (`AB_MCP_Sync_Code_Ops::finding()`); ob sie aktiv ist, prüft sie nicht. Die Deaktivierungshaken des
+    Plugins laufen dabei nicht. Der nächste
     Bericht zeigt die Aktivierung als «live geändert». Eingeschaltet wird von Hand (wp-admin, `wp_activate_plugin`)
     oder, wo der Tausch zurückgeht, über den Rückweg mit `accept`. Die Grenze «Rennen nach dem Vergleich» aus E6
     entfällt mit dem Vergleich.
 - **Trifft Normalfall:** nein. Im Normalfall liegen beide Umbenennungen im selben Aufruf, ohne Aufruf von wp-admin
   dazwischen (Theme), und zwischen den zwei Umbenennungen öffnet niemand «Plugins» (Plugin).
 
-### G-5-19 Plugin bei offenem Tausch oder danach deaktiviert: kein Vergleich am Ende — in G-5-18
+### G-5-19 Plugin bei offenem Tausch oder danach deaktiviert: kein Aktivierungsvergleich am Ende — in G-5-18
 
 - **Grund:** Mit G-5-18 zusammengelegt (Qualitätsdurchsicht vor Teil H, `belege/z5r-q-liste.md` Nr. 20): Fundstelle,
   Quelle, Fall und Normalfall des Plugins stehen dort je unter «Plugin». Die Nummer bleibt, ohne Umnummerierung.
@@ -1216,6 +1221,27 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   Zusage. Die Vorarbeit dazu liegt in `belege/sperre-posten-vorarbeit-a1-fassung2.md`.
 - **Trifft Normalfall:** nein. Es braucht einen Aufruf, der mit allem vor dem Tausch länger als 600 s dauert; das
   Budget eines Aufrufs liegt weit darunter (`until()`).
+
+### G-5-25 Prüfung des Laufs: eine Einheit, die als erste Arbeit eines Aufrufs nicht ganz gelesen wird, ist ein Befund
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Ops::finding()` (`includes/sync/class-sync-code-ops.php:238`, Lesung `:245`,
+  `stopped` `:249`); `AB_MCP_Sync_Engine::run_verify()` (`includes/sync/class-sync-engine.php:2616`, Schleife `:2660`)
+  und `written()` (`:2911`); die Frist der ersten Arbeit `AB_MCP_Sync_Code_Swap::until()` (`class-sync-code-swap.php:1134`).
+  Zeilen am Stand G3b-1 (`acc5b28`).
+- **Quelle:** G3 von GitHub Codex auf #155 (Kommentar 4621397353); Auflage c der Lead vom 18./19.11.2026 (23:26):
+  «Eine Einheit, die der Tausch in einem Aufruf ganz lesen konnte, darf in der Schlussprüfung nicht wegen der Frist
+  zum Befund werden.» Prüfung durch Astra auf `478b2ca` (`belege/codex-pr155-g3-wip-antwort.txt`, F2 und F4).
+- **Was:** Die Prüfung des Laufs liest jede getauschte Einheit ganz. Ist die Einheit nicht die erste Arbeit des
+  Aufrufs, hat die Lesung den Rest des Aufrufs (`$started + work`); endet er in der Lesung, bleibt der Cursor auf ihr,
+  ohne Befund und ohne Zählung, und der nächste Aufruf liest sie als erste Arbeit. Als erste Arbeit hat sie die Zeit
+  eines ganzen Aufrufs ab dem Beginn der Lesung (`until()`, `time_for_call()`, wie der Tausch); wird sie darin nicht
+  ganz gelesen (`too_large`), ist das ein Befund («could not be confirmed … not readable whole within the time of one
+  call»), und die folgenden Einheiten werden weiter geprüft. Die Schranke ist dieselbe wie im Tausch, aber nicht
+  enger als er: der Tausch las mit `min( until, jetzt + UNIT_BUDGET )` nach seinen Umbenennungen; eine Einheit, die er
+  so ganz lesen konnte, kann die erste Arbeit eines Aufrufs bei gleichen Bytes und gleicher Last ebenso lesen. Ein
+  langsameres Dateisystem zum Zeitpunkt der Prüfung kann sie trotzdem zum Befund machen; der Lauf schliesst dann mit
+  Befunden, die Einheit selbst bleibt, wie sie ist (nichts wird geändert).
+- **Trifft Normalfall:** nein. Im Normalfall liest ein Aufruf eine Einheit in Bruchteilen seines Budgets.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
