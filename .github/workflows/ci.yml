@@ -44,6 +44,13 @@ jobs:
           find . -path ./vendor -prune -o -path ./tests -prune -o -name '*.php' -print0 \
             | xargs -0 -n1 php -l
 
+      # Finding 4623266599, option A: PHPUnit does not run on 8.0, so what
+      # OPcache answers for each PHP file at the target after a swap by two
+      # rename() is probed by a script in the syntax of 8.0, on every version
+      # (tests/opcache-ziel-probe.php names what it proves and what not).
+      - name: OPcache answers for each PHP file at the target
+        run: php -d opcache.enable_cli=1 -d opcache.file_update_protection=0 tests/opcache-ziel-probe.php
+
   unit:
     name: PHPUnit on PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
