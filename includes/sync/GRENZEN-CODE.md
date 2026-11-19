@@ -709,8 +709,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   nicht leeren; die Kommandozeile von PHP hat einen eigenen. Der Handweg nennt darum das Leeren oder den Neustart von PHP
   beim Hoster als Satz, ohne Befehl. Bis dahin kann bei `opcache.validate_timestamps=0` der Code laufen, den PHP vor dem
   Zurücklegen gelesen hat. Nach einem harten Abbruch nach den Umbenennungen (P3, F58, G-5-17) lief kein
-  `invalidate()`: Bis Weg (b), der OPcache je bewegter PHP-Datei leert, oder bis zum Satz zu OPcache der Anleitung kann
-  PHP Code der alten Fassung aus OPcache ausführen.
+  `invalidate()`: Bis Weg (b), der OPcache je PHP-Datei am Ziel leert (G-5-26), oder bis zum Satz zu OPcache der
+  Anleitung kann PHP Code der alten Fassung aus OPcache ausführen.
 - **Trifft Normalfall:** nein. Im Normalfall braucht es den Handweg nicht.
 
 ### G-5-13 Z24: Eine Aktivierung nach der letzten Prüfung sieht der Tausch nicht
@@ -1242,6 +1242,30 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   langsameres Dateisystem zum Zeitpunkt der Prüfung kann sie trotzdem zum Befund machen; der Lauf schliesst dann mit
   Befunden, die Einheit selbst bleibt, wie sie ist (nichts wird geändert).
 - **Trifft Normalfall:** nein. Im Normalfall liest ein Aufruf eine Einheit in Bruchteilen seines Budgets.
+
+### G-5-26 Einträge entfernter PHP-Dateien bleiben in OPcache bis zum Reset
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::invalidated()` (`includes/sync/class-sync-code-swap.php:1681`), gerufen aus
+  `after_renames()` (`:1607`) und `restored()` (`:2289`); `moved_back()` (`:2369`, `moved` false `:2372`, leeres Ziel
+  `:2380`). Zeilen am Stand der Behebung (`721f2d1`).
+- **Quelle:** Befund 4623266599 von GitHub Codex auf #155; Entscheid von Thomas vom 19.11.2026 («Option A»); Bericht
+  der Prüfstelle 5, Q4.
+- **Was:** Nach dem Tausch und nach seinem Rückweg leert der Schritt OPcache für jede PHP-Datei, die dann am Ziel
+  liegt, wie der Kern nach einem Update (`wp_opcache_invalidate_directory()`). Eine PHP-Datei, die nur die weggelegte
+  Fassung hat, bekommt keinen Aufruf. Bei `opcache.validate_timestamps=0` (und `opcache.revalidate_path=0`) bleibt ihr
+  Eintrag bis zum Reset von OPcache oder zum Neustart von PHP gültig. Er läuft nur, wenn etwas genau diesen Pfad
+  einbindet: `include` oder `require` ohne Existenzprüfung aus fremdem oder neuem Code; mit Existenzprüfung nur bei
+  `opcache.enable_file_override=1`. Vor PHP 8.1.25 und 8.2.12 liesse sich ein solcher Pfad nach dem Umbenennen gar
+  nicht leeren (`opcache_invalidate()` gibt für eine fehlende Datei false). Zwei Randfälle des Rückwegs:
+    - Leeres Ziel (nach einem Abbruch zwischen den Umbenennungen, oder die neue Fassung wurde von Hand entfernt): Der
+      Rückweg leert für die alte Fassung am Ziel. Lag die neue Fassung vorher am Ziel, bleiben die Einträge ihrer
+      Dateien, die die alte nicht hat, ohne Aufruf.
+    - Schon zurückgelegt (die alte Fassung liegt bewiesen am Ziel, etwa nach dem Handweg): Der Schritt bewegt nichts,
+      ruft OPcache nicht und endet `done` mit `opcache` 0. Das Leeren nach dem Handweg ist der Satz der Anleitung
+      (G-5-12).
+- **Trifft Normalfall:** ja, wo eine Fassung PHP-Dateien hat, die der anderen fehlen: Ihre Einträge bleiben. Ohne
+  Wirkung, solange nichts den entfernten Pfad einbindet; der Weg ist der Reset von OPcache oder der Neustart von PHP
+  beim Hoster.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 

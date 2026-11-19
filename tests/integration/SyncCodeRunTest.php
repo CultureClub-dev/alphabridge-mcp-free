@@ -701,7 +701,7 @@ final class SyncCodeRunTest extends TestCase {
 	 * replacement, the journal of the step and the mark with its instruction
 	 * stand, each as written; then the old folder lies whole in the backup
 	 * and the stage at the target, OPcache is cleared for each PHP file
-	 * replaced, the mark is closed, the pair takes its new bases, the file
+	 * at the target, the mark is closed, the pair takes its new bases, the file
 	 * undo points of the unit go and those of another unit stay; no test
 	 * request after the first rename and no swap back; the answer names the
 	 * target, the backup, the way back and the commands by hand. Then F2,
@@ -1367,7 +1367,7 @@ final class SyncCodeRunTest extends TestCase {
 	 * fatal and MCP answers (AB_MCP_Php_Probe::run()). The way back of the
 	 * run over MCP puts the old version back (put_back()): two renames, each
 	 * onto a place that is free, and OPcache for each PHP file of the old
-	 * and of the new version under its path at the target; then the home
+	 * version, which lies at the target then, and for no other; then the home
 	 * page runs again.
 	 * Sonst: a version that breaks the home page of the customer while MCP
 	 * still answers could not be taken back by the run, or only with code
@@ -1423,14 +1423,14 @@ final class SyncCodeRunTest extends TestCase {
 		);
 		self::assertSame( array( array( $back['result']['place'], false ), array( $target, false ) ), $renames, 'The new version to its place, then the old one to the target, each onto a place that is free.' );
 		$php = array();
-		foreach ( array_merge( array_keys( $old ), array_keys( $new ) ) as $rel ) {
+		foreach ( array_keys( $old ) as $rel ) {
 			if ( AB_MCP_Sync_Code_Stage::is_php( $rel ) ) {
 				$php[ $target . '/' . $rel ] = true;
 			}
 		}
 		$php = array_keys( $php );
 		sort( $php, SORT_STRING );
-		self::assertSame( $php, $opcache, 'OPcache for each PHP file of the old and of the new version, by its path at the target.' );
+		self::assertSame( $php, $opcache, 'OPcache for each PHP file of the old version at the target, and for no file only the new one has.' );
 		self::assertSame( count( $php ), $back['result']['opcache'] );
 		$again = self::probe_now();
 		self::assertSame( array( 'ok', 'ok' ), array( $again['home'], $again['mcp'] ), 'The home page runs again: ' . json_encode( $again ) );
@@ -1820,7 +1820,7 @@ final class SyncCodeRunTest extends TestCase {
 
 	/**
 	 * Prüft: Z13 on the way back: where OPcache cannot be cleared for a file
-	 * the way back put back or moved away, its step is unclear, and its
+	 * the way back put back at the target, its step is unclear, and its
 	 * answer says to have OPcache cleared at the host (the sentence of the
 	 * swap), with the frame of the way back and target and backup; it does
 	 * not say that the old version is back.
@@ -1854,10 +1854,12 @@ final class SyncCodeRunTest extends TestCase {
 	 * a process of its own on site A with OPcache on (with_opcache()). One
 	 * version has four PHP files the other lacks, .php and .inc, each once
 	 * never loaded and once loaded before the step (opcache_compile_file());
-	 * the main file both versions have is in the cache before the step. The
-	 * step ends done, opcache counts the PHP files that lie at the target,
-	 * and the main file is out of the cache: OPcache was cleared, not only
-	 * answered for. The limit G-5-26 is held, not a fault: a loaded file the
+	 * the main file and a .php and a .inc file both versions have (beide/,
+	 * which prepare() does not ask OPcache for) are in the cache before the
+	 * step. The step ends done, opcache counts the PHP files that lie at the
+	 * target, and the three files are out of the cache: OPcache was cleared
+	 * after the renames, not only answered for (Astra on part 1, B1). The
+	 * limit G-5-26 is held, not a fault: a loaded file the
 	 * target no longer has stays in the cache (where PHP finds it under its
 	 * old path: from 8.1.25, 8.2.12 and 8.3.0).
 	 * Sonst: a swap or a way back whose renames went through would end
@@ -1873,16 +1875,23 @@ final class SyncCodeRunTest extends TestCase {
 				self::assertNotFalse( file_put_contents( $dir . '/' . $sub . '/' . $name, "<?php\n// $sub/$name\n" ) );
 			}
 		};
-		// Only in the old version: on both sites before they are paired. Only
-		// in the new one: on staging, beside its version 2.0.0, which comes
-		// as a package of code (wordpress.org does not have these files).
-		$put( AB_MCP_IT_Code::path( 'a', 'plugin', 'ab-it-aktiv' ), 'alt' );
-		$put( AB_MCP_IT_Code::path( 'b', 'plugin', 'ab-it-aktiv' ), 'alt' );
+		// Only in the old version (alt) and in both (beide): on both sites
+		// before they are paired. Only in the new one (neu): on staging,
+		// beside its version 2.0.0 and beide, which comes as a package of
+		// code (wordpress.org does not have these files).
+		foreach ( array( 'a', 'b' ) as $site ) {
+			$put( AB_MCP_IT_Code::path( $site, 'plugin', 'ab-it-aktiv' ), 'alt' );
+			$put( AB_MCP_IT_Code::path( $site, 'plugin', 'ab-it-aktiv' ), 'beide' );
+		}
 		$code = static function ( array $report ): array {
 			self::clear_b();
 			return array( self::relayed( array( 'purpose' => 'code', 'report_hash' => $report['report_hash'], 'refs' => array( array( 'kind' => 'plugin', 'ref' => 'ab-it-aktiv' ) ) ) )[0] );
 		};
-		list( $run_id, , $target ) = self::ready_to_swap( null, array( 'then' => static fn( string $at ) => $put( $at, 'neu' ), 'packages' => $code, 'here' => null ) );
+		$then = static function ( string $at ) use ( $put ): void {
+			$put( $at, 'neu' );
+			$put( $at, 'beide' );
+		};
+		list( $run_id, , $target ) = self::ready_to_swap( null, array( 'then' => $then, 'packages' => $code, 'here' => null ) );
 		$id = $run_id;
 		if ( $back ) {
 			// The swap in this process, then its way back planned.
@@ -1891,7 +1900,7 @@ final class SyncCodeRunTest extends TestCase {
 			$id = self::planned_back( $run_id );
 		}
 		$gone   = $target . ( $back ? '/neu' : '/alt' );
-		$loaded = array( $target . '/ab-it-aktiv.php', $gone . '/geladen.inc', $gone . '/geladen.php' );
+		$loaded = array( $target . '/ab-it-aktiv.php', $target . '/beide/geladen.inc', $target . '/beide/geladen.php', $gone . '/geladen.inc', $gone . '/geladen.php' );
 		$cached = array(
 			'call' => 'array_map',
 			'args' => array( 'opcache_is_script_cached', $loaded ),
@@ -1909,14 +1918,14 @@ final class SyncCodeRunTest extends TestCase {
 		);
 		$said   = sprintf( 'opcache_enabled %s, PHP_VERSION %s', var_export( $got['status']['opcache_enabled'] ?? null, true ), $got['php'] );
 		self::assertTrue( $got['status']['opcache_enabled'] ?? null, 'OPcache is on in the child, or the test proves nothing: ' . $said );
-		self::assertSame( array( true, true, true ), $got['before'], 'The main file and the two loaded files are in the cache before the step.' );
+		self::assertSame( array_fill( 0, 5, true ), $got['before'], 'The main file and the four loaded files are in the cache before the step.' );
 		$step = $back ? self::back_step( $id ) : self::step( $run_id, 3 );
 		self::assertSame( 'done', $step['state'], $said . '; the step ends ' . $step['state'] . ': ' . ( $step['result']['message'] ?? json_encode( $got['next'] ) ) );
 		$php = count( array_filter( array_keys( self::bytes_of( $target ) ), array( AB_MCP_Sync_Code_Stage::class, 'is_php' ) ) );
-		self::assertSame( array( $back ? 5 : 6, $php ), array( $php, $step['result']['opcache'] ), 'opcache counts the PHP files that lie at the target now.' );
-		self::assertFalse( $got['after'][0], 'The main file is out of the cache: OPcache was cleared for it (' . $said . ').' );
+		self::assertSame( array( $back ? 9 : 10, $php ), array( $php, $step['result']['opcache'] ), 'opcache counts the PHP files that lie at the target now.' );
+		self::assertSame( array( false, false, false ), array_slice( $got['after'], 0, 3 ), 'The main file and the loaded .inc and .php file both versions have are out of the cache: OPcache was cleared for them after the renames (' . $said . ').' );
 		if ( version_compare( $got['php'], '8.3.0', '>=' ) || version_compare( $got['php'], version_compare( $got['php'], '8.2.0', '<' ) ? '8.1.25' : '8.2.12', '>=' ) ) {
-			self::assertSame( array( true, true ), array_slice( $got['after'], 1 ), 'G-5-26: a loaded file the target no longer has stays in the cache until OPcache is reset.' );
+			self::assertSame( array( true, true ), array_slice( $got['after'], 3 ), 'G-5-26: a loaded file the target no longer has stays in the cache until OPcache is reset.' );
 		}
 	}
 
@@ -3017,7 +3026,7 @@ final class SyncCodeRunTest extends TestCase {
 	 * reverted; at P1 and after the way by hand nothing moved, no OPcache,
 	 * the stage as it was; at P2 the old version back from the backup and
 	 * OPcache for its PHP files; at P3 the new version in a group of its own
-	 * and OPcache for the PHP files of both. Where WordPress let go of the
+	 * and OPcache for the PHP files of the old one. Where WordPress let go of the
 	 * missing unit at P2 (validate_active_plugins(), validate_current_
 	 * theme(), as wp-admin does), the answer names the plugin left inactive
 	 * or the theme that does not run now, each with its way; a theme is
@@ -3101,7 +3110,7 @@ final class SyncCodeRunTest extends TestCase {
 		$moved = array(
 			'P1' => array(),
 			'P2' => 'by hand' === $way ? array() : array( $old ),
-			'P3' => array( $old, $new ),
+			'P3' => array( $old ),
 		)[ $point ];
 		$php   = array();
 		foreach ( $moved as $version ) {
@@ -3109,7 +3118,7 @@ final class SyncCodeRunTest extends TestCase {
 				$php[ $rel ] = $php[ $rel ] ?? AB_MCP_Sync_Code_Stage::is_php( $rel );
 			}
 		}
-		self::assertSame( count( array_filter( $php ) ), $step['result']['opcache'], 'OPcache for each PHP file of what moved, by its path at the target.' );
+		self::assertSame( count( array_filter( $php ) ), $step['result']['opcache'], 'OPcache for each PHP file of the old version at the target, where this way back put it there.' );
 		if ( 'P3' === $point ) {
 			$place = $step['result']['place'];
 			self::assertIsString( $place, 'The new version moved aside.' );
@@ -3513,7 +3522,7 @@ final class SyncCodeRunTest extends TestCase {
 	 * target, with the bytes of staging and the rights of the site, each
 	 * entry given them once before the note; the old version lies whole in
 	 * the backup, the folder or file itself; OPcache is cleared for each PHP
-	 * file replaced after the second rename; the mark is closed, the pair
+	 * file at the target after the second rename; the mark is closed, the pair
 	 * takes the version of staging as its base, the lock for changes is
 	 * given back; the answer names the versions, target, backup, the way
 	 * back and the one command by hand.
@@ -3703,21 +3712,18 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertSame( $want['old'], self::bytes_of( $backup ), 'The old version whole in the backup.' );
 		$kept = lstat( $backup );
 		self::assertSame( array( $old['dev'], $old['ino'] ), array( $kept['dev'], $kept['ino'] ), 'The backup is the old version itself.' );
-		// OPcache: after the second rename, each PHP file of the old and of the
-		// new version by its path at the target; none between the renames.
-		$php = array();
-		foreach ( array( $want['old'], $want['new'] ) as $bytes ) {
-			foreach ( array_keys( $bytes ) as $rel ) {
-				if ( AB_MCP_Sync_Code_Stage::is_php( (string) $rel ) ) {
-					$php[ $file ? $target : $target . '/' . $rel ] = true;
-				}
+		// OPcache: after the second rename, each PHP file of the new version,
+		// which lies at the target, and no other; none between the renames.
+		$paths = array();
+		foreach ( array_keys( $want['new'] ) as $rel ) {
+			if ( AB_MCP_Sync_Code_Stage::is_php( (string) $rel ) ) {
+				$paths[] = $file ? $target : $target . '/' . $rel;
 			}
 		}
-		$paths = array_keys( $php );
 		sort( $paths, SORT_STRING );
 		self::assertNotSame( array(), $paths, 'The unit has PHP files.' );
 		self::assertSame( array(), array_filter( $opcache, static fn( $call ) => 1 === $call[0] ), 'No OPcache between the renames.' );
-		self::assertSame( $paths, array_column( array_filter( $opcache, static fn( $call ) => 2 === $call[0] ), 1 ), 'OPcache for each PHP file replaced.' );
+		self::assertSame( $paths, array_column( array_filter( $opcache, static fn( $call ) => 2 === $call[0] ), 1 ), 'OPcache for each PHP file at the target.' );
 		self::assertSame( count( $paths ), $result['opcache'] );
 		// The mark closed (Z20a).
 		$marks = AB_MCP_Protected_Store::marks();

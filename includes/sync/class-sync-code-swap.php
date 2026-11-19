@@ -44,7 +44,7 @@
  * (AB_MCP_Update_Log::mark_replaced()) last, each read back, then the
  * target into the backup (the whole old folder) and the stage into the
  * target, each only to a place that is free; OPcache for each PHP file
- * replaced (invalidate(), Z13); and
+ * at the target (invalidate(), Z13); and
  * close() (Z20a): the mark closes only on the new version proved at the
  * target and the old one whole in the backup, then the file undo points of
  * the unit go. The files of its pair take their new bases, the step is

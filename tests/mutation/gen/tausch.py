@@ -546,8 +546,8 @@ e('e-ziel-fehlt', 'restored(): an empty target (place_empty()) takes no place, a
 e('e-eigene-neue', 'moved_back(): only the new version the swap left at the target, proved by at_target(), is moved aside (Z22; Teil E)', CS,
   "\t\tif ( true !== $new ) {", "\t\tif ( false ) {", 'coderun', E_F37)
 e('e-alt-am-ziel', 'moved_back(): the old version at the target already moves nothing, and close() with kept ends it done (question 4 of Teil E)', CS,
-  "return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => array() ) :",
-  "return false ? array( 'moved' => array() ) :", 'coderun', 'testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer')
+  "return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => false ) :",
+  "return false ? array( 'moved' => false ) :", 'coderun', 'testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer')
 e('e-sicherung', 'moved_back(): the old version is put back only where in_backup() proves it whole in the backup (Z22, F37; Teil E)', CS,
   "\t\tif ( true !== $intact ) {", "\t\tif ( false ) {", 'coderun', E_F37)
 E_REN = 'testARenameOfTheWayBackThatFailsEndsItsStepUnclearAndTheNewVersionIsWhereItsResultSays'
@@ -555,9 +555,20 @@ e('e-zurueck', 'moved_back(): where the old version does not reach the target, t
   "return self::move( $slot['path'], $plan['target'] ) ? $failed :", 'return false ? $failed :', 'coderun', E_REN)
 e('e-platz-genannt', 'moved_back(): where the new version cannot go back to the target either, the result of the step names the place where it stays (G-5-14; skeptic E1, B5)', CS,
   "? $failed : $failed + array( 'place' => $slot['path'] );", '? $failed : $failed;', 'coderun', E_REN)
-e('e-opcache', 'restored(): OPcache not cleared for a file put back or moved away ends the step of the way back unclear with the host (Z13; Teil E)', CS,
+e('e-opcache', 'restored(): OPcache not cleared for a file put back at the target ends the step of the way back unclear with the host (Z13; Teil E)', CS,
   "\t\tif ( is_wp_error( $opcache ) ) {\n\t\t\t$moved['fault']",
   "\t\tif ( false ) {\n\t\t\t$moved['fault']", 'coderun', 'testOpcacheNotClearedOnTheWayBackEndsItsStepUnclearWithTheHost')
+# Finding 4623266599, option A (Thomas 19.11.2026): OPcache only for the PHP files that lie at the target. Each probe
+# asks OPcache again for the paths of the version moved away, as before the fix; with OPcache itself a path that is
+# gone and was never loaded is refused, and the step ends unclear.
+OA = 'testWithOpcacheOnAStepEndsDoneWhereOneVersionHasPhpFilesTheOtherLacks'
+OA_AGAIN = "\t\tforeach ( (array) %s as $rel ) {\n\t\t\t$done    = is_wp_error( $opcache ) ? true : self::invalidate( $%s['target'] . '/' . $rel );\n\t\t\t$opcache = true === $done ? $opcache : $done;\n\t\t}\n"
+OA_SWAP = "\t\t$opcache = self::invalidated( $plan['target'], $in['until'] );\n"
+OA_BACK = "\t\t$opcache = isset( $moved['fault'] ) || ! $moved['moved'] ? array() : self::invalidated( $journal['target'], $in['until'] );\n"
+e('oa-ziel-vorwaerts', 'after_renames(): OPcache only for the PHP files at the target, none for a path of the old version that is gone from it (finding 4623266599, option A; G-5-26)', CS,
+  OA_SWAP, OA_SWAP + OA_AGAIN % ("self::php_paths( $plan['old']['path'], $in['until'] )", 'plan'), 'coderun', OA)
+e('oa-ziel-rueckweg', 'restored(): OPcache only for the PHP files at the target, none for a path of the new version moved to its place (finding 4623266599, option A; G-5-26)', CS,
+  OA_BACK, OA_BACK + OA_AGAIN % ("( isset( $moved['place'] ) ? self::php_paths( $moved['place'], $in['until'] ) : array() )", 'journal'), 'coderun', OA)
 # Since A1 the done of the way back is held twice: by close() and by the proof read again (proved_now()); without
 # close() the mark of the swap stays open, which the way back of a swap broken off between its renames shows.
 e('e-z20b', 'restored(): the step of the way back closes the mark of the swap only through close() with kept, which proves the old version at the target first; a way back done leaves no mark open (Z20b; Teil E; A1)', CS,
