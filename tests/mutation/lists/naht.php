@@ -14,7 +14,10 @@
  * depth the counter-probes n-nc-1265, n-nc-1273 and n-nc-1288 change in the
  * rule of the term writer. T4: run_write() and written() ask the forward
  * entrance of the engine (n-code-vor, n-code-pruefung), plan() the one of the
- * planning in Push (n-plan-code). Written by hand.
+ * planning in Push (n-plan-code). T5: begin() with the entrance of the
+ * planning gives it the refusal of the packages as a closure, not made as an
+ * argument (n-begin-ablehnung, the rest of T4, held by I4 (d)). Written by
+ * hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -239,5 +242,14 @@ return array(
 		'replace' => "\t\t\$code = AB_MCP_Sync_Code_Plan::of( \$found, \$entries, \$selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) );",
 		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
 		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
+	),
+	array(
+		'id'      => 'naht/n-begin-ablehnung',
+		'clause'  => 'begin(): with the entrance of the planning the refusal of the packages is not made as an argument',
+		'file'    => $pu,
+		'search'  => 'static function () { return self::packages_refusal(); } );',
+		'replace' => 'self::packages_refusal() );',
+		'run'     => $i4( 'testWithTheEntranceOfThePlanningARunOfTheCodeBeginsWithoutMakingTheRefusal' ),
+		'expect'  => '/testWithTheEntranceOfThePlanningARunOfTheCodeBeginsWithoutMakingTheRefusal/',
 	),
 );
