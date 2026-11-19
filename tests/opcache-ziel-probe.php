@@ -18,8 +18,9 @@
  * apply_filters() is a stand-in that gives the value back, as WordPress
  * does without a filter. For comparison it prints what OPcache answers for
  * the paths that are gone (before 8.1.25 and 8.2.12 not_possible, also for
- * a loaded file). Status 0 only where every file at the target is
- * invalidated and OPcache is on.
+ * a loaded file). Status 0 only where OPcache is on, each loaded file was
+ * in the cache before the renames (opcache_is_script_cached()) and every
+ * file at the target is invalidated.
  *
  * @package AlphaBridge_MCP
  */
@@ -60,12 +61,16 @@ $ab_put( $ab_root . '/stage', array( 'neu', 'beide' ) );
 $ab_status = function_exists( 'opcache_get_status' ) ? opcache_get_status( false ) : false;
 $ab_on     = is_array( $ab_status ) && ! empty( $ab_status['opcache_enabled'] );
 printf( "PHP_VERSION %s, opcache_enabled %s\n", PHP_VERSION, var_export( $ab_on, true ) );
+$ab_loaded = $ab_on;
 foreach ( array( 'alt', 'beide' ) as $ab_sub ) {
 	foreach ( array( 'geladen.inc', 'geladen.php' ) as $ab_name ) {
-		printf( "compiled %s/%s: %s\n", $ab_sub, $ab_name, var_export( $ab_on && opcache_compile_file( $ab_target . '/' . $ab_sub . '/' . $ab_name ), true ) );
+		$ab_path   = $ab_target . '/' . $ab_sub . '/' . $ab_name;
+		$ab_cached = $ab_on && opcache_compile_file( $ab_path ) && opcache_is_script_cached( $ab_path );
+		$ab_loaded = $ab_loaded && $ab_cached;
+		printf( "in the cache before the renames %s/%s: %s\n", $ab_sub, $ab_name, var_export( $ab_cached, true ) );
 	}
 }
-$ab_ok = rename( $ab_target, $ab_root . '/backup' ) && rename( $ab_root . '/stage', $ab_target ) && $ab_on;
+$ab_ok = rename( $ab_target, $ab_root . '/backup' ) && rename( $ab_root . '/stage', $ab_target ) && $ab_loaded;
 clearstatcache();
 foreach ( array( 'beide', 'neu' ) as $ab_sub ) {
 	foreach ( (array) scandir( $ab_target . '/' . $ab_sub ) as $ab_name ) {

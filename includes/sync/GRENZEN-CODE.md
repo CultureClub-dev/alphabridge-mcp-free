@@ -1263,9 +1263,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     - Schon zurückgelegt (die alte Fassung liegt bewiesen am Ziel, etwa nach dem Handweg): Der Schritt bewegt nichts,
       ruft OPcache nicht und endet `done` mit `opcache` 0. Das Leeren nach dem Handweg ist der Satz der Anleitung
       (G-5-12).
-- **Trifft Normalfall:** ja, wo eine Fassung PHP-Dateien hat, die der anderen fehlen: Ihre Einträge bleiben. Ohne
-  Wirkung, solange nichts den entfernten Pfad einbindet; der Weg ist der Reset von OPcache oder der Neustart von PHP
-  beim Hoster.
+- **Trifft Normalfall:** nein, nach Einschätzung (nicht gemessen: wie verbreitet `opcache.validate_timestamps=0` ist
+  und wie oft ein Update PHP-Dateien entfernt). Die Einträge bleiben zwar, wo eine Fassung PHP-Dateien hat, die der
+  anderen fehlen; alter Code läuft aber nur, wenn die Zeitprüfung aus ist und dazu etwas genau den entfernten Pfad
+  einbindet. Der Weg ist der Reset von OPcache oder der Neustart von PHP beim Hoster.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 
