@@ -16,8 +16,9 @@
  * entrance of the engine (n-code-vor, n-code-pruefung), plan() the one of the
  * planning in Push (n-plan-code). T5: begin() with the entrance of the
  * planning gives it the refusal of the packages as a closure, not made as an
- * argument (n-begin-ablehnung, the rest of T4, held by I4 (d)). Written by
- * hand.
+ * argument (n-begin-ablehnung, the rest of T4, held by I4 (d)); boundary()
+ * fails the step of a kind without a writer (n-schreibgrenze, held by I1 (f)
+ * in SyncPlanWithoutWriterTest). Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -47,6 +48,7 @@ $nc   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanRules
 $swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncContentTest::testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell( |$)/' );
 $clip = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncMediaTest::testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack( |$)/' );
 $i4   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncCodeWithoutEntranceTest::' . $test . '( |$)/' );
+$i6   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncPlanWithoutWriterTest::' . $test . '( |$)/' );
 
 $sw = 'includes/sync/class-sync-writers.php';
 $en = 'includes/sync/class-sync-engine.php';
@@ -251,5 +253,14 @@ return array(
 		'replace' => 'self::packages_refusal() );',
 		'run'     => $i4( 'testWithTheEntranceOfThePlanningARunOfTheCodeBeginsWithoutMakingTheRefusal' ),
 		'expect'  => '/testWithTheEntranceOfThePlanningARunOfTheCodeBeginsWithoutMakingTheRefusal/',
+	),
+	array(
+		'id'      => 'naht/n-schreibgrenze',
+		'clause'  => 'boundary(): a step of a kind without a writer fails with the sentence of the core, nothing written',
+		'file'    => $en,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'planned', sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), \$item['kind'] ) );",
+		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'planned', sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), \$item['kind'] ) );",
+		'run'     => $i6( 'testWithoutAWriterAtTheWriteBoundaryTheStepFailsAndNothingIsWritten' ),
+		'expect'  => '/testWithoutAWriterAtTheWriteBoundaryTheStepFailsAndNothingIsWritten/',
 	),
 );

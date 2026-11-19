@@ -31,6 +31,14 @@
  * The way back without the entrance holds SyncCodeRunTest (with the place of
  * AB_MCP_Sync_Revert emptied). The entrances are put back after each case.
  *
+ * R1 open (the seam, first step): where a case here asserts that a run
+ * is closed or refused because a kind has no writer or the code has no
+ * entrance, it describes the state of the first step, not what must hold
+ * once the licence of the plugin that registered a kind ends. What
+ * follows from R1 is open: once the licence is renewed and the kind is
+ * registered again, a run left standing must go on or be taken back, and
+ * its backups must not expire until then.
+ *
  * @package AlphaBridge_MCP
  */
 

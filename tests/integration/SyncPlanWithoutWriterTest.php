@@ -26,9 +26,28 @@
  *   plan() ends without an error (the same report). term_depths() itself,
  *   before plan() removes the depths, gives the depth of the term with its
  *   writer and nothing without it, the term among its items.
+ * - (e) I1, plan() with post alone, by its subtypes post and page (1a
+ *   :775–:777): one entry of each other kind (term, attachment, menu,
+ *   menu_item, widget_area, custom_css, option) and of each other type of
+ *   post (wp_block, wp_template, wp_template_part, wp_global_styles,
+ *   wp_navigation) beside a new post. Each is locked with «The kind … is
+ *   not written by a run of this version.» (the types as post), the post
+ *   alone is planned, plan() and the preview give no error.
+ * - (f) I1, boundary(): a run that updates a term, planned, confirmed and
+ *   checked with every writer, then post alone registered. The step of the
+ *   term fails with «No step of this version writes the kind term.», the
+ *   term stays as it was, no error. How the run ends is not asserted (R1).
  *
  * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
+ *
+ * R1 open (the seam, first step): where a case here asserts that a run
+ * is closed or refused because a kind has no writer or the code has no
+ * entrance, it describes the state of the first step, not what must hold
+ * once the licence of the plugin that registered a kind ends. What
+ * follows from R1 is open: once the licence is renewed and the kind is
+ * registered again, a run left standing must go on or be taken back, and
+ * its backups must not expire until then.
  *
  * @package AlphaBridge_MCP
  */
@@ -71,6 +90,12 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 
 	/** The date every object of these tests carries. */
 	private const DATE = '2026-10-01 10:00:00';
+
+	/** The kinds of the engine but post (I1). */
+	private const OTHER_KINDS = array( 'term', 'attachment', 'menu', 'menu_item', 'widget_area', 'custom_css', 'option' );
+
+	/** The types of post the engine writes but post and page (I1). */
+	private const OTHER_TYPES = array( 'wp_block', 'wp_template', 'wp_template_part', 'wp_global_styles', 'wp_navigation' );
 
 	/** @var array|null The table of the writers as the engine registered it. */
 	private $kept = null;
@@ -346,6 +371,71 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 		self::assertNull( AB_MCP_Sync_Engine::writer( $kind, '' ) );
 	}
 
+	/** Post alone registered, by its subtypes post and page, as U1 allows it (tearDown() puts the table back). */
+	private static function only_post(): void {
+		AB_MCP_Sync_Writers::reset();
+		self::assertTrue( AB_MCP_Sync_Writers::register( 'post', array( 'post', 'page' ), AB_MCP_Sync_Engine::WRITERS['post'] ) );
+		self::assertNull( AB_MCP_Sync_Engine::writer( 'post', 'wp_block' ) );
+	}
+
+	/**
+	 * One object of each other kind and type on B for a takeover, and a new
+	 * post: the description, a text widget and the additional CSS equal on
+	 * both sites and paired, then changed on B (a new additional CSS is
+	 * locked in the report already); a category, an image, a menu with a
+	 * link, a reusable block, a navigation, the template single, the part
+	 * header and the global styles of the theme new on B (both sites run the
+	 * same theme).
+	 */
+	private static function others_on_b(): void {
+		$widget               = array(
+			2              => array( 'title' => 'Hinweis', 'text' => 'Alt', 'filter' => false, 'visual' => false ),
+			'_multiwidget' => 1,
+		);
+		$areas                = get_option( 'sidebars_widgets' );
+		$areas['sidebar-1'][] = 'text-2';
+		update_option( 'blogdescription', 'Things' );
+		update_option( 'widget_text', $widget );
+		update_option( 'sidebars_widgets', $areas );
+		wp_update_custom_css_post( 'body { color: #111111; }' );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'blogdescription', 'value' => 'Things' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $widget ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+				array( 'op' => 'custom_css', 'css' => 'body { color: #111111; }' ),
+			)
+		);
+		self::paired( self::staged() );
+		$widget[2]['text'] = 'Neu';
+		$menu              = self::on_b( array( 'op' => 'nav_menu', 'name' => 'Main' ) );
+		$link              = array( 'menu-item-title' => 'Shop', 'menu-item-url' => 'https://example.test/shop/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 );
+		$para              = array( 'content' => '<!-- wp:paragraph --><p>Neu</p><!-- /wp:paragraph -->' );
+		self::b(
+			array(
+				array( 'op' => 'update_option', 'name' => 'blogdescription', 'value' => 'Other things' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $widget ),
+				array( 'op' => 'custom_css', 'css' => 'body { color: #222222; }' ),
+				array( 'op' => 'update_option', 'name' => 'upload_path', 'value' => self::UPLOADS ),
+				array( 'op' => 'insert_term', 'name' => 'Topics', 'taxonomy' => 'category' ),
+				array( 'op' => 'upload', 'name' => 'bild.jpg', 'mime' => 'image/jpeg', 'image' => array( 'w' => 8, 'h' => 8, 'rgb' => array( 10, 80, 160 ) ), 'args' => array( 'post_title' => 'Bild' ) ),
+				array( 'op' => 'nav_menu_item', 'menu' => $menu, 'args' => $link ),
+				array( 'op' => 'global_styles_id' ),
+				array( 'op' => 'rest', 'method' => 'POST', 'route' => '/wp/v2/templates/' . get_stylesheet() . '//single', 'body' => $para ),
+				array( 'op' => 'rest', 'method' => 'POST', 'route' => '/wp/v2/template-parts/' . get_stylesheet() . '//header', 'body' => $para ),
+			)
+		);
+		self::post_b( 'wp_block', 'hinweis' );
+		self::post_b( 'wp_navigation', 'hauptmenu' );
+		self::post_b( 'post', 'tips' );
+	}
+
+	/** The entries of the report of another kind or type that a takeover writes (take_over or create). */
+	private static function others( array $report ): array {
+		$other = static fn( array $e ): bool => in_array( $e['kind'], self::OTHER_KINDS, true ) || ( 'post' === $e['kind'] && in_array( $e['subtype'], self::OTHER_TYPES, true ) );
+		return array_values( array_filter( $report['all'], static fn( $e ) => $other( $e ) && in_array( $e['action'], array( 'take_over', 'create' ), true ) ) );
+	}
+
 	/** The objects of a plan as kind:staging_ref, in the order of its steps. */
 	private static function order_of( array $plan ): array {
 		return array_map( static fn( $o ) => $o['kind'] . ':' . $o['staging_ref'], $plan['objects'] );
@@ -453,6 +543,94 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 		self::assertIsArray( $bare, is_wp_error( $bare ) ? $bare->get_error_message() : '' );
 		self::assertSame( array( array( (int) $topics['n'], 'term', 'The kind term is not written by a run of this version.', 'Z8d' ) ), array_map( static fn( $l ) => array( $l['n'], $l['kind'], $l['reason'], $l['stage'] ), $bare['locked'] ) );
 		self::assertSame( array_slice( self::order_of( $every ), 1 ), self::order_of( $bare ), 'The page and the post in the order they have beside the term.' );
+		// plan() removes the depth from every object (as it removes refs),
+		// so this line describes the plan and cannot turn red; the depths
+		// are checked through term_depths() above.
 		self::assertSame( array(), array_filter( array_map( static fn( $o ) => isset( $o['depth'] ), $bare['objects'] ) ), 'No depth.' );
+	}
+
+	/**
+	 * Prüft: (e) with post alone registered, by its subtypes post and page,
+	 * plan() locks one entry of each other kind and of each other type of
+	 * post with the sentence of verdict() and the stage Z8d, these twelve
+	 * and no other entry (the message names each entry missing or too
+	 * many); the post alone is planned, so no object of those kinds and
+	 * types is in the plan, and none is written. plan() and the preview give
+	 * no error.
+	 * State of the first step (P3): no run here. A run that wrote the post
+	 * ends at its step post with an internal error where post is registered
+	 * by its subtypes, as run_post() asks for the writer of a kind without
+	 * its subtype (Engine :2650–:2651); after the move a test of its own is
+	 * required there, not a case of the seam.
+	 * Sonst: after the move a kind or type Free no longer has would stay
+	 * writable in Free.
+	 */
+	public function testEveryOtherKindAndTypeIsLockedInThePlanWhereOnlyPostIsRegisteredByItsSubtypes(): void {
+		self::pair();
+		self::others_on_b();
+		$report = self::report( self::staged() );
+		$tips   = self::entry( $report, 'post', 'post', 'tips' );
+		$args   = self::args( $report, array_merge( self::others( $report ), array( $tips ) ) );
+		self::only_post();
+		$plan = AB_MCP_Sync_Push::plan( $args );
+		self::assertIsArray( $plan, is_wp_error( $plan ) ? $plan->get_error_message() : '' );
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$locked = array_map( static fn( $l ) => array( $l['kind'], $l['subtype'], $l['reason'], $l['stage'] ), $plan['locked'] );
+		sort( $locked );
+		$says     = static fn( string $kind ): array => array( "The kind $kind is not written by a run of this version.", 'Z8d' );
+		$expected = array(
+			array_merge( array( 'attachment', 'attachment' ), $says( 'attachment' ) ),
+			array_merge( array( 'custom_css', '' ), $says( 'custom_css' ) ),
+			array_merge( array( 'menu', 'nav_menu' ), $says( 'menu' ) ),
+			array_merge( array( 'menu_item', '' ), $says( 'menu_item' ) ),
+			array_merge( array( 'option', '' ), $says( 'option' ) ),
+			array_merge( array( 'post', 'wp_block' ), $says( 'post' ) ),
+			array_merge( array( 'post', 'wp_global_styles' ), $says( 'post' ) ),
+			array_merge( array( 'post', 'wp_navigation' ), $says( 'post' ) ),
+			array_merge( array( 'post', 'wp_template' ), $says( 'post' ) ),
+			array_merge( array( 'post', 'wp_template_part' ), $says( 'post' ) ),
+			array_merge( array( 'term', 'category' ), $says( 'term' ) ),
+			array_merge( array( 'widget_area', '' ), $says( 'widget_area' ) ),
+		);
+		$rows     = static fn( array $list ): array => array_map( static fn( $row ) => (string) json_encode( $row ), $list );
+		$missing  = implode( ' ', array_diff( $rows( $expected ), $rows( $locked ) ) );
+		$surplus  = implode( ' ', array_diff( $rows( $locked ), $rows( $expected ) ) );
+		self::assertSame( $expected, $locked, "Each other kind and type locked by the registration, and no other entry. Missing: $missing Too many: $surplus" );
+		self::assertSame( array( 'post:' . $tips['staging']['ref'] ), self::order_of( $plan ), 'The post alone is planned.' );
+	}
+
+	/**
+	 * Prüft: (f) a step of a kind whose writer is gone after the check
+	 * reaches the write boundary (boundary()), which the lock of the plan
+	 * and the check (check_item()) hide otherwise: the step fails with the
+	 * sentence the core has for a kind no step writes, the answer is no
+	 * error, the term stays as it was. How the run goes on and ends is not
+	 * asserted (R1).
+	 * Sonst: a step of a kind Free no longer has would be written past the
+	 * write boundary, or end with an error because its writer is missing.
+	 */
+	public function testWithoutAWriterAtTheWriteBoundaryTheStepFailsAndNothingIsWritten(): void {
+		self::pair();
+		$news_a = (int) wp_insert_term( 'News', 'category' )['term_id'];
+		$news_b = self::on_b( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category' ) );
+		self::paired( self::staged() );
+		self::b( array( array( 'op' => 'update_term', 'term' => $news_b, 'taxonomy' => 'category', 'args' => array( 'description' => 'Fresh news.' ) ) ) );
+		$report  = self::report( self::staged() );
+		$args    = self::args( $report, array( self::entry( $report, 'term', 'category', 'news' ) ) );
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
+		$next  = static fn() => self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => (int) $run['run_id'] ) );
+		$check = $next();
+		self::assertIsArray( $check, is_wp_error( $check ) ? $check->get_error_message() : '' );
+		self::assertSame( array( 'check', 'done' ), array( $check['step']['op'], $check['step']['state'] ), 'The check, with every writer.' );
+		$before = AB_MCP_IT_Sites::rows( 'a', 'term_taxonomy', array( 'term_id' => (string) $news_a ) );
+		self::only_post();
+		$failed = $next();
+		self::assertIsArray( $failed, is_wp_error( $failed ) ? $failed->get_error_code() . ': ' . $failed->get_error_message() : '' );
+		self::assertSame( array( 'write', 'failed', 'Not written: No step of this version writes the kind term.' ), array( $failed['step']['op'], $failed['step']['state'], $failed['step']['result']['message'] ) );
+		self::assertSame( $before, AB_MCP_IT_Sites::rows( 'a', 'term_taxonomy', array( 'term_id' => (string) $news_a ) ), 'The term as it was.' );
 	}
 }
