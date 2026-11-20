@@ -22,7 +22,7 @@
  * - (c) the check of the run: as (b), its two steps done as if the entrance
  *   had run them. The check closes the run with that text as the finding of
  *   each step, no error; written() itself gives it without the entrance and
- *   the finding of the code (none) with it.
+ *   the finding of the code (G3 of #155: its journal) with it.
  * - (d) with the entrance of the planning, as this plugin puts it, begin()
  *   of a run of the code makes no refusal (no ab_mcp_sync_push_packages
  *   through the action wp_error_added, its text never through the filter
@@ -567,7 +567,7 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 	 * SyncCodeRunTest sets a step): the run closes with the text the core has
 	 * for a kind no step writes as the finding of each step, no error.
 	 * written() itself (the check closes over it): that finding without the
-	 * entrance, the finding of the code (none) with it. The name of a class
+	 * entrance, the finding of the code (G3) with it. The name of a class
 	 * that is not loaded leaves the place empty, and written() answers as
 	 * without the entrance (B4).
 	 * Sonst: the check of a run asks the code past its one entrance (D5),
@@ -582,12 +582,12 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		$written = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'written' );
 		$run     = AB_MCP_Sync_Run::get( $run_id );
 		$two     = self::step( $run_id, 2 );
-		self::assertSame( array( 0, null ), $written->invoke( null, $run, $two, array(), array() ), 'With the entrance: no finding of a step of the code done.' );
+		self::assertStringStartsWith( 'Step 2 swapped the plugin ab-it-inaktiv, but its journal does not read back as the swap wrote it', $written->invoke( null, $run, $two, array(), array(), null )[1]['message'] ?? '', 'With the entrance: the finding of the code for a step done without the journal of a swap (G3 of #155), not the text of the core.' );
 		self::assertFalse( class_exists( self::NOT_LOADED ) );
 		AB_MCP_Sync_Engine::admit_code( self::NOT_LOADED );
 		try {
 			$place = self::place( AB_MCP_Sync_Engine::class );
-			$wrong = $written->invoke( null, $run, $two, array(), array() );
+			$wrong = $written->invoke( null, $run, $two, array(), array(), null );
 		} finally {
 			AB_MCP_Sync_Engine::admit_code( 'AB_MCP_Sync_Code_Ops' );
 		}
@@ -595,7 +595,7 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		self::assertSame( array( 0, array( 'seq' => 2, 'message' => self::NONE ) ), $wrong, 'written() answers as without the entrance.' );
 		AB_MCP_Sync_Engine::admit_code( null );
 		try {
-			$direct = $written->invoke( null, $run, $two, array(), array() );
+			$direct = $written->invoke( null, $run, $two, array(), array(), null );
 			$closed = self::closed( $run_id );
 		} finally {
 			AB_MCP_Sync_Engine::admit_code( 'AB_MCP_Sync_Code_Ops' );

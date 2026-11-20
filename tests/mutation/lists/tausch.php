@@ -1030,7 +1030,7 @@ return array(
 		'id'      => 'tausch/h-g1-engine-counts',
 		'clause'  => 'run_verify(): the check goes over the steps counts() takes for objects written, never every write step of a run of the code (G1 of GitHub Codex on #155)',
 		'file'    => $en,
-		'search'  => "\t\t\tif ( AB_MCP_Sync_Code_Ops::counts( \$run, \$one ) ) {",
+		'search'  => "\t\t\tif ( null !== self::\$code ? call_user_func( array( self::\$code, 'counts' ), \$run, \$one ) : 'write' === \$one['op'] ) {",
 		'replace' => "\t\t\tif ( 'write' === \$one['op'] ) {",
 		'run'     => $it( 'SyncCodeRunTest', 'testAUnitThisSiteHasAsTheStagingSiteHasItAtItsStepIsDoneWithSameAndNothingIsStagedOrChanged' ),
 		'expect'  => '/testAUnitThisSiteHasAsTheStagingSiteHasItAtItsStepIsDoneWithSameAndNothingIsStagedOrChanged/',

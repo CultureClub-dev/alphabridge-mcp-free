@@ -2718,7 +2718,7 @@ final class AB_MCP_Sync_Engine {
 		$writes = array();
 		$last   = array();
 		foreach ( $steps as $one ) {
-			if ( AB_MCP_Sync_Code_Ops::counts( $run, $one ) ) {
+			if ( null !== self::$code ? call_user_func( array( self::$code, 'counts' ), $run, $one ) : 'write' === $one['op'] ) {
 				$writes[] = $one;
 				if ( 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 					// The last step that wrote an object holds its target: the
@@ -3019,7 +3019,7 @@ final class AB_MCP_Sync_Engine {
 		}
 		$unit = self::code_item( $run['plan'], $one['seq'] );
 		if ( null !== $unit ) {
-			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit, $until );
+			$found = is_wp_error( $unit ) ? $unit->get_error_message() : ( is_string( $unit ) ? $unit : call_user_func( array( self::$code, 'finding' ), $one, $unit, $until ) );
 			return false === $found ? null : array( 0, null === $found ? null : array( 'seq' => $one['seq'], 'message' => $found ) );
 		}
 		$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
