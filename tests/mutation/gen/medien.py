@@ -73,13 +73,11 @@ U_OWN = 'testTheFilesTheRunLaidAreItsOwnAndAFileThereAlreadyIsNot'
 U_ROW = 'testTheFileOfANewAttachmentGoesWithItsRowAndThatOfOneHereByItsOwnCall'
 U_RIGHTS = 'testTheOwnKeysOfAnAttachmentAskTheRightToItAndToUploadForwardAndBack'
 U_WEAK = 'testTheParentOfAnAttachmentIsAWeakReferenceThatWaitsButMakesNoCycle'
-U_VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'
 U_FOLDER = 'testTheFolderOfAFileIsMadeLevelByLevelUnderTheUploadsAndTheUploadsThemselvesWhereTheyAreMissing'
 U_LAY = 'testAFileIsLaidOnlyWhereItIsShownAtItsPathUnderTheUploadsAndAFolderSwappedAsItIsOpenedLeavesItEmptyAndUnclear'
 FLAT = 'testTheFirstFilesOfASiteWithoutMonthFoldersGoIntoItsUploadsAndOnlyWithTheRightToUploadAsTheyAreLaid'
 FILEHOOK = 'testAFileAHookChangesAsTheStepWritesOrPutsBackDeviatesTheAttachmentAndStopsItsWayBack'
 WEBP = 'testAWebpSizeAndAnImportOfOldWithAbsolutePathsLockNoAttachmentBesideThem'
-VIDEO = 'testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack'
 U_KINDS = 'testEachKindRegistersWithWhatTheTableGivesIt'
 U_WRITERS = 'testTheEngineWritesTermsWithTheirOwnWriter'
 IT_LINES = 'testAnImportUnpacksEachLineWithinTheLimitsAndChecksItAgain'
@@ -192,26 +190,8 @@ e('report-weak-passed-on', 'graph(): what needs a held back target by a weak ref
   "\t\tforeach ( array( $edges, $weak ) as $of ) {", "\t\tforeach ( array( $edges ) as $of ) {", 'report', U_WEAK)
 
 # ------------------------------------------------------------- the plan
-e('verdict-attachment', 'verdict(): an attachment is an item of its kind', PU,
-  "\t\t} elseif ( 'attachment' === $entry['kind'] ) {\n\t\t\t// An attachment with its files (branch 10): no choice «as draft».\n\t\t\tif ( $as_draft ) {",
-  "\t\t} elseif ( false ) {\n\t\t\t// An attachment with its files (branch 10): no choice «as draft».\n\t\t\tif ( $as_draft ) {", 'run', U_VERDICT)
-e('verdict-no-draft', 'verdict(): an attachment has no status draft', PU,
-  "\t\t\tif ( $as_draft ) {\n\t\t\t\treturn $lock( ",
-  "\t\t\tif ( false ) {\n\t\t\t\treturn $lock( ", 'run', U_VERDICT)
-e('plan-weak-parent', 'plan(): the weak parent of an attachment is read for its parent step', PU,
-  "\t\t\t\t\t$item['weak_parent'] = (string) (int) $ref['id'];\n\t\t\t\t\tcontinue;",
-  "\t\t\t\t\tcontinue;", 'it', NORMAL)
-e('plan-parent-edge', 'plan(): an attachment here comes after the new parent the run creates', PU,
-  "\t\t\t\t$items[ $n ]['refs'][] = array( 'post', $item['weak_parent'] );\n", "", 'it', CHANGED)
-e('plan-made-attachments', 'plan(): a new attachment counts as a parent the run creates (a poster under its new video; GitHub Codex on free#140, P2)', PU,
-  "\t\t\tif ( in_array( $item['kind'], array( 'post', 'attachment' ), true ) && 'create' === $item['op'] ) {\n\t\t\t\t$made_posts[",
-  "\t\t\tif ( 'post' === $item['kind'] && 'create' === $item['op'] ) {\n\t\t\t\t$made_posts[", 'it', VIDEO)
-e('plan-parent-later', 'plan(): a new attachment under a post the run creates is made unattached first', PU,
-  "\t\t\t\t$items[ $n ]['parent_later'] = true;\n", "", 'it', NORMAL)
 e('plan-parent-step', 'plan(): the parent step after the attachment and its post', PU,
   "\t\tforeach ( $parents as $n => $m ) {", "\t\tforeach ( array() as $n => $m ) {", 'it', NORMAL)
-e('plan-shared-paths', 'plan(): two attachments of the plan naming one path are locked', PU,
-  "\t\t\tif ( count( $ns ) < 2 ) {", "\t\t\tif ( true ) {", 'it', LOCKS)
 
 # ------------------------------------------------------------ the engine
 e('engine-writer', 'WRITERS: the kind attachment has its writer', EN,

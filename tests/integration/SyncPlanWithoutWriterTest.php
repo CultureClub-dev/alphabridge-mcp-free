@@ -37,6 +37,11 @@
  *   checked with every writer, then post alone registered. The step of the
  *   term fails with «No step of this version writes the kind term.», the
  *   term stays as it was, no error. How the run ends is not asserted (R1).
+ * - (g) run_post(), C1: the same run checked and written with every writer,
+ *   then term no longer registered. Phase 7 takes the written term as before
+ *   the first step of T6 (head c95eda5): by the key post with the journal of
+ *   a post, so the writer of post empties it; its step is done, no error.
+ *   How the run ends is not asserted (R1).
  *
  * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
@@ -557,11 +562,8 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 	 * many); the post alone is planned, so no object of those kinds and
 	 * types is in the plan, and none is written. plan() and the preview give
 	 * no error.
-	 * State of the first step (P3): no run here. A run that wrote the post
-	 * ends at its step post with an internal error where post is registered
-	 * by its subtypes, as run_post() asks for the writer of a kind without
-	 * its subtype (Engine :2650–:2651); after the move a test of its own is
-	 * required there, not a case of the seam.
+	 * No run here: a run with post alone, by its subtypes, is (P3) in
+	 * SyncWayBackWithoutWriterTest.
 	 * Sonst: after the move a kind or type Free no longer has would stay
 	 * writable in Free.
 	 */
@@ -632,5 +634,40 @@ final class SyncPlanWithoutWriterTest extends TestCase {
 		self::assertIsArray( $failed, is_wp_error( $failed ) ? $failed->get_error_code() . ': ' . $failed->get_error_message() : '' );
 		self::assertSame( array( 'write', 'failed', 'Not written: No step of this version writes the kind term.' ), array( $failed['step']['op'], $failed['step']['state'], $failed['step']['result']['message'] ) );
 		self::assertSame( $before, AB_MCP_IT_Sites::rows( 'a', 'term_taxonomy', array( 'term_id' => (string) $news_a ) ), 'The term as it was.' );
+	}
+
+	/**
+	 * Prüft: (g) C1, phase 7 (run_post()) of a run that wrote a term with
+	 * every writer, the writer of the term gone after the write (the other
+	 * seven kinds whole): the step post answers without an error and is
+	 * done, as at the head c95eda5 (the key post with the journal of a post,
+	 * so the writer of post). Phase 8 and the end of the run are not
+	 * asserted (R1).
+	 * Sonst: phase 7 would keep the key post but ask the journal of the term
+	 * for its writer, find none and end with an internal error, each next
+	 * again.
+	 */
+	public function testPhaseSevenOfAWrittenTermWhoseWriterIsGoneIsDoneWithoutAnError(): void {
+		self::pair();
+		wp_insert_term( 'News', 'category' );
+		$news_b = self::on_b( array( 'op' => 'insert_term', 'name' => 'News', 'taxonomy' => 'category' ) );
+		self::paired( self::staged() );
+		self::b( array( array( 'op' => 'update_term', 'term' => $news_b, 'taxonomy' => 'category', 'args' => array( 'description' => 'Fresh news.' ) ) ) );
+		$report  = self::report( self::staged() );
+		$args    = self::args( $report, array( self::entry( $report, 'term', 'category', 'news' ) ) );
+		$preview = self::gated( 'wp_site_push', $args );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
+		$next = static fn() => self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => (int) $run['run_id'] ) );
+		foreach ( array( 'check', 'write' ) as $op ) {
+			$answer = $next();
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+			self::assertSame( array( $op, 'done' ), array( $answer['step']['op'], $answer['step']['state'] ), "The step $op, with every writer." );
+		}
+		self::without( 'term' );
+		$post = $next();
+		self::assertIsArray( $post, is_wp_error( $post ) ? $post->get_error_code() . ': ' . $post->get_error_message() : '' );
+		self::assertSame( array( 'post', 'done' ), array( $post['step']['op'], $post['step']['state'] ), 'Phase 7 with the writer of post, as at c95eda5.' );
 	}
 }

@@ -2,8 +2,8 @@
 /**
  * The successors of the entries of the other lists whose clause the seam
  * moved out of AB_MCP_Sync_Push (first step T3, stage 1, decision of the
- * steering 18.11. after 11:16 and the answer of 11:18): the old entries stay
- * word for word until T6, which replaces them by these. Each successor takes
+ * steering 18.11. after 11:16 and the answer of 11:18): the old entries stayed
+ * word for word until T6, which replaced them by these. Each successor takes
  * the same clause out at its new place, one for each target; its run and
  * expect are those of the old entry word for word, so the same test that
  * held the old one holds it. Written by hand.

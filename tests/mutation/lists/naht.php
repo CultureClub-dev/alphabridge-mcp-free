@@ -34,7 +34,10 @@
  * of the run (n-p3-pruefung), for the pair of a new object (n-p3-paar-neu)
  * and for the row the token of a way back binds (n-p3-zeile); each mutation
  * asks without the subtype as before, each held by (P3) in
- * SyncWayBackWithoutWriterTest. Written by hand.
+ * SyncWayBackWithoutWriterTest. T6 part 2 (C1): phase 7 takes an object
+ * without a writer by the key post with the journal of a post, so key and
+ * writer match (n-c1-schluessel-post, held by (g) in
+ * SyncPlanWithoutWriterTest). Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -379,5 +382,14 @@ return array(
 		'replace' => "\t\t\$w = AB_MCP_Sync_Engine::writer( isset( \$object['kind'] ) ? (string) \$object['kind'] : 'post', '' );",
 		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
 		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-c1-schluessel-post',
+		'clause'  => 'run_post(): an object without a writer goes to phase 7 by the key post with the journal of a post, so key and writer match (C1)',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\$ids[] = array( null === \$w ? 'post' : \$kind, self::live_of( \$w, \$one['result']['live_ref'] ), null === \$w ? array() : (array) \$one['parts'] );",
+		'replace' => "\t\t\t\t\$ids[] = array( null === \$w ? 'post' : \$kind, self::live_of( \$w, \$one['result']['live_ref'] ), (array) \$one['parts'] );",
+		'run'     => $i6( 'testPhaseSevenOfAWrittenTermWhoseWriterIsGoneIsDoneWithoutAnError' ),
+		'expect'  => '/testPhaseSevenOfAWrittenTermWhoseWriterIsGoneIsDoneWithoutAnError/',
 	),
 );

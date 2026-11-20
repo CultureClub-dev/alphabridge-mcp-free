@@ -112,12 +112,6 @@ final class AB_MCP_Sync_Push {
 	 */
 	const LAST = array( 'wp_navigation' );
 
-	/**
-	 * The kinds of the structure of a site a run writes (branch 11): a menu
-	 * and its items, a widget area, the additional CSS, a core option.
-	 */
-	const STRUCTURE = array( 'menu', 'menu_item', 'widget_area', 'custom_css', 'option' );
-
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
 
@@ -1160,7 +1154,7 @@ final class AB_MCP_Sync_Push {
 		// others as planned (B2, menu:position_exchange), and none of them is
 		// written halfway.
 		foreach ( AB_MCP_Sync_Decision::cycles( $exchange ) as $members ) {
-			$lock = AB_MCP_Sync_Kinds::lock( 'menu', 'position_exchange' );
+			$lock = self::writer_rule( $items[ reset( $members ) ], 'exchange_lock', array() );
 			foreach ( $members as $n ) {
 				if ( isset( $items[ $n ] ) ) {
 					$locked[] = array(

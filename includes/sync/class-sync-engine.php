@@ -157,7 +157,10 @@ final class AB_MCP_Sync_Engine {
 	 * class whose static methods prepare, check, write, read back and put
 	 * back one object of the kind, with the same names for every kind
 	 * (target_of(), precheck(), current(), journal_parts(), write_row(),
-	 * write_part(), restore_part(), …). A kind without one is written by no
+	 * write_part(), restore_part(), …). This plugin registers each kind whole
+	 * at the end of this file (AB_MCP_Sync_Writers); the core asks the
+	 * registration (writer(), writer_of(), AB_MCP_Sync_Writers::all()), not
+	 * this list. A kind or subtype without a writer there is written by no
 	 * step (writer() null: the step fails before anything is written). Since
 	 * branch 11 the kinds of the structure of a site: a menu (its term and its
 	 * positions) and its items, a widget area with its instances, the
@@ -2622,13 +2625,15 @@ final class AB_MCP_Sync_Engine {
 		}
 		// The written objects with their kind: a post by its id, a term by
 		// term:<id> (two id spaces; branch 9), and their journal, by whose
-		// writer (writer_of(), with its subtype) they are emptied.
+		// writer (writer_of(), with its subtype) they are emptied. One whose
+		// writer is gone takes the key post with the journal of a post, so key
+		// and writer match: the writer of post empties it (C1 of the seam).
 		$ids = array();
 		foreach ( $steps as $one ) {
 			if ( 'write' === $one['op'] && 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 				$kind  = is_array( $one['parts'] ) && isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post';
 				$w     = self::writer_of( (array) $one['parts'] );
-				$ids[] = array( null === $w ? 'post' : $kind, self::live_of( $w, $one['result']['live_ref'] ), (array) $one['parts'] );
+				$ids[] = array( null === $w ? 'post' : $kind, self::live_of( $w, $one['result']['live_ref'] ), null === $w ? array() : (array) $one['parts'] );
 			}
 		}
 		// In parts, within the work of the call, the cursor kept in the result
@@ -4062,7 +4067,7 @@ final class AB_MCP_Sync_Engine {
 // its class, as the file loads; a refusal is not answered here,
 // SyncWritersTest holds all. Then the files of the code, whose last lines
 // admit the entrances of its forward way and of its planning (as
-// AB_MCP_Sync_Code_Ops admits the one of its way back); none asks writer().
+// AB_MCP_Sync_Code_Ops admits the one of its way back); none asks the registration.
 require_once __DIR__ . '/class-sync-post-writer.php';
 require_once __DIR__ . '/class-sync-term-writer.php';
 require_once __DIR__ . '/class-sync-attachment-writer.php';

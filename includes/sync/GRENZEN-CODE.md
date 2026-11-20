@@ -1079,10 +1079,11 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     - Die Sperrzeile trägt die Zeit, zu der sie geschrieben wurde: beim ersten `take()` des Aufrufs über `create()`,
       danach bei jedem `touch()`, frühestens alle 60 s.
     - Der Tausch ruft `touch()` nicht (`git grep -c "Change_Lock::touch" -- includes/sync/class-sync-code-swap.php`:
-      0). Die drei Aufrufe in der Engine liegen in anderen Pfaden: `includes/sync/class-sync-engine.php:1249` in
-      `boundary()`, `:1701` in `write_parts()`, `:2441` in `put_back()`, alle für Schritte des Inhalts. Ein Schritt des
-      Codes geht in `run_write()` an `:1022`–`:1024` direkt an `AB_MCP_Sync_Code_Ops::run()` und kehrt von dort zurück;
-      keiner der drei frischt die Zeile während oder nach einem Schritt des Tauschs auf.
+      0). Die drei Aufrufe in der Engine liegen in anderen Pfaden: `includes/sync/class-sync-engine.php:1321` in
+      `boundary()`, `:1773` in `write_parts()`, `:2514` in `put_back()`, alle für Schritte des Inhalts. Ein Schritt des
+      Codes geht in `run_write()` an `:1095`–`:1096` über den Platz des Codes (`call_user_func( array( self::$code,
+      'run' ), … )`) an `AB_MCP_Sync_Code_Ops::run()` und kehrt von dort zurück; keiner der drei frischt die Zeile
+      während oder nach einem Schritt des Tauschs auf.
     - Der Tausch nimmt die Sperre in einem Lauf verschachtelt (`take()` `:77`–`:79`). Die Zeile stammt dann vom äusseren
       `take()` in `under_lock()` (Run `:831`), am Anfang des Aufrufs, oder vom letzten `touch()` davor im selben Aufruf.
     - Die 600 s laufen also nicht je Dateiaufruf, sondern über den ganzen Aufruf, bis zur Freigabe.

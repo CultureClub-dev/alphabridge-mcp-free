@@ -34,11 +34,14 @@
  * leaves the post and the page as before the run. No stand-in for the test
  * of the move with the real registrations.
  *
- * As the setup, not as a promise about the plan: each way back and the
- * continuation run at least one step under next, so each reaches
- * revert_boundary(); a plan of no step would leave a case green without it.
- * In (I2 b) the way back of the steps of the kind post runs more steps than
- * it has of post and page, so a step of a type without a writer reaches it.
+ * As the setup, not as a promise about the plan, one condition in
+ * way_back(), which each way back of I2 and the continuation of I3 go
+ * through: of the write steps a way back takes (the journal of the forward
+ * run), more run under next than those outside the steps of a subtype
+ * without a writer (its kind registered, its subtype not; a step goes back
+ * once), so one of those reaches revert_boundary(); where it takes none,
+ * at least one step runs. A plan that left those steps out, or had none,
+ * would leave a case green without it.
  *
  * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
@@ -532,29 +535,43 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 	}
 
 	/**
-	 * The way back of the run, of these steps or of every one, planned and
-	 * confirmed: neither answer an internal error (their content read to go
-	 * on, not asserted, R2), then next as often as the confirmation names
-	 * steps planned (read), each answer an array; as the setup, at least one
-	 * of them runs a step, so revert_boundary() is reached (not the plan): how many ran.
+	 * The way back of the run, of these steps or of every one, or the
+	 * continuation of its way back $continued (0: a way back anew), planned
+	 * and confirmed: neither answer an internal error (their content read to
+	 * go on, not asserted, R2), then next as often as the confirmation names
+	 * steps planned (read), each answer an array. As the setup, not the plan:
+	 * of the write steps taken back (the journal of the forward run), more
+	 * run than those outside the steps of a subtype without a writer (its
+	 * kind registered, its subtype not), so one of those reached
+	 * revert_boundary() (a step goes back once); with none such, at least one.
 	 */
-	private static function way_back( int $push, ?array $steps ): int {
+	private static function way_back( int $push, ?array $steps, int $continued = 0 ): void {
+		$taken   = array();
+		$without = array();
+		foreach ( AB_MCP_Sync_Run::steps( $push ) as $step ) {
+			if ( 'write' === $step['op'] && ( null === $steps || in_array( (int) $step['seq'], $steps, true ) ) ) {
+				$taken[] = (int) $step['seq'];
+				if ( isset( AB_MCP_Sync_Writers::all()[ $step['parts']['object']['kind'] ] ) && null === AB_MCP_Sync_Engine::writer_of( $step['parts'] ) ) {
+					$without[] = (int) $step['seq'];
+				}
+			}
+		}
+		$name = 0 === $continued ? 'way back' : 'continuation';
 		$args = array(
 			'action' => 'plan',
-			'run_id' => $push,
+			'run_id' => 0 === $continued ? $push : $continued,
 		) + ( null === $steps ? array() : array( 'steps' => $steps ) );
 		$plan = self::gated( 'wp_site_revert', $args );
-		self::not_internal( $plan, 'The plan of the way back.' );
+		self::not_internal( $plan, "The plan of the $name." );
 		$led = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $plan['confirm_token'] ) );
-		self::not_internal( $led, 'The confirmation of the way back.' );
+		self::not_internal( $led, "The confirmation of the $name." );
 		$ran = 0;
 		for ( $i = 0; $i < $led['counts']['planned']; $i++ ) {
 			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $led['run_id'] ) );
 			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
 			$ran += (int) isset( $answer['step'] );
 		}
-		self::assertGreaterThan( 0, $ran, 'A step of the way back ran under next, so revert_boundary() was reached (the setup, not a promise about the plan).' );
-		return $ran;
+		self::assertGreaterThan( array() === $without ? 0 : count( $taken ) - count( $without ), $ran, "Steps of the $name ran under next, more than it takes back outside the steps of a subtype without a writer (a step goes back once), so revert_boundary() was reached, by one of those where it takes any (the setup, not a promise about the plan)." );
 	}
 
 	/**
@@ -614,7 +631,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		foreach ( AB_MCP_Sync_Run::steps( $push ) as $step ) {
 			if ( 'write' === $step['op'] ) {
 				if ( 'post' === $step['parts']['object']['kind'] ) {
-					$of_post[ (int) $step['seq'] ] = $step['parts']['object']['identity']['post_type'];
+					$of_post[] = (int) $step['seq'];
 				} else {
 					$others[] = (int) $step['seq'];
 				}
@@ -622,7 +639,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		}
 		self::assertSame( array( 7, 7 ), array( count( $of_post ), count( $others ) ), 'Seven steps of the kind post, seven of the other kinds (the setup).' );
 		self::only_post();
-		self::assertGreaterThan( count( array_intersect( $of_post, array( 'post', 'page' ) ) ), self::way_back( $push, array_keys( $of_post ) ), 'More steps of the kind post ran under next than of post and page (a step goes back once), so one of a type without a writer reached revert_boundary() (the setup, not a promise about the plan).' );
+		self::way_back( $push, $of_post );
 		foreach ( $others as $seq ) {
 			self::way_back( $push, array( $seq ) );
 		}
@@ -679,21 +696,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		self::assertIsArray( $status, is_wp_error( $status ) ? $status->get_error_message() : '' );
 		self::assertSame( 'interrupted', $status['state'], 'The way back is interrupted (the setup, still with every writer).' );
 		self::only_post();
-		$args = array(
-			'action' => 'plan',
-			'run_id' => $r,
-		);
-		$plan = self::gated( 'wp_site_revert', $args );
-		self::not_internal( $plan, 'The plan of the continuation.' );
-		$led = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $plan['confirm_token'] ) );
-		self::not_internal( $led, 'The confirmation of the continuation.' );
-		$ran = 0;
-		for ( $i = 0; $i < $led['counts']['planned']; $i++ ) {
-			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $r ) );
-			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
-			$ran += (int) isset( $answer['step'] );
-		}
-		self::assertGreaterThan( 0, $ran, 'A step of the continuation ran under next, so revert_boundary() was reached (the setup, not a promise about the plan).' );
+		self::way_back( $push, null, $r );
 		self::assertSame( $written, self::terms_a( $on_a ), 'Nothing of a term put back, the interrupted step as little as the open ones.' );
 	}
 

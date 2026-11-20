@@ -79,7 +79,6 @@ U_ITEMSAN = 'testTheFieldsOfAMenuItemGoThroughWhatTheCoreWouldMakeOfThemBeforeAn
 U_MAP = 'testTheInstancesOfAnAreaAreOneByTheMappingOfThePairAndANewOneKeepsItsNumberWhereItIsFree'
 U_AREA = 'testWhatAnAreaWouldLoseOrCannotTellIsLockedBeforeAnythingIsWritten'
 U_AREACHK = 'testTheChecksOfAnAreaAskTheRightTheRowOfEachWidgetAndItsUpdateAhead'
-U_VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'
 U_PENDING = 'testTheEngineKnowsWhatItCreatesInBothSpacesAndNoStepWritesAKindWithoutAWriter'
 IT_ITEMS = 'testAChangedMenuItemAndANewItemGoOverAndTheWayBackPutsTheChangedOnesBackAndLeavesTheNewOneAsARest'
 IT_NEWMENU = 'testANewMenuAtAPositionOfTheThemeGoesOverAndTheWayBackPutsThePositionBackAndLeavesTheMenuAsARest'
@@ -475,11 +474,6 @@ e('b1-free-position', 'with_row(): a new menu names the positions it sets that n
   "\t\t\tif ( false ) {\n\t\t\t\t$out[ $name ] = AB_MCP_Sync_Shared_Row::hash( null );", 'it', IT_FREEPOS)
 
 # B2: positions between the menus of a run.
-e('b2-takes', 'plan(): the positions a menu takes, from its form (B2)', PU,
-  "\t\t\t\t$item['takes'] = AB_MCP_Sync_Menu_Writer::line_positions( $line );", "", 'it', IT_MOVE)
-e('b2-holder', 'plan(): a menu after the menu of the run that holds a position it takes (B2)', PU,
-  "\t\t\t\tif ( null !== $holder && isset( $menus[ $holder ] ) && $menus[ $holder ] !== $n ) {",
-  "\t\t\t\tif ( false ) {", 'it', IT_MOVE)
 e('b2-after', 'order(): the menu that gives the position up first (B2)', PU,
   "\t\t\t\t\t$items[ $n ]['after'][] = $m;\n\t\t\t\t\t$exchange[ $n ][ $m ]   = true;",
   "\t\t\t\t\t$exchange[ $n ][ $m ]   = true;", 'run', U_MOVE)
@@ -717,15 +711,6 @@ e('c3-guard-options', 'shared_back(): the takeover lock covers the options of th
   "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn $left(", 'it', IT_GUARD)
 
 # ------------------------------------------------------------------ plan
-e('push-structure', 'verdict(): the kinds of the structure are items', PU,
-  "\t\t} elseif ( in_array( $entry['kind'], self::STRUCTURE, true ) ) {",
-  "\t\t} elseif ( false ) {", 'run', U_VERDICT)
-e('push-draft', 'verdict(): no structure as draft', PU,
-  "\t\t\tif ( $as_draft ) {\n\t\t\t\t/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */\n\t\t\t\treturn $lock( sprintf( ",
-  "\t\t\tif ( false ) {\n\t\t\t\t/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */\n\t\t\t\treturn $lock( sprintf( ", 'run', U_VERDICT)
-e('push-create', 'verdict(): a widget area, an option and the CSS are not made by a run', PU,
-  "\t\t\tif ( 'create' === $action && in_array( $entry['kind'], array( 'widget_area', 'option', 'custom_css' ), true ) ) {",
-  "\t\t\tif ( false ) {", 'run', U_VERDICT)
 
 
 def test_of(expect):

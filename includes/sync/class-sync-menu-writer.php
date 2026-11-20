@@ -140,6 +140,18 @@ final class AB_MCP_Sync_Menu_Writer {
 	}
 
 	/**
+	 * The lock of the menus of the run that take each other's position (an
+	 * exchange: a loop of the orders after_holders() gives), for each of
+	 * them (rule of the seam, D4, asked by AB_MCP_Sync_Push::order() for
+	 * each such loop): menu:position_exchange (B2).
+	 *
+	 * @return array|null The lock (AB_MCP_Sync_Kinds::lock()).
+	 */
+	public static function exchange_lock() {
+		return AB_MCP_Sync_Kinds::lock( 'menu', 'position_exchange' );
+	}
+
+	/**
 	 * The positions a line names for its menu (its form on the staging
 	 * site), names only, for the order of the plan (Codex round 1 of branch
 	 * 11, B2); none where the form names none.

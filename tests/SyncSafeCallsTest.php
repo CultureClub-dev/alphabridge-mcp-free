@@ -32,8 +32,8 @@ namespace AlphaBridge\Tests;
 use PHPUnit\Framework\TestCase;
 
 // testTheWriteSideOfAKindIsAClassOfTheTakeover() reads the writers of the
-// engine: loaded here, so the file runs on its own too (Z8b branch 2b,
-// Behebung 1, C7).
+// registration the engine makes (AB_MCP_Sync_Writers::all()): loaded
+// here, so the file runs on its own too (Z8b branch 2b, Behebung 1, C7).
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-engine.php';
 
 final class SyncSafeCallsTest extends TestCase {
@@ -709,12 +709,18 @@ final class SyncSafeCallsTest extends TestCase {
 
 	public function testTheWriteSideOfAKindIsAClassOfTheTakeover(): void {
 		// The calls through $w (branch 9) count as calls of a class declared
-		// under includes/sync/ (scan()): so every writer is one, and $w is
-		// assigned nowhere but from AB_MCP_Sync_Engine::writer() or
-		// writer_of(), which answer from the registration (AB_MCP_Sync_Writers).
-		foreach ( \AB_MCP_Sync_Engine::WRITERS as $kind => $class ) {
-			self::assertTrue( class_exists( $class ), $kind );
-			self::assertStringStartsWith( dirname( __DIR__ ) . '/includes/sync/', (string) ( new \ReflectionClass( $class ) )->getFileName(), $kind );
+		// under includes/sync/ (scan()): so every writer of the registration
+		// (AB_MCP_Sync_Writers::all(), each kind and subtype, as the engine
+		// registers it as it loads) is one, and $w is assigned nowhere but
+		// from AB_MCP_Sync_Engine::writer() or writer_of(), which answer from
+		// the registration.
+		$all = \AB_MCP_Sync_Writers::all();
+		self::assertNotSame( array(), $all, 'The engine registers its writers as it loads.' );
+		foreach ( $all as $kind => $classes ) {
+			foreach ( $classes as $subtype => $class ) {
+				self::assertTrue( class_exists( $class ), "$kind $subtype" );
+				self::assertStringStartsWith( dirname( __DIR__ ) . '/includes/sync/', (string) ( new \ReflectionClass( $class ) )->getFileName(), "$kind $subtype" );
+			}
 		}
 		$assigned = 0;
 		foreach ( glob( dirname( __DIR__ ) . '/includes/sync/*.php' ) as $file ) {

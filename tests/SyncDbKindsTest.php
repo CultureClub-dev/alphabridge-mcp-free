@@ -75,7 +75,7 @@ final class SyncDbKindsTest extends TestCase {
 			}
 			// Every other method of the interface that would write answers
 			// that the kind does not write, whatever the kind: the engine
-			// writes through its writers (AB_MCP_Sync_Engine::WRITERS), never
+			// writes through the writers registered (AB_MCP_Sync_Writers), never
 			// through a kind (since branch 11 every kind exports, so the
 			// methods are asked for each of them; the CI of free#141).
 			foreach ( array(
