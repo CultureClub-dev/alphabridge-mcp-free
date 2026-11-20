@@ -27,9 +27,16 @@
  *   of a run of the code makes no refusal (no ab_mcp_sync_push_packages
  *   through the action wp_error_added, its text never through the filter
  *   gettext), and the run begins as before.
+ * - (e) both places empty, a new post of B goes over as with them: plan()
+ *   gives the same plan (but for the resources it measures), the run checks,
+ *   writes and closes as done, the post is on A (B1 of Fable-P4 after T4).
+ *
+ * In (a) and (c) as well: the name of a class that is not loaded leaves the
+ * place empty, and the case answers as without the entrance (B4).
  *
  * The way back without the entrance holds SyncCodeRunTest (with the place of
- * AB_MCP_Sync_Revert emptied). The entrances are put back after each case.
+ * AB_MCP_Sync_Revert emptied). After each case both places hold again what
+ * they held before it (C2).
  *
  * R1 open (the seam, first step): where a case here asserts that a run
  * is closed or refused because a kind has no writer or the code has no
@@ -65,6 +72,7 @@ use AB_MCP_Tool_Registry;
 use AB_MCP_Tools_Staging;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
+use ReflectionProperty;
 use WP_Error;
 
 require_once AB_MCP_DIR . 'includes/sync/class-sync-import.php';
@@ -78,10 +86,20 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 	/** The text of the core for a kind no step writes, with the kind code (Engine check_item() and boundary()). */
 	private const NONE = 'No step of this version writes the kind code.';
 
+	/** The name of a class that is not loaded (B4). */
+	private const NOT_LOADED = 'AB_MCP_Sync_Code_Not_Loaded';
+
 	/** @var string|null DOCUMENT_ROOT before the case. */
 	private $docroot_before;
 
+	/** @var array<string,string|null> The place of each entrance before the case, by its class (C2). */
+	private $places = array();
+
 	protected function setUp(): void {
+		$this->places = array(
+			AB_MCP_Sync_Engine::class => self::place( AB_MCP_Sync_Engine::class ),
+			AB_MCP_Sync_Push::class   => self::place( AB_MCP_Sync_Push::class ),
+		);
 		AB_MCP_IT_Sites::reset( 'a' );
 		AB_MCP_IT_Sites::reset( 'b' );
 		self::wipe();
@@ -99,8 +117,9 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
-		AB_MCP_Sync_Engine::admit_code( 'AB_MCP_Sync_Code_Ops' );
-		AB_MCP_Sync_Push::admit_code( 'AB_MCP_Sync_Code_Plan' );
+		foreach ( $this->places as $class => $value ) {
+			( new ReflectionProperty( $class, 'code' ) )->setValue( null, $value );
+		}
 		if ( null === $this->docroot_before ) {
 			unset( $_SERVER['DOCUMENT_ROOT'] );
 		} else {
@@ -128,6 +147,11 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 
 	private static function root(): string {
 		return (string) getenv( 'AB_IT_ROOT' );
+	}
+
+	/** What the place of the entrance in this class holds (Reflection). */
+	private static function place( string $class ) {
+		return ( new ReflectionProperty( $class, 'code' ) )->getValue();
 	}
 
 	private static function wipe(): void {
@@ -181,7 +205,7 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		self::assertIsArray( AB_MCP_Sync_Anchor::confirm( $prepared['fingerprint'], self::admin() ) );
 	}
 
-	/** A package B makes with these arguments, taken over by A over the relay: its id. */
+	/** A package B makes with these arguments, taken over by A over the relay (bound to the report where they name its hash): its id. */
 	private static function relayed( array $export ): array {
 		$package = self::b( array( array( 'op' => 'export', 'as' => 'package' ) + $export ) )['package'];
 		self::assertIsArray( $package );
@@ -191,7 +215,7 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 				'package_id' => $package['package_id'],
 				'manifest'   => $package['manifest'],
 				'purpose'    => $export['purpose'],
-			)
+			) + array_intersect_key( $export, array( 'report_hash' => true ) )
 		);
 		self::assertIsArray( $state, is_wp_error( $state ) ? $state->get_error_message() : '' );
 		$steps = array();
@@ -311,6 +335,76 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		self::fail( 'The report names the plugin ab-it-inaktiv.' );
 	}
 
+	/** A post of B, published: its id. */
+	private static function post_b( string $name ): int {
+		$args = array(
+			'post_type'     => 'post',
+			'post_status'   => 'publish',
+			'post_title'    => ucfirst( $name ),
+			'post_name'     => $name,
+			'post_content'  => 'Text.',
+			'post_author'   => 1,
+			'post_date'     => '2026-10-01 10:00:00',
+			'post_date_gmt' => '2026-10-01 10:00:00',
+		);
+		return (int) self::b( array( array( 'op' => 'insert_post', 'args' => $args, 'as' => 'id' ) ) )['id'];
+	}
+
+	/** wp_site_diff of the inventory of B in this process, worked out to its end and paged: every entry in all. */
+	private static function report(): array {
+		self::clear_b();
+		$answer = AB_MCP_Sync_Report::call( array( 'packages' => self::staged( 'inventory' ) ) );
+		for ( $calls = 1; is_array( $answer ) && false === $answer['done'] && $calls < 300; $calls++ ) {
+			$answer = AB_MCP_Sync_Report::call( array( 'report_id' => $answer['report_id'] ) );
+		}
+		self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
+		self::assertTrue( $answer['done'] );
+		$all  = $answer['entries'];
+		$page = $answer;
+		for ( $pages = 0; null !== $page['cursor'] && $pages < 300; $pages++ ) {
+			$page = AB_MCP_Sync_Report::call( array( 'report_id' => $answer['report_id'], 'cursor' => $page['cursor'] ) );
+			self::assertIsArray( $page );
+			$all = array_merge( $all, $page['entries'] );
+		}
+		$answer['all'] = $all;
+		return $answer;
+	}
+
+	/** The entry of a post or page of this subtype in the report by the slug of its staging side. */
+	private static function entry( array $report, string $subtype, string $name ): array {
+		foreach ( $report['all'] as $entry ) {
+			if ( 'post' === $entry['kind'] && $subtype === $entry['subtype'] && $name === ( $entry['staging']['identity']['post_name'] ?? null ) ) {
+				return $entry;
+			}
+		}
+		self::fail( "No entry of the post $subtype $name in the report." );
+	}
+
+	/** The arguments of a plan of these entries of the report, with the package of their objects bound to it. */
+	private static function objects( array $report, array $entries ): array {
+		$refs = array();
+		foreach ( $entries as $entry ) {
+			$refs[] = array(
+				'kind' => $entry['kind'],
+				'ref'  => (string) $entry['staging']['ref'],
+			);
+		}
+		self::clear_b();
+		list( $id ) = self::relayed(
+			array(
+				'purpose'     => 'objects',
+				'report_hash' => $report['report_hash'],
+				'refs'        => $refs,
+			)
+		);
+		return array(
+			'action'    => 'plan',
+			'report_id' => $report['report_id'],
+			'select'    => array_map( static fn( $e ) => (int) $e['n'], $entries ),
+			'packages'  => array( $id ),
+		);
+	}
+
 	/** A plan confirmed in this process, its check run with both entrances: the run id. */
 	private static function checked( array $args ): int {
 		$preview = self::gated( 'wp_site_push', $args );
@@ -385,9 +479,12 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 	 * contents without packages, and no run is made; with it, the preview of
 	 * the run of the code with its unit. begin(), with a plan of the code
 	 * made with the entrance, refuses without it with the same text and
-	 * closes the run it made at once, nothing staged.
+	 * closes the run it made at once, nothing staged. The name of a class
+	 * that is not loaded leaves the place empty, and the planning refuses
+	 * as without the entrance (B4).
 	 * Sonst: the core plans or begins a run of the code past its one
-	 * entrance (D5), or a run is left open without it.
+	 * entrance (D5), a run is left open without it, or a name the place
+	 * cannot call takes it.
 	 */
 	public function testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun(): void {
 		$args = self::changed();
@@ -399,6 +496,17 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		}
 		$says = self::refused( $answer, 'ab_mcp_sync_push_packages' );
 		self::assertStringStartsWith( 'A run writes from packages of objects of the staging site: pass packages', $says, 'The text of a run of the contents without packages.' );
+		self::assertNull( AB_MCP_Sync_Run::open_run(), 'No run.' );
+		self::assertFalse( class_exists( self::NOT_LOADED ) );
+		AB_MCP_Sync_Push::admit_code( self::NOT_LOADED );
+		try {
+			$place  = self::place( AB_MCP_Sync_Push::class );
+			$answer = self::gated( 'wp_site_push', $args );
+		} finally {
+			AB_MCP_Sync_Push::admit_code( 'AB_MCP_Sync_Code_Plan' );
+		}
+		self::assertNull( $place, 'A name that is not loaded leaves the place empty (B4).' );
+		self::assertSame( $says, self::refused( $answer, 'ab_mcp_sync_push_packages' ), 'The planning refuses as without the entrance.' );
 		self::assertNull( AB_MCP_Sync_Run::open_run(), 'No run.' );
 		$preview = self::gated( 'wp_site_push', $args );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
@@ -459,9 +567,12 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 	 * SyncCodeRunTest sets a step): the run closes with the text the core has
 	 * for a kind no step writes as the finding of each step, no error.
 	 * written() itself (the check closes over it): that finding without the
-	 * entrance, the finding of the code (none) with it.
-	 * Sonst: the check of a run asks the code past its one entrance (D5), or
-	 * ends with an error where it is not loaded.
+	 * entrance, the finding of the code (none) with it. The name of a class
+	 * that is not loaded leaves the place empty, and written() answers as
+	 * without the entrance (B4).
+	 * Sonst: the check of a run asks the code past its one entrance (D5),
+	 * ends with an error where it is not loaded, or a name the place cannot
+	 * call takes it.
 	 */
 	public function testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings(): void {
 		$run_id = self::checked( self::changed() );
@@ -472,6 +583,16 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		$run     = AB_MCP_Sync_Run::get( $run_id );
 		$two     = self::step( $run_id, 2 );
 		self::assertSame( array( 0, null ), $written->invoke( null, $run, $two, array(), array() ), 'With the entrance: no finding of a step of the code done.' );
+		self::assertFalse( class_exists( self::NOT_LOADED ) );
+		AB_MCP_Sync_Engine::admit_code( self::NOT_LOADED );
+		try {
+			$place = self::place( AB_MCP_Sync_Engine::class );
+			$wrong = $written->invoke( null, $run, $two, array(), array() );
+		} finally {
+			AB_MCP_Sync_Engine::admit_code( 'AB_MCP_Sync_Code_Ops' );
+		}
+		self::assertNull( $place, 'A name that is not loaded leaves the place empty (B4).' );
+		self::assertSame( array( 0, array( 'seq' => 2, 'message' => self::NONE ) ), $wrong, 'written() answers as without the entrance.' );
 		AB_MCP_Sync_Engine::admit_code( null );
 		try {
 			$direct = $written->invoke( null, $run, $two, array(), array() );
@@ -521,5 +642,56 @@ final class SyncCodeWithoutEntranceTest extends TestCase {
 		self::assertNotContains( 'ab_mcp_sync_push_packages', $made, 'No refusal of the packages is made.' );
 		self::assertSame( array(), preg_grep( '/^A run writes from packages of objects of the staging site/', $said ), 'Its text is never asked for.' );
 		self::assertSame( 'done', self::next( (int) $run['run_id'] )['step']['state'], 'The check of the run, as before.' );
+	}
+
+	/**
+	 * Prüft: (e) with both places empty a new post of B goes over as with
+	 * them (B1 of Fable-P4 after T4): plan() gives the same plan, but for the
+	 * resources it measures at each call; the run checks, writes, empties the
+	 * caches and closes as done without a finding, and the post is on A as on
+	 * B. Without the entrance a plan without the key code is a run of the
+	 * contents (code_item()), which the core runs as before.
+	 * Sonst: without the plugin of the code no run of the contents goes,
+	 * which after the move is the ordinary case of Free.
+	 */
+	public function testWithBothPlacesEmptyANewPostGoesOverAsWithThem(): void {
+		self::paired();
+		self::post_b( 'tips' );
+		$report = self::report();
+		$args   = self::objects( $report, array( self::entry( $report, 'post', 'tips' ) ) );
+		$with   = AB_MCP_Sync_Push::plan( $args );
+		self::assertIsArray( $with, is_wp_error( $with ) ? $with->get_error_code() . ': ' . $with->get_error_message() : '' );
+		AB_MCP_Sync_Engine::admit_code( null );
+		AB_MCP_Sync_Push::admit_code( null );
+		try {
+			$without = AB_MCP_Sync_Push::plan( $args );
+			$preview = self::gated( 'wp_site_push', $args );
+			self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
+			$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
+			self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_code() . ': ' . $run->get_error_message() : '' );
+			$closed = self::closed( (int) $run['run_id'] );
+		} finally {
+			AB_MCP_Sync_Engine::admit_code( 'AB_MCP_Sync_Code_Ops' );
+			AB_MCP_Sync_Push::admit_code( 'AB_MCP_Sync_Code_Plan' );
+		}
+		self::assertIsArray( $without, is_wp_error( $without ) ? $without->get_error_code() . ': ' . $without->get_error_message() : '' );
+		// The free space and the time of the machine, measured at each call.
+		unset( $with['resources'], $without['resources'] );
+		self::assertSame( $with, $without, 'The plan as with both places.' );
+		self::assertSame( 'closed_done', $closed['state'], (string) json_encode( $closed ) );
+		$steps = AB_MCP_Sync_Run::steps( (int) $run['run_id'] );
+		self::assertIsArray( $steps );
+		self::assertSame( array( 'check done', 'write done', 'post done', 'verify done' ), array_map( static fn( $s ) => $s['op'] . ' ' . $s['state'], $steps ) );
+		self::assertSame( array(), self::findings( (int) $run['run_id'] ), 'The check finds nothing.' );
+		$on_a = AB_MCP_IT_Sites::rows(
+			'a',
+			'posts',
+			array(
+				'post_name' => 'tips',
+				'post_type' => 'post',
+			)
+		);
+		self::assertCount( 1, $on_a );
+		self::assertSame( array( 'Tips', 'Text.', 'publish' ), array( $on_a[0]['post_title'], $on_a[0]['post_content'], $on_a[0]['post_status'] ), 'The post on A as on B.' );
 	}
 }

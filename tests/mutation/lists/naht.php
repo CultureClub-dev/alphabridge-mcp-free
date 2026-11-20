@@ -18,7 +18,13 @@
  * planning gives it the refusal of the packages as a closure, not made as an
  * argument (n-begin-ablehnung, the rest of T4, held by I4 (d)); boundary()
  * fails the step of a kind without a writer (n-schreibgrenze, held by I1 (f)
- * in SyncPlanWithoutWriterTest). Written by hand.
+ * in SyncPlanWithoutWriterTest). T5 part 2: code_item() gives its text
+ * without the entrance only for a plan of the code, a run of the contents
+ * goes on (n-inhalte-ohne-platz, held by I4 (e)); begin() binds a plan of the
+ * code only through the place of the planning (n-begin-bind-fest, held by I4
+ * (a)); admit_code() puts only a class that is loaded, in the engine
+ * (n-platz-engine-wert, held by I4 (c)) and in Push (n-platz-push-wert, held
+ * by I4 (a)). Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -262,5 +268,41 @@ return array(
 		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'planned', sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), \$item['kind'] ) );",
 		'run'     => $i6( 'testWithoutAWriterAtTheWriteBoundaryTheStepFailsAndNothingIsWritten' ),
 		'expect'  => '/testWithoutAWriterAtTheWriteBoundaryTheStepFailsAndNothingIsWritten/',
+	),
+	array(
+		'id'      => 'naht/n-inhalte-ohne-platz',
+		'clause'  => 'code_item(): without the entrance the text only for a plan of the code, a run of the contents goes on',
+		'file'    => $en,
+		'search'  => "return array_key_exists( 'code', \$plan ) ? sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), 'code' ) : null;",
+		'replace' => "return sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), 'code' );",
+		'run'     => $i4( 'testWithBothPlacesEmptyANewPostGoesOverAsWithThem' ),
+		'expect'  => '/testWithBothPlacesEmptyANewPostGoesOverAsWithThem/',
+	),
+	array(
+		'id'      => 'naht/n-begin-bind-fest',
+		'clause'  => 'begin(): a plan of the code is bound only through the place of the planning, refused without it',
+		'file'    => $pu,
+		'search'  => "\$bound = self::code_plan( 'bind', array( \$plan, (int) \$run['run_id'] ), static function () { return self::packages_refusal(); } );",
+		'replace' => "\$bound = AB_MCP_Sync_Code_Plan::bind( \$plan, (int) \$run['run_id'] );",
+		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
+		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
+	),
+	array(
+		'id'      => 'naht/n-platz-engine-wert',
+		'clause'  => 'admit_code() of the engine: only a class that is loaded takes the place',
+		'file'    => $en,
+		'search'  => 'self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;',
+		'replace' => 'self::$code = is_string( $code ) ? $code : null;',
+		'run'     => $i4( 'testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings' ),
+		'expect'  => '/testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings/',
+	),
+	array(
+		'id'      => 'naht/n-platz-push-wert',
+		'clause'  => 'admit_code() of Push: only a class that is loaded takes the place of the planning',
+		'file'    => $pu,
+		'search'  => 'self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;',
+		'replace' => 'self::$code = is_string( $code ) ? $code : null;',
+		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
+		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
 	),
 );
