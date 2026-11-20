@@ -23,6 +23,7 @@ use AB_MCP_Sync_Menu_Writer;
 use AB_MCP_Sync_Option_Writer;
 use AB_MCP_Sync_Shared_Row;
 use AB_MCP_Sync_Widget_Area_Writer;
+use AB_MCP_Sync_Writers;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
@@ -183,16 +184,16 @@ final class SyncStructureWritersTest extends TestCase {
 	/* ------------------------------------------------------------ engine */
 
 	public function testTheEngineWritesTheStructureByTheWriterOfEachKindAndNamesItsObjectsByAName(): void {
-		self::assertSame( AB_MCP_Sync_Menu_Writer::class, AB_MCP_Sync_Engine::writer( 'menu' ) );
-		self::assertSame( AB_MCP_Sync_Menu_Item_Writer::class, AB_MCP_Sync_Engine::writer( 'menu_item' ) );
-		self::assertSame( AB_MCP_Sync_Widget_Area_Writer::class, AB_MCP_Sync_Engine::writer( 'widget_area' ) );
-		self::assertSame( AB_MCP_Sync_Css_Writer::class, AB_MCP_Sync_Engine::writer( 'custom_css' ) );
-		self::assertSame( AB_MCP_Sync_Option_Writer::class, AB_MCP_Sync_Engine::writer( 'option' ) );
+		self::assertSame( AB_MCP_Sync_Menu_Writer::class, AB_MCP_Sync_Writers::whole( 'menu' ) );
+		self::assertSame( AB_MCP_Sync_Menu_Item_Writer::class, AB_MCP_Sync_Writers::whole( 'menu_item' ) );
+		self::assertSame( AB_MCP_Sync_Widget_Area_Writer::class, AB_MCP_Sync_Writers::whole( 'widget_area' ) );
+		self::assertSame( AB_MCP_Sync_Css_Writer::class, AB_MCP_Sync_Writers::whole( 'custom_css' ) );
+		self::assertSame( AB_MCP_Sync_Option_Writer::class, AB_MCP_Sync_Writers::whole( 'option' ) );
 		// An id as an integer (as before), a name as the writer reads it.
-		self::assertSame( 12, AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer( 'menu_item' ), '12' ) );
-		self::assertSame( 'blogname', AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer( 'option' ), 'blogname' ) );
-		self::assertSame( 'sidebar-1', AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer( 'widget_area' ), 'sidebar-1' ) );
-		self::assertNull( AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer( 'widget_area' ), 'array_version' ), 'No area of that name.' );
+		self::assertSame( 12, AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Writers::whole( 'menu_item' ), '12' ) );
+		self::assertSame( 'blogname', AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Writers::whole( 'option' ), 'blogname' ) );
+		self::assertSame( 'sidebar-1', AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Writers::whole( 'widget_area' ), 'sidebar-1' ) );
+		self::assertNull( AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Writers::whole( 'widget_area' ), 'array_version' ), 'No area of that name.' );
 		self::assertSame( 0, AB_MCP_Sync_Engine::live_of( null, 'x' ) );
 		foreach ( array( 12 => true, 0 => false, -1 => false ) as $id => $is ) {
 			self::assertSame( $is, AB_MCP_Sync_Engine::is_ref( $id ), (string) $id );

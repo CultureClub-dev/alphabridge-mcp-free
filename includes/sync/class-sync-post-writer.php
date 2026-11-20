@@ -205,6 +205,58 @@ final class AB_MCP_Sync_Post_Writer {
 	/* ------------------------------------------------------------ prepare */
 
 	/**
+	 * The lock of the plan for an entry of a post, or null (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		unset( $as_draft );
+		if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), self::TYPES, true ) ) {
+			/* translators: 1: the post types the engine writes, separated by commas, 2: the post type of the entry. */
+			return $lock( sprintf( __( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', 'alphabridge-mcp' ), implode( ', ', self::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+		}
+		if ( in_array( (string) ( $entry['subtype'] ?? '' ), self::THEMED, true ) ) {
+			// A template, a template part or the global styles of a theme that
+			// is not the active one here (branch 9b): a staging site keeps the
+			// rows of every theme it tried, so the plan names them locked with
+			// the way (all leaves them out) rather than the check before the
+			// first write ending the run for them; the check and the boundary
+			// ask it again (AB_MCP_Sync_Post_Writer::theme_refusal()).
+			$theme = isset( $entry['staging']['identity']['theme'] ) && is_string( $entry['staging']['identity']['theme'] ) ? $entry['staging']['identity']['theme'] : '';
+			$other = self::inactive_theme_detail( (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $theme );
+			if ( null !== $other ) {
+				$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );
+				return $lock( sprintf( '%1$s (post:theme_mismatch) %2$s', AB_MCP_Sync_Said::text( (string) $held['reason'] ), $other ), (string) $held['stage'] );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * What the plan holds of a post beside what every kind has (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::plan()): the references and the
+	 * name of its order.
+	 *
+	 * @param array $item The item of the plan.
+	 * @param array $line Its line of the package of objects.
+	 * @return array The item.
+	 */
+	public static function plan_item( array $item, array $line ) {
+		// The references the boundary asks by an id or a name, for the
+		// order (branch 9b, Codex round 1, B): reusable blocks and
+		// navigations by their ref, template parts by theme and slug,
+		// the template a page names; and the name of the object itself
+		// where another names it so.
+		$item['order_refs'] = self::order_refs( $line );
+		$item['order_name'] = self::order_name( $line );
+		return $item;
+	}
+
+	/**
 	 * What a step writes for one object, from its line of the package of
 	 * objects and the item of the plan: the post row for wp_insert_post(),
 	 * the columns as they should be stored, the meta by key, the terms by

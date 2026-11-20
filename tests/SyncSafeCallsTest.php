@@ -32,8 +32,8 @@ namespace AlphaBridge\Tests;
 use PHPUnit\Framework\TestCase;
 
 // testTheWriteSideOfAKindIsAClassOfTheTakeover() reads the writers of the
-// engine: loaded here, so the file runs on its own too (Z8b branch 2b,
-// Behebung 1, C7).
+// registration the engine makes (AB_MCP_Sync_Writers::all()): loaded
+// here, so the file runs on its own too (Z8b branch 2b, Behebung 1, C7).
 require_once dirname( __DIR__ ) . '/includes/sync/class-sync-engine.php';
 
 final class SyncSafeCallsTest extends TestCase {
@@ -167,7 +167,7 @@ final class SyncSafeCallsTest extends TestCase {
 	 */
 	private const EXCEPTIONS = array(
 		'class-sync-attachment-writer.php' => array(
-			'__' => array( 91, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 92, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2). the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'_n' => array( 2, 'The same texts where a count decides the form: the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Builders::markup_meta_refusal' => array( 1, 'precheck(): a key of a page builder needs unfiltered_html, as for a post (the list of the signatures and the capability); no stored value.' ),
 			'AB_MCP_Change_Lock::touch'            => array( 1, 'lay_files(): the heartbeat of the lock after each file laid.' ),
@@ -197,7 +197,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_cache_delete' => array( 3, 'forget(): the caches of an option after a write or a put back raw (decision 33: alloptions, notoptions, the row).' ),
 		),
 		'class-sync-option-writer.php' => array(
-			'__' => array( 23, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 24, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'->init'              => array( 1, 'post_write(): WP_Rewrite::init(), the permalink structure as the option holds it now, before the rules are built from it (A19).' ),
 			'current_user_can'    => array( 3, 'precheck(), write_row() and restore_right(): manage_options, forward, right before the write and on the way back (decision 27).' ),
 			'flush_rewrite_rules' => array( 1, 'post_write(): the rewrite rules built anew after an option of the permalinks was written or put back (decision 33, A19); soft, no file.' ),
@@ -205,7 +205,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'update_option'       => array( 1, 'write_row(): the way forward of a core option (decisions 17 and 27).' ),
 		),
 		'class-sync-css-writer.php' => array(
-			'__' => array( 29, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 30, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Page_Cache::purge_site' => array( 1, 'post_write(): the page cache of the whole site after the CSS changed (decision 33).' ),
 			'apply_filters'             => array( 1, 'css_refusal(): update_custom_css_data, the filter wp_update_custom_css_post() saves the CSS with, ahead and without writing (decision 17).' ),
 			'clean_post_cache'          => array( 1, 'post_write(): the caches of the CSS post (decision 33).' ),
@@ -223,7 +223,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_get_theme' => array( 1, 'AB_MCP_Sync_Kind_Custom_Css::post_form(): the version of the theme of the stylesheet from its files, packed with the CSS (decision 25), no stored value compared.' ),
 		),
 		'class-sync-menu-writer.php' => array(
-			'__' => array( 86, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 88, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2). the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Page_Cache::purge_site' => array( 2, 'post_write() of a menu and of an item: the page cache of the whole site (a menu shows on every page; decision 33).' ),
 			'clean_post_cache'              => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::post_write(): the caches of the item (decision 33).' ),
 			'current_user_can'              => array( 17, 'precheck(), write_row(), location_refusal(), restore_right() and restore_part() of a menu and an item: edit_theme_options, edit_post at an item, the right to make items, assign_term at the menu, forward, right before the write and on the way back, there again right before a position or the row of an item goes back (decision 28; as AB_MCP_Tools_Menus_Users::add_menu_item(); Codex round 1 of branch 11, A5).' ),
@@ -240,7 +240,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_post'                => array( 1, 'AB_MCP_Sync_Menu_Item_Writer::restore_part(): the row of an item put back through the core (decision 23).' ),
 		),
 		'class-sync-widget-area-writer.php' => array(
-			'__' => array( 35, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 36, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Page_Cache::purge_site' => array( 1, 'post_write(): the page cache of the whole site (a widget area shows on every page; decision 33).' ),
 			'AB_MCP_Widget_Writer::sanitize' => array( 3, 'sanitizer_refusal(), write_part() and restore_right(): the widget writer of this plugin (WP_Widget::update(), widget_update_callback), ahead, right before the write and for the backed-up settings (decision 17); nothing written.' ),
 			'AB_MCP_Widget_Writer::widget'   => array( 1, 'target_of(): whether a widget is registered here (code, no stored value).' ),
@@ -364,7 +364,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'update_post_meta'    => array( 1, 'begin(): the edit lock _edit_lock of a covered post, so an editor sees it taken (decision 19); excluded from every comparison.' ),
 		),
 		'class-sync-term-writer.php' => array(
-			'__' => array( 50, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 51, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2). the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'clean_term_cache'          => array( 1, 'post_write(): the caches of the written term (decision 33).' ),
 			'current_user_can'          => array( 3, 'precheck(): the rights of the account at the term (edit_term) or of the taxonomy for a new one (manage_terms, edit_terms, assign_terms); restore_right(): edit_term on the way back. The rights of the meta of a term go through AB_MCP_Sync_Post_Writer::ops_right() (Codex round 1, A2).' ),
 			'get_taxonomy'              => array( 1, 'precheck(): the capabilities of the taxonomy; no stored value compared.' ),
@@ -373,7 +373,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'sanitize_term'             => array( 1, 'sanitizer_refusal(): the sanitizers ahead, as wp_insert_term() and wp_update_term() run them (decision 17).' ),
 			'wp_cache_delete'           => array( 1, 'post_write(): the meta cache of the written term.' ),
 			'wp_find_hierarchy_loop'    => array( 1, 'loop(): the loop of parents wp_update_term() would break (wp_check_term_hierarchy_for_loops()), read before anything is written; the parents through wp_get_term_taxonomy_parent_id().' ),
-			'wp_get_term_taxonomy_parent_id' => array( 1, 'loop(): the parent here of a term the run does not move, beside the parents it gives the terms it writes (Codex round 1 on branch 9, B4); read for the check of a loop, never compared with the staging site.' ),
+			'wp_get_term_taxonomy_parent_id' => array( 2, 'loop(): the parent here of a term the run does not move, beside the parents it gives the terms it writes (Codex round 1 on branch 9, B4); read for the check of a loop, never compared with the staging site. term_depths(): the parent here of a term the run does not write, for the depth of the terms of the run in the tree it leaves, which orders their steps (Codex rounds 1 and 2 on branch 9, B4); read for the order, never compared with the staging site.' ),
 			'wp_insert_term'            => array( 1, 'write_row(): the way forward of a new term (decision 17).' ),
 			'wp_slash'                  => array( 6, 'sanitizer_refusal(), write_row() and restore_row(): the slashing wp_insert_term() and wp_update_term() expect of the name and the description.' ),
 			'wp_unique_term_slug'       => array( 1, 'precheck(): the slug WordPress would store for a new term, read before anything is written.' ),
@@ -391,7 +391,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'AB_MCP_Protected_Store::delete_path' => array( 1, 'measure(): the temp file goes again through the one remover of the store (Z37); no stored value.' ),
 		),
 		'class-sync-post-writer.php' => array(
-			'__' => array( 145, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 146, 'the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2). the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'_n' => array( 4, 'The same texts where a count decides the form: the refusals of the writer and the notes of its parts and of its way back in the journal, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'AB_MCP_Builder_Caches::clear'             => array( 1, 'post_write(): the builder caches of the written post (decision 33).' ),
 			'remove_filter'                            => array( 2, 'keeping_revisions(): the filters wp_revisions_to_keep and wp_{$post_type}_revisions_to_keep of the one call that saves a post go again (Codex rounds 1 and 2 of branch 11, A3 and A7; every writer of the engine).' ),
@@ -439,7 +439,7 @@ final class SyncSafeCallsTest extends TestCase {
 			'wp_update_post'                           => array( 2, 'write_row() and restore_row(): the way forward and back of the row (decisions 17 and 23).' ),
 		),
 		'class-sync-engine.php' => array(
-			'__' => array( 156, 'the journal of a run (the message and the findings of a step, the notes of its parts, why a part does not go back) and the refusals of wp_site_push and wp_site_revert, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 157, 'the journal of a run (the message and the findings of a step, the notes of its parts, why a part does not go back) and the refusals of wp_site_push and wp_site_revert, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'_n' => array( 15, 'The same texts where a count decides the form: the journal of a run (the message and the findings of a step, the notes of its parts, why a part does not go back) and the refusals of wp_site_push and wp_site_revert, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2); with G3 of GitHub Codex on #155 the sentence that closes a run of the code (closing()).' ),
 			'AB_MCP_Change_Lock::touch'       => array( 3, 'boundary(), write_parts() (the parts read back as written) and put_back() (each part put back, within the boundary and on the way back; B8): the heartbeat of the lock.' ),
 			'AB_MCP_Php_Probe::run'           => array( 1, 'run_verify(): the PHP probe of the site (decision 33).' ),
@@ -457,11 +457,10 @@ final class SyncSafeCallsTest extends TestCase {
 			'wptexturize'                     => array( 1, 'sample_finding(): the title as a theme shows it texturized (B4); a calculation on the journal\'s title.' ),
 		),
 		'class-sync-push.php'   => array(
-			'__' => array( 55, 'the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
+			'__' => array( 51, 'the refusals and the preview of wp_site_push, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
 			'_n' => array( 1, 'plan(): the same texts where a count decides the form, in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 			'_x' => array( 1, 'preview(): the word compared for the environment of the report, in the language of the site: the person sees the preview (AB_MCP_Confirm_Token); no value the takeover compares or hashes (branch 13 text/z8, Codex round 2, B1).' ),
 			'AB_MCP_Protected_Store::bind' => array( 1, 'bind_package(): the packages of objects bound to the run, kept while it is not closed.' ),
-			'wp_get_term_taxonomy_parent_id' => array( 1, 'term_depths(): the parent here of a term the run does not write, for the depth of the terms of the run in the tree it leaves, which orders their steps (Codex rounds 1 and 2 on branch 9, B4); read for the order, never compared with the staging site.' ),
 		),
 		'class-sync-pairs-tool.php' => array(
 			'__' => array( 48, 'the refusals and the preview of wp_site_pairs and of «Discard» on the page «Staging», in the language of the site as they are made; the locale of the site and its bundled translation are read, no value the takeover compares or hashes; checked_before() alone reads a placeholder of a value not shown, and a credential it finds there hides that value in the answer, never a write (branch 13 text/z8, Codex rounds 1 and 2).' ),
@@ -656,8 +655,9 @@ final class SyncSafeCallsTest extends TestCase {
 						$call = isset( $methods[ $name ] ) ? '' : ( $parents[ $base ][0] ?? '?' ) . '::' . $name;
 					} elseif ( '$w' === $class ) {
 						// The write side of a kind (AB_MCP_Sync_Engine::writer(), branch 9):
-						// one of WRITERS, classes declared here, and $w is assigned from
-						// writer() only (testTheWriteSideOfAKindIsAClassOfTheTakeover).
+						// one of the registration (AB_MCP_Sync_Writers), classes declared
+						// here, and $w is assigned from writer() or writer_of() only
+						// (testTheWriteSideOfAKindIsAClassOfTheTakeover).
 						$call = '';
 					} else {
 						$call = isset( $declared[ $class ] ) ? '' : $class . '::' . $name;
@@ -711,12 +711,18 @@ final class SyncSafeCallsTest extends TestCase {
 
 	public function testTheWriteSideOfAKindIsAClassOfTheTakeover(): void {
 		// The calls through $w (branch 9) count as calls of a class declared
-		// under includes/sync/ (scan()): so every writer is one, and $w is
-		// assigned nowhere but from AB_MCP_Sync_Engine::writer() or
-		// writer_of(), which answer from WRITERS.
-		foreach ( \AB_MCP_Sync_Engine::WRITERS as $kind => $class ) {
-			self::assertTrue( class_exists( $class ), $kind );
-			self::assertStringStartsWith( dirname( __DIR__ ) . '/includes/sync/', (string) ( new \ReflectionClass( $class ) )->getFileName(), $kind );
+		// under includes/sync/ (scan()): so every writer of the registration
+		// (AB_MCP_Sync_Writers::all(), each kind and subtype, as the engine
+		// registers it as it loads) is one, and $w is assigned nowhere but
+		// from AB_MCP_Sync_Engine::writer() or writer_of(), which answer from
+		// the registration.
+		$all = \AB_MCP_Sync_Writers::all();
+		self::assertNotSame( array(), $all, 'The engine registers its writers as it loads.' );
+		foreach ( $all as $kind => $classes ) {
+			foreach ( $classes as $subtype => $class ) {
+				self::assertTrue( class_exists( $class ), "$kind $subtype" );
+				self::assertStringStartsWith( dirname( __DIR__ ) . '/includes/sync/', (string) ( new \ReflectionClass( $class ) )->getFileName(), "$kind $subtype" );
+			}
 		}
 		$assigned = 0;
 		foreach ( glob( dirname( __DIR__ ) . '/includes/sync/*.php' ) as $file ) {
@@ -729,7 +735,7 @@ final class SyncSafeCallsTest extends TestCase {
 			foreach ( preg_split( '/\R/', $text ) as $n => $line ) {
 				if ( 1 === preg_match( '/\$w\s*=(?!=)/', $line ) ) {
 					++$assigned;
-					self::assertMatchesRegularExpression( '/\$w\s*=\s*(self::writer(_of)?|AB_MCP_Sync_Engine::writer)\(/', $line, basename( $file ) . ':' . ( $n + 1 ) );
+					self::assertMatchesRegularExpression( '/\$w\s*=\s*(self::writer(_of)?|AB_MCP_Sync_Engine::writer(_of)?)\(/', $line, basename( $file ) . ':' . ( $n + 1 ) );
 				}
 			}
 		}

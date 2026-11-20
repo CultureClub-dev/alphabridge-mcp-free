@@ -20,6 +20,7 @@
         <testsuite name="code">
             <file>SyncCodeRunTest.php</file>
             <file>CodeStageTest.php</file>
+            <file>SyncCodeWithoutEntranceTest.php</file>
             <file>StoreRemoverTest.php</file>
             <file>ProtectedStoreTest.php</file>
             <file>CodeFixturesTest.php</file>
@@ -44,6 +45,8 @@
             <file>StagingTransferTest.php</file>
             <file>SyncReportTest.php</file>
             <file>SyncManifestTest.php</file>
+            <file>SyncWayBackWithoutWriterTest.php</file>
+            <file>SyncPlanWithoutWriterTest.php</file>
             <file>SyncLocksTest.php</file>
             <file>SyncPackageSeriesTest.php</file>
             <file>SyncTrustTest.php</file>

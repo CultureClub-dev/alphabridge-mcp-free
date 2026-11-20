@@ -113,6 +113,130 @@ final class AB_MCP_Sync_Attachment_Writer {
 	/* ------------------------------------------------------------ prepare */
 
 	/**
+	 * The lock of the plan for an entry of an attachment, or null (rule of
+	 * the seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		unset( $entry );
+		// An attachment with its files (branch 10): no choice «as draft».
+		if ( $as_draft ) {
+			return $lock( __( 'An attachment has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ) );
+		}
+		return null;
+	}
+
+	/**
+	 * What the plan holds of an attachment beside what every kind has (rule
+	 * of the seam, D4, asked by AB_MCP_Sync_Push::plan()): its file list,
+	 * the bytes of the files it may lay in its size, and its parent, a weak
+	 * reference.
+	 *
+	 * @param array $item The item of the plan (op, live_ref, size).
+	 * @param array $line Its line of the package of objects (form, refs).
+	 * @return array The item.
+	 */
+	public static function plan_item( array $item, array $line ) {
+		// The bytes of the files it may lay besides its rows (decision 8:
+		// the new media files are booked, with their temporary copies):
+		// of an attachment here only those its list here does not name
+		// (a file at a path it names is never written over); and its file
+		// list for the paths two objects of the run would share (branch 10).
+		$listed = 'update' === $item['op'] ? AB_MCP_Sync_Media::paths_of( (int) $item['live_ref'] ) : array();
+		$item['files'] = array();
+		foreach ( isset( $line['form']['files'] ) && is_array( $line['form']['files'] ) ? $line['form']['files'] : array() as $file ) {
+			if ( is_array( $file ) && isset( $file['path'], $file['size'] ) && is_string( $file['path'] ) ) {
+				$item['files'][] = $file['path'];
+				if ( null === $listed || ! in_array( $file['path'], $listed, true ) ) {
+					$item['size'] += (int) $file['size'];
+				}
+			}
+		}
+		foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
+			if ( is_array( $ref ) && 'weak' === ( $ref['strength'] ?? null ) && 'post' === ( $ref['space'] ?? null ) && 'post_parent' === ( $ref['at'] ?? null ) && isset( $ref['id'] ) ) {
+				// The parent of an attachment, a weak reference (decision 16).
+				$item['weak_parent'] = (string) (int) $ref['id'];
+			}
+		}
+		return $item;
+	}
+
+	/**
+	 * The paths two attachments of the run name, each with the entry
+	 * numbers of the attachments that name it (rule of the seam, D4, asked
+	 * by AB_MCP_Sync_Push::plan(), which locks them).
+	 *
+	 * @param array $items The items of the plan by entry number.
+	 * @return array<string,int[]> Path => entry numbers.
+	 */
+	public static function shared_paths( array $items ) {
+		// The attachments of the run (branch 10): a path two of them name is
+		// shared (attachment:shared_path), both are locked; an attachment
+		// here whose new parent the run creates comes after that post (an
+		// order, a cycle locked); a new one hangs under it by a parent step
+		// after both (decision 16: the weak reference).
+		$by_path = array();
+		foreach ( $items as $n => $item ) {
+			foreach ( 'attachment' === $item['kind'] && isset( $item['files'] ) ? array_unique( $item['files'] ) : array() as $path ) {
+				$by_path[ $path ][] = $n;
+			}
+		}
+		$shared = array();
+		foreach ( $by_path as $path => $ns ) {
+			if ( count( $ns ) < 2 ) {
+				continue;
+			}
+			$shared[ $path ] = $ns;
+		}
+		return $shared;
+	}
+
+	/**
+	 * Whether an attachment is an object of the space of posts, a parent
+	 * another attachment may hang under (rule of the seam, N-c no. 2, asked
+	 * by AB_MCP_Sync_Push::plan()): it is; the poster image of a new video
+	 * hangs under the video (GitHub Codex on free#140, P2).
+	 *
+	 * @param array $item The item of the plan.
+	 * @return bool
+	 */
+	public static function made_in_posts( array $item ) {
+		unset( $item );
+		return true;
+	}
+
+	/**
+	 * What the plan sets for an attachment whose parent, a weak reference,
+	 * the run creates (rule of the seam, N-c no. 3, asked by
+	 * AB_MCP_Sync_Push::plan()): one here comes after that post (a
+	 * reference, an order); a new one is made unattached and hangs under it
+	 * by a parent step after both (decision 16). The item, and its parent
+	 * step: its entry number => the entry of the parent, or none.
+	 *
+	 * @param array $item       The item of the plan.
+	 * @param int   $n          Its entry number.
+	 * @param array $made_posts The objects of the space of posts the run creates: staging ref => entry number.
+	 * @return array{0:array,1:array<int,int>} The item and its parent step.
+	 */
+	public static function weak_parent( array $item, $n, array $made_posts ) {
+		$later = array();
+		if ( ! isset( $item['weak_parent'], $made_posts[ $item['weak_parent'] ] ) || $made_posts[ $item['weak_parent'] ] === $n ) {
+			return array( $item, $later );
+		}
+		if ( 'update' === $item['op'] ) {
+			$item['refs'][] = array( 'post', $item['weak_parent'] );
+		} else {
+			$item['parent_later'] = true;
+			$later[ $n ]          = $made_posts[ $item['weak_parent'] ];
+		}
+		return array( $item, $later );
+	}
+
+	/**
 	 * What a step writes for one attachment, from its line of the package of
 	 * objects and the item of the plan (see AB_MCP_Sync_Post_Writer::
 	 * target_of() for the fields): the row, the meta by key, the terms, the

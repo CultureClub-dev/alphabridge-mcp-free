@@ -19,6 +19,7 @@ use AB_MCP_Sync_Engine;
 use AB_MCP_Sync_Kinds;
 use AB_MCP_Sync_Post_Writer;
 use AB_MCP_Sync_Term_Writer;
+use AB_MCP_Sync_Writers;
 use PHPUnit\Framework\TestCase;
 use WP_Error;
 
@@ -236,11 +237,11 @@ final class SyncTermWriterTest extends TestCase {
 	}
 
 	public function testTheEngineWritesTermsWithTheirOwnWriter(): void {
-		self::assertSame( AB_MCP_Sync_Term_Writer::class, AB_MCP_Sync_Engine::writer( 'term' ) );
-		self::assertSame( AB_MCP_Sync_Post_Writer::class, AB_MCP_Sync_Engine::writer( 'post' ) );
-		self::assertNull( AB_MCP_Sync_Engine::writer( 'theme_mod' ), 'No step writes a kind without a writer (theme mods: Z8d).' );
-		self::assertSame( \AB_MCP_Sync_Menu_Writer::class, AB_MCP_Sync_Engine::writer( 'menu' ), 'The menus with their own writer (branch 11).' );
-		self::assertSame( \AB_MCP_Sync_Attachment_Writer::class, AB_MCP_Sync_Engine::writer( 'attachment' ), 'The attachments with their own writer (branch 10).' );
+		self::assertSame( AB_MCP_Sync_Term_Writer::class, AB_MCP_Sync_Writers::whole( 'term' ) );
+		self::assertSame( AB_MCP_Sync_Post_Writer::class, AB_MCP_Sync_Writers::whole( 'post' ) );
+		self::assertNull( AB_MCP_Sync_Writers::whole( 'theme_mod' ), 'No step writes a kind without a writer (theme mods: Z8d).' );
+		self::assertSame( \AB_MCP_Sync_Menu_Writer::class, AB_MCP_Sync_Writers::whole( 'menu' ), 'The menus with their own writer (branch 11).' );
+		self::assertSame( \AB_MCP_Sync_Attachment_Writer::class, AB_MCP_Sync_Writers::whole( 'attachment' ), 'The attachments with their own writer (branch 10).' );
 		self::assertSame( array( 'category', 'post_tag', 'wp_pattern_category' ), AB_MCP_Sync_Term_Writer::TAXONOMIES );
 		foreach ( AB_MCP_Sync_Term_Writer::TAXONOMIES as $taxonomy ) {
 			self::assertSame( 'term', AB_MCP_Sync_Kinds::taxonomy( $taxonomy )['kind'], 'The kind term owns ' . $taxonomy );

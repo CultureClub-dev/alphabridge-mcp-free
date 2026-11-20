@@ -1,0 +1,395 @@
+<?php
+/**
+ * The registration of the write side (AB_MCP_Sync_Writers, the seam, first
+ * step T1): the refusals of register() (a subtype twice, an entry with a
+ * stage, no class loaded, whole and by subtype at once) and the list of this
+ * plugin at the end of the engine (a kind struck out, two classes swapped).
+ * T2: writer() asks with the subtype, and the reader of the subtype of a
+ * journal (fixed to post, fixed to ''); the check before the first write
+ * asks the rule planned_parent() of a writer (N-c no. 1). T3: verdict()
+ * locks a kind without a writer (n-verdict); plan() asks the rules
+ * made_in_posts() and weak_parent() of a writer (N-c no. 2 and 3), and
+ * absent_identity() (no. 4); order() asks first_by_depth() (no. 5);
+ * term_depths() asks depths() (no. 6 to 8), whose node, given parent and
+ * depth the counter-probes n-nc-1265, n-nc-1273 and n-nc-1288 change in the
+ * rule of the term writer. T4: run_write() and written() ask the forward
+ * entrance of the engine (n-code-vor, n-code-pruefung), plan() the one of the
+ * planning in Push (n-plan-code). T5: begin() with the entrance of the
+ * planning gives it the refusal of the packages as a closure, not made as an
+ * argument (n-begin-ablehnung, the rest of T4, held by I4 (d)); boundary()
+ * fails the step of a kind without a writer (n-schreibgrenze, held by I1 (f)
+ * in SyncPlanWithoutWriterTest). T5 part 2: code_item() gives its text
+ * without the entrance only for a plan of the code, a run of the contents
+ * goes on (n-inhalte-ohne-platz, held by I4 (e)); begin() binds a plan of the
+ * code only through the place of the planning (n-begin-bind-fest, held by I4
+ * (a)); admit_code() puts only a class that is loaded, in the engine
+ * (n-platz-engine-wert, held by I4 (c)) and in Push (n-platz-push-wert, held
+ * by I4 (a)). T5 part 3: row_now() gives 'unread' for a kind without a
+ * writer, so the plan of a way back reads no row through a writer it
+ * lacks (n-zeile-jetzt), and revert_boundary() fails the step of such a
+ * kind without putting anything back (n-rueckweg); both held by I2 (a) in
+ * SyncWayBackWithoutWriterTest. T6 part 1 (P3, the root): the writer asked
+ * with the subtype in phase 7 for each written object (n-p3-objekt) and for
+ * the taxonomies of each writer registered (n-p3-taxonomien), in the check
+ * of the run (n-p3-pruefung), for the pair of a new object (n-p3-paar-neu)
+ * and for the row the token of a way back binds (n-p3-zeile); each mutation
+ * asks without the subtype as before, each held by (P3) in
+ * SyncWayBackWithoutWriterTest. T6 part 2 (C1): phase 7 takes an object
+ * without a writer by the key post with the journal of a post, so key and
+ * writer match (n-c1-schluessel-post, held by (g) in
+ * SyncPlanWithoutWriterTest). Written by hand.
+ *
+ * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
+ * It is equivalent while a kind is either whole or by subtype, never both
+ * (naht/n-ganz-und-teil holds that); it goes to I1.
+ *
+ * Not here either: writer_of() asking the subtype for a kind registered
+ * whole as well. It is equivalent: a whole kind answers every subtype.
+ *
+ * Held by the unit suite (SyncWritersTest, SyncWriterOfTest, SyncPlanLockTest,
+ * SyncPlanRulesTest), n-nc-854 by the integration suite (SyncContentTest),
+ * n-nc-539 and n-nc-545 as well (SyncMediaTest). n-nc-1197 by U4
+ * (SyncPlanRulesTest): the test the build sheet named (SyncContentTest, a new
+ * category with a new child and a new post in it) does not see it, as the
+ * three depend on each other and their order follows from that alone.
+ * n-nc-1265, n-nc-1273 and n-nc-1288 by U4 as well: the tests the build sheet
+ * named (SyncContentTest, two categories that swap their places, and the new
+ * category with its child) do not see them. The three of T4 by I4
+ * (SyncCodeWithoutEntranceTest), the only test that empties those entrances.
+ *
+ * @package AlphaBridge_MCP
+ */
+
+$unit = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWritersTest' );
+$of   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncWriterOfTest' );
+$rule = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanLockTest' );
+$nc   = array( 'vendor/bin/phpunit', '--no-progress', '--filter', 'SyncPlanRulesTest' );
+$swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncContentTest::testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell( |$)/' );
+$clip = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncMediaTest::testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack( |$)/' );
+$i4   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncCodeWithoutEntranceTest::' . $test . '( |$)/' );
+$i6   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncPlanWithoutWriterTest::' . $test . '( |$)/' );
+$wb   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncWayBackWithoutWriterTest::' . $test . '( |$)/' );
+
+$sw = 'includes/sync/class-sync-writers.php';
+$en = 'includes/sync/class-sync-engine.php';
+$pu = 'includes/sync/class-sync-push.php';
+$tw = 'includes/sync/class-sync-term-writer.php';
+$rv = 'includes/sync/class-sync-revert.php';
+
+return array(
+	array(
+		'id'      => 'naht/n-doppelt',
+		'clause'  => 'register(): a kind or subtype registered already is refused',
+		'file'    => $sw,
+		'search'  => "\t\tif ( count( \$once ) !== count( \$taken ) ) {",
+		'replace' => "\t\tif ( false && count( \$once ) !== count( \$taken ) ) {",
+		'run'     => $unit,
+		'expect'  => '/with data set "a subtype twice"/',
+	),
+	array(
+		'id'      => 'naht/n-etappe',
+		'clause'  => 'register(): a subtype whose entry has a stage is refused',
+		'file'    => $sw,
+		'search'  => "\t\t\tif ( \$kind === \$entry['kind'] && isset( \$entry['stage'] ) && in_array(",
+		'replace' => "\t\t\tif ( false && \$kind === \$entry['kind'] && isset( \$entry['stage'] ) && in_array(",
+		'run'     => $unit,
+		'expect'  => '/with data set "an entry with a stage \(Kinds :159\)"/',
+	),
+	array(
+		'id'      => 'naht/n-klasse',
+		'clause'  => 'register(): a class that is not loaded is refused',
+		'file'    => $sw,
+		'search'  => "\t\tif ( ! is_string( \$class ) || ! class_exists( \$class ) ) {",
+		'replace' => "\t\tif ( false && ( ! is_string( \$class ) || ! class_exists( \$class ) ) ) {",
+		'run'     => $unit,
+		'expect'  => '/with data set "no class, whole"/',
+	),
+	array(
+		'id'      => 'naht/n-ganz-und-teil',
+		'clause'  => 'register(): a kind is registered whole or by subtype, never both',
+		'file'    => $sw,
+		'search'  => "\t\tif ( in_array( self::WHOLE, \$once, true ) && count( \$once ) > 1 ) {",
+		'replace' => "\t\tif ( false && in_array( self::WHOLE, \$once, true ) && count( \$once ) > 1 ) {",
+		'run'     => $unit,
+		'expect'  => '/with data set "whole after a subtype"/',
+	),
+	array(
+		'id'      => 'naht/n-free-liste',
+		'clause'  => 'the list of this plugin registers post',
+		'file'    => $en,
+		'search'  => 'foreach ( AB_MCP_Sync_Engine::WRITERS as $ab_mcp_kind => $ab_mcp_writer ) {',
+		'replace' => 'foreach ( array_slice( AB_MCP_Sync_Engine::WRITERS, 1 ) as $ab_mcp_kind => $ab_mcp_writer ) {',
+		'run'     => $unit,
+		'expect'  => '/testAFreshProcessThatLoadsTheEngineHasEveryKindWhole/',
+	),
+	array(
+		'id'      => 'naht/n-free-klasse',
+		'clause'  => 'the list of this plugin gives each kind its class of WRITERS',
+		'file'    => $en,
+		'search'  => "\tAB_MCP_Sync_Writers::register( \$ab_mcp_kind, AB_MCP_Sync_Writers::WHOLE, \$ab_mcp_writer );",
+		'replace' => "\tAB_MCP_Sync_Writers::register( \$ab_mcp_kind, AB_MCP_Sync_Writers::WHOLE, array( 'post' => 'AB_MCP_Sync_Term_Writer', 'term' => 'AB_MCP_Sync_Post_Writer' )[ \$ab_mcp_kind ] ?? \$ab_mcp_writer );",
+		'run'     => $unit,
+		'expect'  => '/testTheWritersOfThisPluginAreTheWritersOfTheEngineForEveryKindAndSubtype/',
+	),
+	array(
+		'id'      => 'naht/n-writer-untertyp',
+		'clause'  => 'writer(): with a subtype, the class registered for it',
+		'file'    => $en,
+		'search'  => "\t\treturn AB_MCP_Sync_Writers::of( \$kind, (string) \$subtype );",
+		'replace' => "\t\treturn AB_MCP_Sync_Writers::of( \$kind, '' );",
+		'run'     => $unit,
+		'expect'  => '/testWriterAsksTheRegistrationBySubtype/',
+	),
+	array(
+		'id'      => 'naht/n-untertyp',
+		'clause'  => 'subtype_in(): the subtype of a journal from its identity, not post',
+		'file'    => $en,
+		'search'  => "\t\t\$subtype = \$journal['object']['identity']['post_type'] ?? \$journal['object']['identity']['taxonomy'] ?? \$journal['object']['identity']['name'] ?? '';",
+		'replace' => "\t\t\$subtype = 'post';",
+		'run'     => $of,
+		'expect'  => '/testAJournalOfAKindRegisteredBySubtypeGivesTheClassOfItsSubtype/',
+	),
+	array(
+		'id'      => 'naht/n-untertyp-leer',
+		'clause'  => 'subtype_in(): the subtype of a journal from its identity, not none',
+		'file'    => $en,
+		'search'  => "\t\t\$subtype = \$journal['object']['identity']['post_type'] ?? \$journal['object']['identity']['taxonomy'] ?? \$journal['object']['identity']['name'] ?? '';",
+		'replace' => "\t\t\$subtype = '';",
+		'run'     => $of,
+		'expect'  => '/testAJournalOfAKindRegisteredBySubtypeGivesTheClassOfItsSubtype/',
+	),
+	array(
+		'id'      => 'naht/n-nc-854',
+		'clause'  => 'planned_parents(): the check asks the rule planned_parent() of the writer of the kind',
+		'file'    => $en,
+		'search'  => "\t\t\tif ( ! self::has_rule( \$w, 'planned_parent' ) || 'update' !== ( isset( \$one['op'] ) ? (string) \$one['op'] : '' ) ) {",
+		'replace' => "\t\t\tif ( true || 'update' !== ( isset( \$one['op'] ) ? (string) \$one['op'] : '' ) ) {",
+		'run'     => $swap,
+		'expect'  => '/testTwoCategoriesThatSwapTheirPlacesGoOverAndBackAndAnOrdinaryMoveGoesAsWell/',
+	),
+	array(
+		'id'      => 'naht/n-verdict',
+		'clause'  => 'verdict(): an entry of a kind without a writer is locked with the sentence of the core',
+		'file'    => $pu,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
+		'replace' => "\t\t\$w = \$w ?? ( AB_MCP_Sync_Engine::WRITERS[ (string) \$entry['kind'] ] ?? null );\n\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it. */",
+		'run'     => $rule,
+		'expect'  => '/testAKindWithoutAWriterIsLockedWithTheSentenceOfTheCore/',
+	),
+	array(
+		'id'      => 'naht/n-nc-539',
+		'clause'  => 'plan(): a new attachment counts as a parent the run creates by the rule made_in_posts() of its writer',
+		'file'    => $pu,
+		'search'  => "\t\treturn 'post' === \$item['kind'] || self::writer_rule( \$item, 'made_in_posts', array( \$item ), false );",
+		'replace' => "\t\treturn 'post' === \$item['kind'];",
+		'run'     => $clip,
+		'expect'  => '/testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack/',
+	),
+	array(
+		'id'      => 'naht/n-nc-545',
+		'clause'  => 'plan(): an attachment whose weak parent the run creates hangs under it by the rule weak_parent() of its writer',
+		'file'    => $pu,
+		'search'  => "self::writer_rule( \$item, 'weak_parent', array( \$item, \$n, \$made_posts ), array( \$item, array() ) );",
+		'replace' => "array( \$item, array() );",
+		'run'     => $clip,
+		'expect'  => '/testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack/',
+	),
+	array(
+		'id'      => 'naht/n-nc-680',
+		'clause'  => 'plan(): the identity of a term that is not here, for the reserve of its backup, by the rule absent_identity() of its writer',
+		'file'    => $pu,
+		'search'  => "\t\treturn self::writer_rule( \$item, 'absent_identity', array( \$item ), array( 'post_type' => (string) ( \$item['subtype'] ?? '' ), 'post_name' => (string) \$item['staging_ref'], 'theme' => '' ) );",
+		'replace' => "\t\treturn array( 'post_type' => (string) ( \$item['subtype'] ?? '' ), 'post_name' => (string) \$item['staging_ref'], 'theme' => '' );",
+		'run'     => $nc,
+		'expect'  => '/testTheIdentityOfAnObjectThatIsNotHereIsByTheRuleOfATermElseTheFormOfAPost/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1197',
+		'clause'  => 'order(): the terms first, by their depth, by the rule first_by_depth() of their writer',
+		'file'    => $pu,
+		'search'  => "\t\t\t\t\tif ( null !== ( \$first = self::writer_rule( \$items[ \$n ], 'first_by_depth', array( \$items[ \$n ], \$n ) ) ) ) {",
+		'replace' => "\t\t\t\t\tif ( null !== ( \$first = null ) ) {",
+		'run'     => $nc,
+		'expect'  => '/testTheTermsComeFirstInTheOrderByTheirDepth/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1265',
+		'clause'  => 'depths(): a term the run updates is a node of this site, by the rule depths() of the term writer',
+		'file'    => $tw,
+		'search'  => "\t\t\t\t\$node_of[ (string) \$item['staging_ref'] ] = 'update' === \$item['op'] ? 'l:' . (int) \$item['live_ref'] : 'n:' . (string) \$item['staging_ref'];",
+		'replace' => "\t\t\t\t\$node_of[ (string) \$item['staging_ref'] ] = 'n:' . (string) \$item['staging_ref'];",
+		'run'     => $nc,
+		'expect'  => '/testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1273',
+		'clause'  => 'depths(): a term of the run stands under the parent the run gives it, by the rule depths() of the term writer',
+		'file'    => $tw,
+		'search'  => "\t\t\tif ( ! isset( \$item['parent_ref'] ) ) {",
+		'replace' => "\t\t\tif ( true ) {",
+		'run'     => $nc,
+		'expect'  => '/testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter/',
+	),
+	array(
+		'id'      => 'naht/n-nc-1288',
+		'clause'  => 'depths(): the depth of each term in the tree the run leaves, by the rule depths() of the term writer',
+		'file'    => $tw,
+		'search'  => "\t\t\t\$out[ \$n ] = \$depth;",
+		'replace' => "\t\t\t\$out[ \$n ] = 0;",
+		'run'     => $nc,
+		'expect'  => '/testTheDepthOfATermInTheTreeTheRunLeavesIsByTheRuleOfItsWriter/',
+	),
+	array(
+		'id'      => 'naht/n-code-vor',
+		'clause'  => 'run_write(): a step of the code by the forward entrance of the engine, its stage failed without it',
+		'file'    => $en,
+		'search'  => "\t\t\$unit = self::code_item( \$plan, \$step['seq'] );\n\t\tif ( is_string( \$unit ) ) {\n\t\t\treturn self::fail_step( (int) \$run['run_id'], (int) \$step['seq'], 'planned', \$unit );\n\t\t}\n\t\tif ( null !== \$unit ) {\n\t\t\treturn is_wp_error( \$unit ) ? \$unit : call_user_func( array( self::\$code, 'run' ), \$run, \$step, \$unit );",
+		'replace' => "\t\t\$unit = AB_MCP_Sync_Code_Ops::item( \$plan, \$step['seq'] );\n\t\tif ( null !== \$unit ) {\n\t\t\treturn is_wp_error( \$unit ) ? \$unit : AB_MCP_Sync_Code_Ops::run( \$run, \$step, \$unit );",
+		'run'     => $i4( 'testWithoutTheForwardEntranceAStepOfTheCodeFailsAndNothingIsStagedOrSwapped' ),
+		'expect'  => '/testWithoutTheForwardEntranceAStepOfTheCodeFailsAndNothingIsStagedOrSwapped/',
+	),
+	array(
+		'id'      => 'naht/n-code-pruefung',
+		'clause'  => 'written(): the check of a step of the code by the forward entrance of the engine, a finding without it',
+		'file'    => $en,
+		'search'  => "\t\t\$unit = self::code_item( \$run['plan'], \$one['seq'] );\n\t\tif ( null !== \$unit ) {\n\t\t\t\$found = is_wp_error( \$unit ) ? \$unit->get_error_message() : ( is_string( \$unit ) ? \$unit : call_user_func( array( self::\$code, 'finding' ), \$one, \$unit, \$until ) );",
+		'replace' => "\t\t\$unit = AB_MCP_Sync_Code_Ops::item( \$run['plan'], \$one['seq'] );\n\t\tif ( null !== \$unit ) {\n\t\t\t\$found = is_wp_error( \$unit ) ? \$unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( \$one, \$unit, \$until );",
+		'run'     => $i4( 'testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings' ),
+		'expect'  => '/testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings/',
+	),
+	array(
+		'id'      => 'naht/n-plan-code',
+		'clause'  => 'plan(): a plan of the code only by the entrance of the planning, none without it',
+		'file'    => $pu,
+		'search'  => "\t\t\$code = self::code_plan( 'of', array( \$found, \$entries, \$selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) ) );",
+		'replace' => "\t\t\$code = AB_MCP_Sync_Code_Plan::of( \$found, \$entries, \$selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) );",
+		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
+		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
+	),
+	array(
+		'id'      => 'naht/n-begin-ablehnung',
+		'clause'  => 'begin(): with the entrance of the planning the refusal of the packages is not made as an argument',
+		'file'    => $pu,
+		'search'  => 'static function () { return self::packages_refusal(); } );',
+		'replace' => 'self::packages_refusal() );',
+		'run'     => $i4( 'testWithTheEntranceOfThePlanningARunOfTheCodeBeginsWithoutMakingTheRefusal' ),
+		'expect'  => '/testWithTheEntranceOfThePlanningARunOfTheCodeBeginsWithoutMakingTheRefusal/',
+	),
+	array(
+		'id'      => 'naht/n-schreibgrenze',
+		'clause'  => 'boundary(): a step of a kind without a writer fails with the sentence of the core, nothing written',
+		'file'    => $en,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'planned', sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), \$item['kind'] ) );",
+		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'planned', sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), \$item['kind'] ) );",
+		'run'     => $i6( 'testWithoutAWriterAtTheWriteBoundaryTheStepFailsAndNothingIsWritten' ),
+		'expect'  => '/testWithoutAWriterAtTheWriteBoundaryTheStepFailsAndNothingIsWritten/',
+	),
+	array(
+		'id'      => 'naht/n-inhalte-ohne-platz',
+		'clause'  => 'code_item(): without the entrance the text only for a plan of the code, a run of the contents goes on',
+		'file'    => $en,
+		'search'  => "return array_key_exists( 'code', \$plan ) ? sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), 'code' ) : null;",
+		'replace' => "return sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), 'code' );",
+		'run'     => $i4( 'testWithBothPlacesEmptyANewPostGoesOverAsWithThem' ),
+		'expect'  => '/testWithBothPlacesEmptyANewPostGoesOverAsWithThem/',
+	),
+	array(
+		'id'      => 'naht/n-begin-bind-fest',
+		'clause'  => 'begin(): a plan of the code is bound only through the place of the planning, refused without it',
+		'file'    => $pu,
+		'search'  => "\$bound = self::code_plan( 'bind', array( \$plan, (int) \$run['run_id'] ), static function () { return self::packages_refusal(); } );",
+		'replace' => "\$bound = AB_MCP_Sync_Code_Plan::bind( \$plan, (int) \$run['run_id'] );",
+		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
+		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
+	),
+	array(
+		'id'      => 'naht/n-platz-engine-wert',
+		'clause'  => 'admit_code() of the engine: only a class that is loaded takes the place',
+		'file'    => $en,
+		'search'  => 'self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;',
+		'replace' => 'self::$code = is_string( $code ) ? $code : null;',
+		'run'     => $i4( 'testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings' ),
+		'expect'  => '/testWithoutTheForwardEntranceTheCheckNamesTheStepsOfTheCodeAsFindings/',
+	),
+	array(
+		'id'      => 'naht/n-platz-push-wert',
+		'clause'  => 'admit_code() of Push: only a class that is loaded takes the place of the planning',
+		'file'    => $pu,
+		'search'  => 'self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;',
+		'replace' => 'self::$code = is_string( $code ) ? $code : null;',
+		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
+		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
+	),
+	array(
+		'id'      => 'naht/n-zeile-jetzt',
+		'clause'  => 'row_now(): a kind without a writer gives unread, so the plan of a way back reads no row through a writer it lacks',
+		'file'    => $rv,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\treturn 'unread';",
+		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\treturn 'unread';",
+		'run'     => $wb( 'testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse' ),
+		'expect'  => '/testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse/',
+	),
+	array(
+		'id'      => 'naht/n-rueckweg',
+		'clause'  => 'revert_boundary(): the step of a kind without a writer fails with the sentence of the core, nothing put back',
+		'file'    => $en,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'begun', sprintf( __( 'No step of this version writes the kind %s; nothing is put back.'",
+		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'begun', sprintf( __( 'No step of this version writes the kind %s; nothing is put back.'",
+		'run'     => $wb( 'testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse' ),
+		'expect'  => '/testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse/',
+	),
+	array(
+		'id'      => 'naht/n-p3-objekt',
+		'clause'  => 'run_post(): phase 7 empties each written object by the writer of its journal, with its subtype',
+		'file'    => $en,
+		'search'  => "\t\t\t\$w                           = self::writer_of( \$journal );",
+		'replace' => "\t\t\t\$w                           = self::writer( \$kind, '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-taxonomien',
+		'clause'  => 'run_post(): phase 7 empties the taxonomies of each writer registered, whole or by subtype',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\$w = self::writer( \$kind, \$subtype );",
+		'replace' => "\t\t\t\t\$w = self::writer( \$kind, '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-pruefung',
+		'clause'  => 'written(): the check of the run hashes each written object by the writer of its journal, with its subtype',
+		'file'    => $en,
+		'search'  => "\t\t\$w       = self::writer_of( (array) \$one['parts'] );",
+		'replace' => "\t\t\$w       = self::writer( (string) ( \$one['parts']['object']['kind'] ?? 'post' ), '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-paar-neu',
+		'clause'  => 'pair_for_new(): the pair of a new object is based on its hash by the writer of its subtype',
+		'file'    => $en,
+		'search'  => "\t\t\$w    = self::writer( \$item['kind'], \$item['subtype'] );",
+		'replace' => "\t\t\$w    = self::writer( \$item['kind'], '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-zeile',
+		'clause'  => 'row_now(): the token of a way back binds the row of an object by the writer of its journal, with its subtype',
+		'file'    => $rv,
+		'search'  => "\t\t\$w = AB_MCP_Sync_Engine::writer_of( array( 'object' => \$object ) );",
+		'replace' => "\t\t\$w = AB_MCP_Sync_Engine::writer( isset( \$object['kind'] ) ? (string) \$object['kind'] : 'post', '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-c1-schluessel-post',
+		'clause'  => 'run_post(): an object without a writer goes to phase 7 by the key post with the journal of a post, so key and writer match (C1)',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\$ids[] = array( null === \$w ? 'post' : \$kind, self::live_of( \$w, \$one['result']['live_ref'] ), null === \$w ? array() : (array) \$one['parts'] );",
+		'replace' => "\t\t\t\t\$ids[] = array( null === \$w ? 'post' : \$kind, self::live_of( \$w, \$one['result']['live_ref'] ), (array) \$one['parts'] );",
+		'run'     => $i6( 'testPhaseSevenOfAWrittenTermWhoseWriterIsGoneIsDoneWithoutAnError' ),
+		'expect'  => '/testPhaseSevenOfAWrittenTermWhoseWriterIsGoneIsDoneWithoutAnError/',
+	),
+);

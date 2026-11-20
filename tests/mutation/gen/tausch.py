@@ -192,12 +192,6 @@ e('engine-written-plan', 'written(): a plan that does not read back judges a ste
   "\t\tif ( ! is_array( $run['plan'] ) ) {", "\t\tif ( false ) {", 'run', WRIT)
 # Through the public way (B of the Codex round 1 on the code, finding 4): a
 # plan of the code stored with the run that does not read.
-PLANT = 'testAPlanOfTheCodeThatDoesNotReadInTheRunRefusesItsStepAndWritesNothing'
-ITEMS = "\t\t$unit = AB_MCP_Sync_Code_Ops::item( $plan, $step['seq'] );\n\t\tif ( null !== $unit ) {\n\t\t\treturn is_wp_error( $unit ) ? $unit : AB_MCP_Sync_Code_Ops::run( $run, $step, $unit );"
-e('engine-code-plan-code', 'run_write(): a plan of the code that does not read is never taken for a plan of the contents', EN,
-  ITEMS, ITEMS.replace('null !== $unit', 'is_array( $unit )'), 'coderun', PLANT)
-e('engine-code-plan-refused', 'run_write(): a plan of the code that does not read refuses its step with the reason and the way', EN,
-  ITEMS, ITEMS.replace('is_wp_error( $unit ) ? $unit : ', ''), 'coderun', PLANT)
 
 # ------------------------------------------- what runs here, three-valued (Z8b branch 5, part 1)
 PLUG = 'testWhichPluginsRunIsReadFromTheRowOfActivePluginsAndARowNotReadIsNotKnown'
@@ -348,7 +342,7 @@ e('h-g1-counts-skipped', 'counts(): a swap skipped as the same is no object writ
 e('h-g1-counts-stage', 'counts(): a stage done changed nothing of the site and is no object written (Fable check 2, C4; G1 of GitHub Codex on #155)', CO,
   "\t\t\treturn 'done' !== $step['state'];", "\t\t\treturn true;", 'ops', COUNTS)
 e('h-g1-engine-counts', 'run_verify(): the check goes over the steps counts() takes for objects written, never every write step of a run of the code (G1 of GitHub Codex on #155)', EN,
-  "\t\t\tif ( AB_MCP_Sync_Code_Ops::counts( $run, $one ) ) {", "\t\t\tif ( 'write' === $one['op'] ) {", 'coderun', SAME)
+  "\t\t\tif ( self::code_counts( $run, $one ) ) {", "\t\t\tif ( 'write' === $one['op'] ) {", 'coderun', SAME)
 
 # Part H: G2 of GitHub Codex on #155 (a group of the backups for each swap)
 e('h-g2-group', 'plan_of(): each swap puts the old version into a group of the backups of its own, bound to the run, so a plugin and a theme of one name never meet at one place (G2 of GitHub Codex on #155)', CS,

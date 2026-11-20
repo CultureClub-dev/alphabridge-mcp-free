@@ -246,8 +246,6 @@ VERDICT = 'testWhichEntryOfAReportIsAStepLockedOrNothing'
 ORDER = 'testTheOrderOfTheGraphPutsATargetBeforeWhatRefersToItAndLocksACycle'
 e('plan-unclear', 'verdict(): an unclear pair is written over only after a confirmation', PU,
   "\t\t\tif ( 'unclear' === $entry['result'] ) {", "\t\t\tif ( false ) {", 'unit', VERDICT)
-e('plan-type', 'verdict(): a type the engine does not write is locked with Z8d', PU,
-  "\t\t} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {", "\t\t} elseif ( false ) {", 'unit', VERDICT)
 e('plan-as-draft', 'verdict(): the choice as_draft goes with the item', PU,
   "\t\t\t\t'as_draft'    => (bool) $as_draft,", "\t\t\t\t'as_draft'    => false,", 'unit', VERDICT)
 e('plan-choice-keep', 'verdict(): keep_live and leave_open write nothing', PU,

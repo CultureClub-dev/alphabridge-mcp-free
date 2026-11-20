@@ -714,20 +714,21 @@ final class AB_MCP_Sync_Revert {
 		if ( ! isset( $object['live_ref'] ) ) {
 			return 0;
 		}
-		$ref = AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer( isset( $object['kind'] ) ? (string) $object['kind'] : 'post' ), $object['live_ref'] );
+		$ref = AB_MCP_Sync_Engine::live_of( AB_MCP_Sync_Engine::writer_of( array( 'object' => $object ) ), $object['live_ref'] );
 		return null === $ref ? 0 : $ref;
 	}
 
 	/**
 	 * The hash of the row of an object as it is now, by the write side of its
-	 * kind: gone, unread, or the hash.
+	 * kind and subtype (writer_of(), as live_ref_of()): gone, unread, or the
+	 * hash.
 	 *
 	 * @param array $object  The object of the journal.
 	 * @param int   $live_id Its id here.
 	 * @return string
 	 */
 	private static function row_now( array $object, $live_id ) {
-		$w = AB_MCP_Sync_Engine::writer( isset( $object['kind'] ) ? (string) $object['kind'] : 'post' );
+		$w = AB_MCP_Sync_Engine::writer_of( array( 'object' => $object ) );
 		if ( null === $w ) {
 			return 'unread';
 		}

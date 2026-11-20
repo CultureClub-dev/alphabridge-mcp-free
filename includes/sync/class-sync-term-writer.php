@@ -222,6 +222,161 @@ final class AB_MCP_Sync_Term_Writer {
 	}
 
 	/**
+	 * The lock of the plan for an entry of a term, or null (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		unset( $as_draft );
+		if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), self::TAXONOMIES, true ) ) {
+			/* translators: 1: the taxonomies the engine writes, separated by commas, 2: the taxonomy of the entry. */
+			return $lock( sprintf( __( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', 'alphabridge-mcp' ), implode( ', ', self::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
+		}
+		return null;
+	}
+
+	/**
+	 * What the plan holds of a term from one of its strong references (rule
+	 * of the seam, D4, asked by AB_MCP_Sync_Push::plan() for each strong
+	 * reference of the line of an item): the parent the reference names.
+	 *
+	 * @param array $item The item of the plan.
+	 * @param array $ref  A strong reference of its line (space, id, at).
+	 * @return array The item.
+	 */
+	public static function strong_parent( array $item, array $ref ) {
+		if ( 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
+			// The parent of a term, for the order (order()).
+			$item['parent_ref'] = (string) (int) $ref['id'];
+		}
+		return $item;
+	}
+
+	/**
+	 * The identity of a term of the plan that is not here, for the reserve
+	 * of its backup (rule of the seam, N-c no. 4, asked by
+	 * AB_MCP_Sync_Push::plan()): its taxonomy and its slug.
+	 *
+	 * @param array $item The item of the plan (subtype, staging_ref).
+	 * @return array
+	 */
+	public static function absent_identity( array $item ) {
+		return array( 'taxonomy' => (string) ( $item['subtype'] ?? '' ), 'slug' => (string) $item['staging_ref'] );
+	}
+
+	/**
+	 * The rank of a term in the order of the plan (rule of the seam, N-c
+	 * no. 5, asked by AB_MCP_Sync_Push::order()): before the objects of the
+	 * other kinds, by its depth in the tree the run leaves (0 where none is
+	 * set), then by its entry.
+	 *
+	 * @param array $item The item of the plan (depth).
+	 * @param int   $n    Its entry number.
+	 * @return int[]
+	 */
+	public static function first_by_depth( array $item, $n ) {
+		return array( 0, isset( $item['depth'] ) ? (int) $item['depth'] : 0, (int) $n );
+	}
+
+	/**
+	 * The depth of each term the run writes in the tree it leaves: every
+	 * term here with its parent here, the terms of the run with the parent
+	 * they are given (the parent of the staging site, by the run when it
+	 * writes that parent too, else by its pair); a new term stands as a node
+	 * of its own until its step made it. 0 for a root; a parent without a
+	 * pair, or a loop (which the check locks, term:parent), ends the walk.
+	 * Rule of the seam, N-c no. 6 to 8, asked by
+	 * AB_MCP_Sync_Push::term_depths() for the order of the plan.
+	 *
+	 * @param array    $items  The items of the plan (kind, op, staging_ref, live_ref, subtype, parent_ref).
+	 * @param callable $mapped Staging id of a term => its id here, or null.
+	 * @return array<int,int> n => depth, for the terms.
+	 */
+	public static function depths( array $items, callable $mapped ) {
+		$node_of = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' === $item['kind'] ) {
+				$node_of[ (string) $item['staging_ref'] ] = 'update' === $item['op'] ? 'l:' . (int) $item['live_ref'] : 'n:' . (string) $item['staging_ref'];
+			}
+		}
+		// The parent each term of the run is given: a node, null for none (a
+		// root), false where it has no counterpart here.
+		$given = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' !== $item['kind'] ) {
+				continue;
+			}
+			$node = $node_of[ (string) $item['staging_ref'] ];
+			if ( ! isset( $item['parent_ref'] ) ) {
+				$given[ $node ] = null;
+			} elseif ( isset( $node_of[ (string) $item['parent_ref'] ] ) ) {
+				$given[ $node ] = $node_of[ (string) $item['parent_ref'] ];
+			} else {
+				$here           = $mapped( (string) $item['parent_ref'] );
+				$given[ $node ] = null === $here ? false : 'l:' . (int) $here;
+			}
+		}
+		$out = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'term' !== $item['kind'] ) {
+				continue;
+			}
+			$taxonomy = isset( $item['subtype'] ) ? (string) $item['subtype'] : '';
+			$at       = $node_of[ (string) $item['staging_ref'] ];
+			$seen     = array( $at => true );
+			$depth    = 0;
+			while ( $depth <= AB_MCP_Sync_Push::MAX_OBJECTS ) {
+				if ( array_key_exists( $at, $given ) ) {
+					$up = $given[ $at ];
+				} elseif ( 0 === strpos( $at, 'l:' ) ) {
+					// A term the run does not write: its parent here.
+					$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( $at, 2 ), $taxonomy );
+					$up     = $parent > 0 ? 'l:' . $parent : null;
+				} else {
+					$up = null;
+				}
+				if ( ! is_string( $up ) || isset( $seen[ $up ] ) ) {
+					break;
+				}
+				$seen[ $up ] = true;
+				$at          = $up;
+				++$depth;
+			}
+			$out[ $n ] = $depth;
+		}
+		return $out;
+	}
+
+	/**
+	 * The parent a run gives a term of this site it updates, for the check
+	 * before the first write (rule N-c no. 1 of the seam, asked by
+	 * AB_MCP_Sync_Engine::planned_parents()): the parent here its target
+	 * names; null where its line or its target is refused, or where the run
+	 * makes the parent first.
+	 *
+	 * @param array          $one  The item of the plan (an update).
+	 * @param array|WP_Error $line Its line of the package.
+	 * @param array          $ctx  context(), with pending.
+	 * @return int|null
+	 */
+	public static function planned_parent( array $one, $line, array $ctx ) {
+		if ( is_wp_error( $line ) ) {
+			return null;
+		}
+		$prepared = self::target_of( $line, $one, $ctx );
+		// A parent the run makes first has no id here yet: the term counts
+		// as it is here (fail closed; the boundary asks it again).
+		if ( is_wp_error( $prepared ) || ! empty( $prepared['pending'] ) ) {
+			return null;
+		}
+		return (int) $prepared['args']['parent'];
+	}
+
+	/**
 	 * The checks before the first part (decision 17, step 4): the rights of
 	 * the account, the group, the parent, the slug, the sanitizers ahead,
 	 * the rights per meta key.

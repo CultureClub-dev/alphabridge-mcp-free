@@ -70,7 +70,6 @@ require_once __DIR__ . '/class-sync-engine.php';
 require_once __DIR__ . '/class-sync-report.php';
 require_once __DIR__ . '/class-sync-resources.php';
 require_once __DIR__ . '/class-sync-media.php';
-require_once __DIR__ . '/class-sync-code-plan.php';
 
 /**
  * Class AB_MCP_Sync_Push
@@ -113,12 +112,6 @@ final class AB_MCP_Sync_Push {
 	 */
 	const LAST = array( 'wp_navigation' );
 
-	/**
-	 * The kinds of the structure of a site a run writes (branch 11): a menu
-	 * and its items, a widget area, the additional CSS, a core option.
-	 */
-	const STRUCTURE = array( 'menu', 'menu_item', 'widget_area', 'custom_css', 'option' );
-
 	/** Steps a preview names at most (all are counted). */
 	const NAMED = 200;
 
@@ -127,6 +120,17 @@ final class AB_MCP_Sync_Push {
 
 	/** Seconds a run stays open at most without a step (its expires). */
 	const EXPIRES = 86400;
+
+	/**
+	 * The one entrance of the planning of the code (Z8b branch 5; D5 of the
+	 * seam): the name of the class AB_MCP_Sync_Code_Plan puts here as its
+	 * file loads (admit_code()). The core never calls the plan of the code by
+	 * a name of its class; where nothing is here, no run of the code is
+	 * planned, bound or shown (code_plan()).
+	 *
+	 * @var string|null
+	 */
+	private static $code = null;
 
 	/* ------------------------------------------------- the confirmation */
 
@@ -370,8 +374,8 @@ final class AB_MCP_Sync_Push {
 		}
 		// A run of the code (Z8b branch 5; E19, Z30): where the selection
 		// names a plugin or a theme, the plan is the one of the code and holds
-		// no step of the contents (AB_MCP_Sync_Code_Plan::of(), called here alone).
-		$code = AB_MCP_Sync_Code_Plan::of( $found, $entries, $selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) );
+		// no step of the contents (of() of the entrance, asked here alone; D5).
+		$code = self::code_plan( 'of', array( $found, $entries, $selection + array( 'accept' => array() ), compact( 'source', 'anchor', 'print', 'report_hash', 'plan_hash', 'existing' ) ) );
 		if ( null !== $code ) {
 			return $code;
 		}
@@ -429,89 +433,28 @@ final class AB_MCP_Sync_Push {
 			}
 			$item['size'] = isset( $line['size'] ) ? (int) $line['size'] : 0;
 			$item['refs'] = array();
-			if ( 'attachment' === $item['kind'] ) {
-				// The bytes of the files it may lay besides its rows (decision 8:
-				// the new media files are booked, with their temporary copies):
-				// of an attachment here only those its list here does not name
-				// (a file at a path it names is never written over); and its file
-				// list for the paths two objects of the run would share (branch 10).
-				$listed = 'update' === $item['op'] ? AB_MCP_Sync_Media::paths_of( (int) $item['live_ref'] ) : array();
-				$item['files'] = array();
-				foreach ( isset( $line['form']['files'] ) && is_array( $line['form']['files'] ) ? $line['form']['files'] : array() as $file ) {
-					if ( is_array( $file ) && isset( $file['path'], $file['size'] ) && is_string( $file['path'] ) ) {
-						$item['files'][] = $file['path'];
-						if ( null === $listed || ! in_array( $file['path'], $listed, true ) ) {
-							$item['size'] += (int) $file['size'];
-						}
-					}
-				}
-			}
+			// What its writer adds to the item of its kind by the rule
+			// plan_item() (D4 of the seam): an attachment its files, their
+			// bytes and its weak parent (branch 10), a menu the positions it
+			// takes (branch 11), a post the references and the name of its
+			// order (branch 9b).
+			$item = self::writer_rule( $item, 'plan_item', array( $item, $line ), $item );
 			foreach ( isset( $line['refs'] ) && is_array( $line['refs'] ) ? $line['refs'] : array() as $ref ) {
-				if ( 'attachment' === $item['kind'] && is_array( $ref ) && 'weak' === ( $ref['strength'] ?? null ) && 'post' === ( $ref['space'] ?? null ) && 'post_parent' === ( $ref['at'] ?? null ) && isset( $ref['id'] ) ) {
-					// The parent of an attachment, a weak reference (decision 16).
-					$item['weak_parent'] = (string) (int) $ref['id'];
-					continue;
-				}
 				if ( is_array( $ref ) && isset( $ref['space'], $ref['id'] ) && in_array( $ref['space'], array( 'post', 'term' ), true ) && 'strong' === ( $ref['strength'] ?? null ) ) {
 					$item['refs'][] = array( (string) $ref['space'], (string) (int) $ref['id'] );
-					if ( 'term' === $item['kind'] && 'term' === $ref['space'] && 'parent' === ( $ref['at'] ?? null ) ) {
-						// The parent of a term, for the order (order()).
-						$item['parent_ref'] = (string) (int) $ref['id'];
-					}
+					$item           = self::writer_rule( $item, 'strong_parent', array( $item, $ref ), $item );
 				}
-			}
-			if ( 'menu' === $item['kind'] ) {
-				// The positions it takes (its form on the staging site), for the
-				// order of the menus (branch 11, Codex round 1, B2).
-				$item['takes'] = AB_MCP_Sync_Menu_Writer::line_positions( $line );
-			}
-			if ( 'post' === $item['kind'] ) {
-				// The references the boundary asks by an id or a name, for the
-				// order (branch 9b, Codex round 1, B): reusable blocks and
-				// navigations by their ref, template parts by theme and slug,
-				// the template a page names; and the name of the object itself
-				// where another names it so.
-				$item['order_refs'] = AB_MCP_Sync_Post_Writer::order_refs( $line );
-				$item['order_name'] = AB_MCP_Sync_Post_Writer::order_name( $line );
 			}
 			$items[ $n ] = $item;
 		}
-		// The menus of the run (branch 11, Codex round 1, B2): the positions
-		// are fields of one row (decision 24), and a menu's form names them.
-		// A menu that takes a position another menu of the run holds here
-		// comes after that menu (an order, no dependency: order()), which
-		// gives the position up first; else its step would change that menu,
-		// whose step would find it changed since the plan.
-		$menus = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'menu' === $item['kind'] && 'update' === $item['op'] ) {
-				$menus[ (int) $item['live_ref'] ] = $n;
-			}
+		// The menus of the run a menu comes after (branch 11, B2), by the rule
+		// after_holders() of the writers of the plan (D4 of the seam).
+		foreach ( self::writers_rule( $items, 'after_holders', array( $items ) ) as $n => $after ) {
+			$items[ $n ]['menu_after'] = $after;
 		}
-		$held = array() === $menus ? array() : AB_MCP_Sync_Menu_Writer::held_positions();
-		foreach ( $items as $n => $item ) {
-			foreach ( 'menu' === $item['kind'] && isset( $item['takes'] ) ? $item['takes'] : array() as $location ) {
-				$holder = isset( $held[ $location ] ) ? $held[ $location ] : null;
-				if ( null !== $holder && isset( $menus[ $holder ] ) && $menus[ $holder ] !== $n ) {
-					$items[ $n ]['menu_after'][] = $menus[ $holder ];
-				}
-			}
-		}
-		// The attachments of the run (branch 10): a path two of them name is
-		// shared (attachment:shared_path), both are locked; an attachment
-		// here whose new parent the run creates comes after that post (an
-		// order, a cycle locked); a new one hangs under it by a parent step
-		// after both (decision 16: the weak reference).
-		$by_path = array();
-		foreach ( $items as $n => $item ) {
-			foreach ( 'attachment' === $item['kind'] && isset( $item['files'] ) ? array_unique( $item['files'] ) : array() as $path ) {
-				$by_path[ $path ][] = $n;
-			}
-		}
-		foreach ( $by_path as $path => $ns ) {
-			if ( count( $ns ) < 2 ) {
-				continue;
-			}
+		// A path two attachments of the run name, by the rule shared_paths()
+		// of each writer of the kind (D4 of the seam): both are locked here.
+		foreach ( self::shared_paths( $items ) as $path => $ns ) {
 			$held = AB_MCP_Sync_Kinds::lock( 'attachment', 'shared_path' );
 			foreach ( $ns as $n ) {
 				if ( isset( $items[ $n ] ) ) {
@@ -536,21 +479,14 @@ final class AB_MCP_Sync_Push {
 		// the weak one makes no cycle; GitHub Codex on free#140, P2).
 		$made_posts = array();
 		foreach ( $items as $n => $item ) {
-			if ( in_array( $item['kind'], array( 'post', 'attachment' ), true ) && 'create' === $item['op'] ) {
+			if ( self::made_in_posts( $item ) && 'create' === $item['op'] ) {
 				$made_posts[ (string) $item['staging_ref'] ] = $n;
 			}
 		}
 		$parents = array();
 		foreach ( $items as $n => $item ) {
-			if ( 'attachment' !== $item['kind'] || ! isset( $item['weak_parent'], $made_posts[ $item['weak_parent'] ] ) || $made_posts[ $item['weak_parent'] ] === $n ) {
-				continue;
-			}
-			if ( 'update' === $item['op'] ) {
-				$items[ $n ]['refs'][] = array( 'post', $item['weak_parent'] );
-			} else {
-				$items[ $n ]['parent_later'] = true;
-				$parents[ $n ]               = $made_posts[ $item['weak_parent'] ];
-			}
+			list( $items[ $n ], $later ) = self::writer_rule( $item, 'weak_parent', array( $item, $n, $made_posts ), array( $item, array() ) );
+			$parents                    += $later;
 		}
 		$refused = self::too_many( count( $items ) + count( $parents ) );
 		if ( null !== $refused ) {
@@ -671,15 +607,13 @@ final class AB_MCP_Sync_Push {
 			// not the staging side: reserved from them, uncompressed, as the
 			// store counts them (AB_MCP_Sync_Backup::size_of(); GitHub Codex
 			// round 6 on free#137, P2). A new object leaves a small mark.
-			$w       = AB_MCP_Sync_Engine::writer( $item['kind'] );
+			$w       = AB_MCP_Sync_Engine::writer( $item['kind'], $item['subtype'] );
 			$live_id = 'update' === $item['op'] && isset( $item['live_ref'] ) ? AB_MCP_Sync_Engine::live_of( $w, $item['live_ref'] ) : 0;
 			$current = AB_MCP_Sync_Engine::is_ref( $live_id ) && null !== $w ? $w::current( $live_id ) : null;
 			if ( is_wp_error( $current ) ) {
 				return $current;
 			}
-			$absent = 'term' === $item['kind']
-				? array( 'taxonomy' => (string) ( $item['subtype'] ?? '' ), 'slug' => (string) $item['staging_ref'] )
-				: array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' );
+			$absent = self::absent_identity( $item );
 			$bytes += AB_MCP_Sync_Backup::size_of( is_array( $current ) ? $current : array( 'absent' => true, 'identity' => $absent ) );
 		}
 		$depends_of = array();
@@ -951,47 +885,16 @@ final class AB_MCP_Sync_Push {
 			/* translators: %s: the action of the entry, as the report names it (keep, …). */
 			return $lock( sprintf( __( 'The report says %s for this entry: a takeover writes nothing for it.', 'alphabridge-mcp' ), $action ) );
 		}
-		if ( 'term' === $entry['kind'] ) {
-			if ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Term_Writer::TAXONOMIES, true ) ) {
-				/* translators: 1: the taxonomies the engine writes, separated by commas, 2: the taxonomy of the entry. */
-				return $lock( sprintf( __( 'The engine of the kind term writes the terms of %1$s; the taxonomy %2$s waits for its classification.', 'alphabridge-mcp' ), implode( ', ', AB_MCP_Sync_Term_Writer::TAXONOMIES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
-			}
-		} elseif ( 'attachment' === $entry['kind'] ) {
-			// An attachment with its files (branch 10): no choice «as draft».
-			if ( $as_draft ) {
-				return $lock( __( 'An attachment has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ) );
-			}
-		} elseif ( in_array( $entry['kind'], self::STRUCTURE, true ) ) {
-			// The structure of the site (branch 11): no choice «as draft»; a
-			// widget area or a core option is changed, never made by a run (the
-			// additional CSS is locked to be made in the report already).
-			if ( $as_draft ) {
-				/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */
-				return $lock( sprintf( __( 'A %s has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ), (string) $entry['kind'] ) );
-			}
-			if ( 'create' === $action && in_array( $entry['kind'], array( 'widget_area', 'option', 'custom_css' ), true ) ) {
-				$held = AB_MCP_Sync_Kinds::lock( (string) $entry['kind'], 'create' );
-				return $lock( sprintf( '%1$s (%2$s)', AB_MCP_Sync_Said::text( (string) $held['reason'] ), (string) $held['key'] ), (string) $held['stage'] );
-			}
-		} elseif ( 'post' !== $entry['kind'] ) {
+		// The kind as the registration of the writers has it (D4 of the seam):
+		// without a writer locked; with one, the lock its rule plan_lock() gives.
+		$w = AB_MCP_Sync_Engine::writer( (string) $entry['kind'], (string) ( $entry['subtype'] ?? '' ) );
+		if ( null === $w ) {
 			/* translators: %s: kind of the object, as the tools name it. */
 			return $lock( sprintf( __( 'The kind %s is not written by a run of this version.', 'alphabridge-mcp' ), (string) $entry['kind'] ), 'Z8d' );
-		} elseif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {
-			/* translators: 1: the post types the engine writes, separated by commas, 2: the post type of the entry. */
-			return $lock( sprintf( __( 'The engine of the kind post writes the types %1$s; the type %2$s waits for its field schema.', 'alphabridge-mcp' ), implode( ', ', AB_MCP_Sync_Post_Writer::TYPES ), (string) ( $entry['subtype'] ?? '' ) ), 'Z8d' );
-		} elseif ( in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::THEMED, true ) ) {
-			// A template, a template part or the global styles of a theme that
-			// is not the active one here (branch 9b): a staging site keeps the
-			// rows of every theme it tried, so the plan names them locked with
-			// the way (all leaves them out) rather than the check before the
-			// first write ending the run for them; the check and the boundary
-			// ask it again (AB_MCP_Sync_Post_Writer::theme_refusal()).
-			$theme = isset( $entry['staging']['identity']['theme'] ) && is_string( $entry['staging']['identity']['theme'] ) ? $entry['staging']['identity']['theme'] : '';
-			$other = AB_MCP_Sync_Post_Writer::inactive_theme_detail( (string) $entry['subtype'], (string) ( $entry['staging']['identity']['post_name'] ?? '' ), $theme );
-			if ( null !== $other ) {
-				$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );
-				return $lock( sprintf( '%1$s (post:theme_mismatch) %2$s', AB_MCP_Sync_Said::text( (string) $held['reason'] ), $other ), (string) $held['stage'] );
-			}
+		}
+		$held = self::has_rule( $w, 'plan_lock' ) ? $w::plan_lock( $entry, $as_draft, $lock ) : null;
+		if ( null !== $held ) {
+			return $held;
 		}
 		$staging = isset( $entry['staging']['ref'] ) ? (string) $entry['staging']['ref'] : '';
 		if ( '' === $staging ) {
@@ -1020,8 +923,143 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
+	 * Whether the writer of a kind has the rule $rule for the plan (D4 of
+	 * the seam), as AB_MCP_Sync_Engine::has_rule() for the engine.
+	 *
+	 * @param string $w    The writer (AB_MCP_Sync_Engine::writer()).
+	 * @param string $rule The name of the rule.
+	 * @return bool
+	 */
+	private static function has_rule( $w, $rule ) {
+		return method_exists( $w, $rule );
+	}
+
+	/**
+	 * What the rule $rule of the writer of an object gives for the plan (D4
+	 * and N-c of the seam): its answer to $args where the writer of the kind
+	 * and subtype of $of has the rule, else $none, what the core holds for a
+	 * kind without it. plan() asks the rules of the writers through it, each
+	 * in the place of the line that decided by the kind before.
+	 *
+	 * @param array  $of   An item of the plan, or a kind and a subtype.
+	 * @param string $rule The name of the rule.
+	 * @param array  $args The arguments of the rule.
+	 * @param mixed  $none What holds where the writer has no such rule.
+	 * @return mixed
+	 */
+	private static function writer_rule( array $of, $rule, array $args, $none = null ) {
+		$w = AB_MCP_Sync_Engine::writer( (string) $of['kind'], (string) $of['subtype'] );
+		return null !== $w && self::has_rule( $w, $rule ) ? $w::$rule( ...$args ) : $none;
+	}
+
+	/**
+	 * Put the entrance of the planning of the code, or take it away (null):
+	 * AB_MCP_Sync_Code_Plan as its file loads, nothing else.
+	 *
+	 * @param string|null $code The name of the class.
+	 */
+	public static function admit_code( $code ) {
+		self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;
+	}
+
+	/**
+	 * What the method $method of the entrance of the planning of the code
+	 * gives (D5 of the seam): its answer to $args where the entrance is here,
+	 * else $none, what the core holds without it; a Closure there is called
+	 * only then, so what it makes (a refusal) is made only without the
+	 * entrance. plan(), begin() and shown() ask the plan of the code through
+	 * it, each in the place of the line that called AB_MCP_Sync_Code_Plan by
+	 * its name before.
+	 *
+	 * @param string $method The name of the method.
+	 * @param array  $args   Its arguments.
+	 * @param mixed  $none   What holds where the entrance is not here, or a Closure that gives it.
+	 * @return mixed
+	 */
+	private static function code_plan( $method, array $args, $none = null ) {
+		if ( null === self::$code ) {
+			return $none instanceof Closure ? $none() : $none;
+		}
+		return call_user_func_array( array( self::$code, $method ), $args );
+	}
+
+	/**
+	 * What the rule $rule of the writers of the plan gives, a rule over all
+	 * its items (D4 of the seam): each writer of a kind and subtype of the
+	 * plan is asked once, through writer_rule(), where it has the rule; the
+	 * answers merged by their keys in the order of the plan (the first answer
+	 * for a key holds). None where no writer has the rule.
+	 *
+	 * @param array  $items The items of the plan by entry number.
+	 * @param string $rule  The name of the rule.
+	 * @param array  $args  The arguments of the rule.
+	 * @return array
+	 */
+	private static function writers_rule( array $items, $rule, array $args ) {
+		$out   = array();
+		$asked = array();
+		foreach ( $items as $item ) {
+			$w = AB_MCP_Sync_Engine::writer( (string) $item['kind'], (string) $item['subtype'] );
+			if ( null === $w || isset( $asked[ $w ] ) ) {
+				continue;
+			}
+			$asked[ $w ] = true;
+			$out        += self::writer_rule( $item, $rule, $args, array() );
+		}
+		return $out;
+	}
+
+	/**
+	 * The paths two attachments of the plan name (attachment:shared_path):
+	 * the answers of the rule shared_paths() of each writer registered for
+	 * the kind attachment, whole or by subtype (AB_MCP_Sync_Writers::all()),
+	 * merged by path (the first answer for a path holds); none where no
+	 * writer of the kind has the rule.
+	 *
+	 * @param array $items The items of the plan by entry number.
+	 * @return array<string,int[]> The entry numbers by path.
+	 */
+	private static function shared_paths( array $items ) {
+		$out = array();
+		foreach ( array_keys( AB_MCP_Sync_Writers::all()['attachment'] ?? array() ) as $subtype ) {
+			$out += self::writer_rule( array( 'kind' => 'attachment', 'subtype' => $subtype ), 'shared_paths', array( $items ), array() );
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether an item is an object of the space of posts, a parent an
+	 * attachment may hang under (N-c no. 2 of the seam): a post, a kind of
+	 * this plugin, or an object whose writer says so by its rule
+	 * made_in_posts() (an attachment).
+	 *
+	 * @param array $item The item of the plan.
+	 * @return bool
+	 */
+	private static function made_in_posts( array $item ) {
+		return 'post' === $item['kind'] || self::writer_rule( $item, 'made_in_posts', array( $item ), false );
+	}
+
+	/**
+	 * The identity of an object of the plan that is not here, for the
+	 * reserve of its backup (N-c no. 4 of the seam): what the rule
+	 * absent_identity() of its writer gives (a term: its taxonomy and slug),
+	 * else the form of a post, which the core holds for every kind without
+	 * the rule.
+	 *
+	 * @param array $item The item of the plan (kind, subtype, staging_ref).
+	 * @return array
+	 */
+	private static function absent_identity( array $item ) {
+		return self::writer_rule( $item, 'absent_identity', array( $item ), array( 'post_type' => (string) ( $item['subtype'] ?? '' ), 'post_name' => (string) $item['staging_ref'], 'theme' => '' ) );
+	}
+
+	/**
 	 * The items in the order of their references: a target created in the
-	 * same run comes first (depends_on); a cycle is locked.
+	 * same run comes first (depends_on); a cycle is locked. The rank where
+	 * nothing else orders: what the rule first_by_depth() of the writer of
+	 * an item gives (a term, by its depth; N-c no. 5 of the seam), else the
+	 * rank of the core.
 	 *
 	 * @param array $items Items by entry number.
 	 * @return array{items:array,locked:array}|WP_Error
@@ -1116,7 +1154,7 @@ final class AB_MCP_Sync_Push {
 		// others as planned (B2, menu:position_exchange), and none of them is
 		// written halfway.
 		foreach ( AB_MCP_Sync_Decision::cycles( $exchange ) as $members ) {
-			$lock = AB_MCP_Sync_Kinds::lock( 'menu', 'position_exchange' );
+			$lock = self::writer_rule( $items[ reset( $members ) ], 'exchange_lock', array(), AB_MCP_Sync_Kinds::lock( 'menu', 'position_exchange' ) );
 			foreach ( $members as $n ) {
 				if ( isset( $items[ $n ] ) ) {
 					$locked[] = array(
@@ -1194,8 +1232,8 @@ final class AB_MCP_Sync_Push {
 			$left,
 			static function ( $a, $b ) use ( $items ) {
 				$rank = static function ( $n ) use ( $items ) {
-					if ( 'term' === $items[ $n ]['kind'] ) {
-						return array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n );
+					if ( null !== ( $first = self::writer_rule( $items[ $n ], 'first_by_depth', array( $items[ $n ], $n ) ) ) ) {
+						return $first;
 					}
 					// The objects named by a name rather than an id (branch 9b): the
 					// template parts a template names by theme and slug, then the
@@ -1248,70 +1286,16 @@ final class AB_MCP_Sync_Push {
 	}
 
 	/**
-	 * The depth of each term the run writes in the tree it leaves: every
-	 * term here with its parent here, the terms of the run with the parent
-	 * they are given (the parent of the staging site, by the run when it
-	 * writes that parent too, else by its pair); a new term stands as a node
-	 * of its own until its step made it. 0 for a root; a parent without a
-	 * pair, or a loop (which the check locks, term:parent), ends the walk.
+	 * What the rule depths() of the writers of the plan gives, for the order
+	 * (N-c no. 6 to 8 of the seam): the depth of each term the run writes in
+	 * the tree it leaves; none where no writer of the plan has the rule.
 	 *
 	 * @param array    $items  The items of the plan (kind, op, staging_ref, live_ref, subtype, parent_ref).
 	 * @param callable $mapped Staging id of a term => its id here, or null.
 	 * @return array<int,int> n => depth, for the terms.
 	 */
 	private static function term_depths( array $items, callable $mapped ) {
-		$node_of = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'term' === $item['kind'] ) {
-				$node_of[ (string) $item['staging_ref'] ] = 'update' === $item['op'] ? 'l:' . (int) $item['live_ref'] : 'n:' . (string) $item['staging_ref'];
-			}
-		}
-		// The parent each term of the run is given: a node, null for none (a
-		// root), false where it has no counterpart here.
-		$given = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'term' !== $item['kind'] ) {
-				continue;
-			}
-			$node = $node_of[ (string) $item['staging_ref'] ];
-			if ( ! isset( $item['parent_ref'] ) ) {
-				$given[ $node ] = null;
-			} elseif ( isset( $node_of[ (string) $item['parent_ref'] ] ) ) {
-				$given[ $node ] = $node_of[ (string) $item['parent_ref'] ];
-			} else {
-				$here           = $mapped( (string) $item['parent_ref'] );
-				$given[ $node ] = null === $here ? false : 'l:' . (int) $here;
-			}
-		}
-		$out = array();
-		foreach ( $items as $n => $item ) {
-			if ( 'term' !== $item['kind'] ) {
-				continue;
-			}
-			$taxonomy = isset( $item['subtype'] ) ? (string) $item['subtype'] : '';
-			$at       = $node_of[ (string) $item['staging_ref'] ];
-			$seen     = array( $at => true );
-			$depth    = 0;
-			while ( $depth <= self::MAX_OBJECTS ) {
-				if ( array_key_exists( $at, $given ) ) {
-					$up = $given[ $at ];
-				} elseif ( 0 === strpos( $at, 'l:' ) ) {
-					// A term the run does not write: its parent here.
-					$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( $at, 2 ), $taxonomy );
-					$up     = $parent > 0 ? 'l:' . $parent : null;
-				} else {
-					$up = null;
-				}
-				if ( ! is_string( $up ) || isset( $seen[ $up ] ) ) {
-					break;
-				}
-				$seen[ $up ] = true;
-				$at          = $up;
-				++$depth;
-			}
-			$out[ $n ] = $depth;
-		}
-		return $out;
+		return self::writers_rule( $items, 'depths', array( $items, $mapped ) );
 	}
 
 	/**
@@ -1384,8 +1368,9 @@ final class AB_MCP_Sync_Push {
 			// A run of the code keeps what it reads until its swaps (the
 			// packages of the environment of its report, its packages of code;
 			// Z8b branch 5, V20 of its pre-check): each binding checked, and a
-			// run that cannot keep them is not left open.
-			$bound = AB_MCP_Sync_Code_Plan::bind( $plan, (int) $run['run_id'] );
+			// run that cannot keep them is not left open; without the entrance
+			// it is refused as plan() refuses it then (D5).
+			$bound = self::code_plan( 'bind', array( $plan, (int) $run['run_id'] ), static function () { return self::packages_refusal(); } );
 			if ( is_wp_error( $bound ) ) {
 				$closed = AB_MCP_Sync_Engine::abort( $run );
 				/* translators: 1: why (one or more whole sentences), 2: run number. */
@@ -1447,7 +1432,7 @@ final class AB_MCP_Sync_Push {
 				'phase'   => $step['phase'],
 				'depends' => $step['depends'],
 			);
-			$unit = AB_MCP_Sync_Code_Plan::step( $plan, $seq );
+			$unit = self::code_plan( 'step', array( $plan, $seq ) );
 			if ( null !== $unit ) {
 				$shown['unit'] = $unit;
 			}
@@ -1488,7 +1473,7 @@ final class AB_MCP_Sync_Push {
 			// A run of the code (Z8b branch 5, Z42): per unit the operation,
 			// the versions, the sentence on its routines and the paths that
 			// lie in the backup afterwards.
-			$out['units']  = AB_MCP_Sync_Code_Plan::shown( $plan );
+			$out['units']  = self::code_plan( 'shown', array( $plan ), array() );
 			$out['effect'] = __( 'Makes a run of the code: each plugin or theme named is staged in the protected store first (nothing of this site changes), then swapped in one call under the lock of AlphaBridge, with a probe of the site before and the old version kept whole in the backup. A plugin or theme new on this site is refused at its swap in this version (code:create_not_built). The run holds no step of the contents: make a new report (wp_site_diff) after it. Nothing is written by this call; the confirmed call makes the run.', 'alphabridge-mcp' );
 		}
 		if ( isset( $plan['existing_run'] ) ) {

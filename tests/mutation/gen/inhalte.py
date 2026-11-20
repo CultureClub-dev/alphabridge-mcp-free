@@ -208,15 +208,13 @@ e('engine-revert-guard-terms', 'revert_boundary(): the lock of the way back cove
   "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );",
   "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 e('engine-post-by-kind', 'run_post(): the caches of a written term by the writer of its kind', EN,
-  "\t\t\t\t$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", "\t\t\t\t$ids[] = array( 'post', self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", 'it', E_IT1)
+  "\t\t\t\t$ids[] = array( null === $w ? 'post' : $kind, self::live_of( $w, $one['result']['live_ref'] ), null === $w ? array() : (array) $one['parts'] );", "\t\t\t\t$ids[] = array( 'post', self::live_of( $w, $one['result']['live_ref'] ), array() );", 'it', E_IT1)
 e('engine-verify-by-kind', 'written() of run_verify(): a written term against its target by the writer of its kind', EN,
-  "\t\t$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );", "\t\t$w       = self::writer( 'post' );", 'it', E_IT1)
+  "\t\t$w       = self::writer_of( (array) $one['parts'] );", "\t\t$w       = self::writer_of( array() );", 'it', E_IT1)
 e('engine-pair-by-kind', 'pair_for_new(): the base of a new term by the writer of its kind', EN,
-  "\t\t$w    = self::writer( $item['kind'] );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", "\t\t$w    = self::writer( 'post' );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", 'it', E_IT1)
+  "\t\t$w    = self::writer( $item['kind'], $item['subtype'] );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", "\t\t$w    = self::writer( 'post', 'post' );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", 'it', E_IT1)
 
 # --------------------------------------------- the plan
-e('plan-term-taxonomy', 'verdict(): a term of a taxonomy the term engine does not write is locked with Z8d', PU,
-  "\t\t\tif ( ! in_array( (string) ( $entry['subtype'] ?? '' ), AB_MCP_Sync_Term_Writer::TAXONOMIES, true ) ) {", "\t\t\tif ( false ) {", 'unit', 'testWhichEntryOfAReportIsAStepLockedOrNothing')
 e('plan-item-kind', 'verdict(): the item carries the kind of the entry', PU,
   "\t\t\t\t'kind'        => (string) $entry['kind'],", "\t\t\t\t'kind'        => 'post',", 'unit', 'testWhichEntryOfAReportIsAStepLockedOrNothing')
 e('plan-order-space', 'order(): a new term in the space of terms, a new post in the space of posts', PU,
@@ -334,8 +332,6 @@ e('term-loop-planned', 'loop(): a term the run writes stands with the parent the
   "\t\t\treturn isset( $planned[ (int) $id ] ) ? (int) $planned[ (int) $id ] : wp_get_term_taxonomy_parent_id( (int) $id, $tax );", "\t\t\treturn wp_get_term_taxonomy_parent_id( (int) $id, $tax );", 'term', T_B4)
 C_B4R2 = 'testAChainOfCategoriesTurnedOverGoesOverAndBack'
 U_DEPTH = 'testTheTermsOfARunAreWrittenFromTheRootOfTheTreeItLeavesDown'
-e('push-order-depth', 'order(): the terms by their depth in the tree the run leaves, ancestors first (Codex rounds 1 and 2, B4)', PU,
-  "\t\t\t\t\t\treturn array( 0, isset( $items[ $n ]['depth'] ) ? (int) $items[ $n ]['depth'] : 0, (int) $n );", "\t\t\t\t\t\treturn array( 0, 0, (int) $n );", 'unit', U_DEPTH)
 e('push-depth-set', 'plan(): the depth of each term goes with its item into the order', PU,
   "\t\t\t$items[ $n ]['depth'] = $depth;\n", '', 'it', C_B4R2)
 e('push-depth-given', 'term_depths(): a term of the run stands under the parent the run gives it when the run writes that parent too', PU,
@@ -344,8 +340,6 @@ e('push-depth-mapped', 'term_depths(): else under its parent by the pair', PU,
   "\t\t\t\t$given[ $node ] = null === $here ? false : 'l:' . (int) $here;", "\t\t\t\t$given[ $node ] = false;", 'unit', U_DEPTH)
 e('push-depth-live-parent', 'term_depths(): a term the run does not write stands under its parent here', PU,
   "\t\t\t\t\t$parent = (int) wp_get_term_taxonomy_parent_id( (int) substr( $at, 2 ), $taxonomy );", "\t\t\t\t\t$parent = 0;", 'unit', U_DEPTH)
-e('push-parent-ref', 'plan(): the parent of a term from its references, for the order', PU,
-  "\t\t\t\t\t\t$item['parent_ref'] = (string) (int) $ref['id'];\n", '', 'it', C_B4)
 e('revert-last-first', 'plan(): the way back goes from the last step to the first (Codex round 1, B4)', RV,
   "\t\t$items = array_reverse( $items );\n", '', 'it', C_B4)
 e('post-slug-trashed-draft', 'slug_refusal(): a post in the trash with the slug is renamed for a draft as well, so a draft asks it too (Codex round 1, C)', PW,

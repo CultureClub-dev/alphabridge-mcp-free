@@ -655,8 +655,11 @@ final class AB_MCP_Sync_Code_Ops {
 	}
 }
 
-// The one entrance of the way back of the code, in the file of the entrance
-// of the swap (N12): where this file is not loaded, the core plans and runs
-// no way back of the code (AB_MCP_Sync_Revert::code()).
+// The one entrance of the way back of the code and the one of its forward
+// way, in the file of the entrance of the swap (N12; D5 of the seam): where
+// this file is not loaded, the core plans and runs no way back of the code
+// (AB_MCP_Sync_Revert::code()) and runs no step of it
+// (AB_MCP_Sync_Engine::code_item()).
 require_once __DIR__ . '/class-sync-revert.php';
 AB_MCP_Sync_Revert::admit( array( 'AB_MCP_Sync_Code_Ops', 'back' ) );
+AB_MCP_Sync_Engine::admit_code( 'AB_MCP_Sync_Code_Ops' );

@@ -93,19 +93,12 @@
 defined( 'ABSPATH' ) || exit;
 
 require_once __DIR__ . '/class-sync-run.php';
-require_once __DIR__ . '/class-sync-code-ops.php';
 require_once __DIR__ . '/class-sync-backup.php';
 require_once __DIR__ . '/class-sync-said.php';
 require_once __DIR__ . '/class-sync-guard.php';
 require_once __DIR__ . '/class-sync-resources.php';
-require_once __DIR__ . '/class-sync-post-writer.php';
-require_once __DIR__ . '/class-sync-term-writer.php';
-require_once __DIR__ . '/class-sync-attachment-writer.php';
-require_once __DIR__ . '/class-sync-menu-writer.php';
-require_once __DIR__ . '/class-sync-widget-area-writer.php';
-require_once __DIR__ . '/class-sync-css-writer.php';
 require_once __DIR__ . '/class-sync-write.php';
-require_once __DIR__ . '/class-sync-option-writer.php';
+require_once __DIR__ . '/class-sync-writers.php';
 require_once __DIR__ . '/class-sync-import.php';
 require_once __DIR__ . '/class-sync-anchor.php';
 require_once __DIR__ . '/class-sync-urls.php';
@@ -148,11 +141,26 @@ final class AB_MCP_Sync_Engine {
 	public static $probe = null;
 
 	/**
+	 * The one entrance of the forward way of the code (Z8b branch 5; D5 of
+	 * the seam): the name of the class AB_MCP_Sync_Code_Ops puts here as its
+	 * file loads (admit_code()), in the file of the entrance of the swap.
+	 * The core never calls the code by a name of its class; where nothing is
+	 * here, a step of a run of the code fails and its check names it
+	 * (code_item()).
+	 *
+	 * @var string|null
+	 */
+	private static $code = null;
+
+	/**
 	 * The write side of each kind a run writes (contract A; branch 9): the
 	 * class whose static methods prepare, check, write, read back and put
 	 * back one object of the kind, with the same names for every kind
 	 * (target_of(), precheck(), current(), journal_parts(), write_row(),
-	 * write_part(), restore_part(), …). A kind without one is written by no
+	 * write_part(), restore_part(), …). This plugin registers each kind whole
+	 * at the end of this file (AB_MCP_Sync_Writers); the core asks the
+	 * registration (writer(), writer_of(), AB_MCP_Sync_Writers::all()), not
+	 * this list. A kind or subtype without a writer there is written by no
 	 * step (writer() null: the step fails before anything is written). Since
 	 * branch 11 the kinds of the structure of a site: a menu (its term and its
 	 * positions) and its items, a widget area with its instances, the
@@ -171,25 +179,46 @@ final class AB_MCP_Sync_Engine {
 	);
 
 	/**
-	 * The write side of a kind, or null where no step writes the kind.
+	 * The write side of a kind, or null where no step writes the kind: the
+	 * class registered for the subtype, else for the whole kind
+	 * (AB_MCP_Sync_Writers::of(), the seam). The subtype has no default
+	 * (the seam, stage 2): every call names it, and a call without it fails
+	 * loudly; '' (or null) is a line without a subtype, which answers from
+	 * the whole kind (the contract of AB_MCP_Sync_Writers).
 	 *
-	 * @param string $kind Kind of the plan (post, term).
+	 * @param string      $kind    Kind of the plan (post, term).
+	 * @param string|null $subtype Subtype (a post type, a taxonomy, the name of an option; AB_MCP_Sync_Writers::WHOLE, a key of all(), for the whole kind), '' or null for none.
 	 * @return string|null The class name.
 	 */
-	public static function writer( $kind ) {
-		$kind = (string) $kind;
-		return isset( self::WRITERS[ $kind ] ) ? self::WRITERS[ $kind ] : null;
+	public static function writer( $kind, $subtype ) {
+		return AB_MCP_Sync_Writers::of( $kind, (string) $subtype );
 	}
 
 	/**
 	 * The write side of the object of a journal (its kind), the post's for a
-	 * journal of branch 8 that names no other.
+	 * journal of branch 8 that names no other, by its subtype (subtype_in()):
+	 * the class registered for the subtype, else for the whole kind. Also
+	 * for the way back (AB_MCP_Sync_Revert::live_ref_of(), row_now()).
 	 *
 	 * @param array $journal Journal.
 	 * @return string|null The class name.
 	 */
-	private static function writer_of( array $journal ) {
-		return self::writer( isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post' );
+	public static function writer_of( array $journal ) {
+		$kind = isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post';
+		return self::writer( $kind, self::subtype_in( $journal ) );
+	}
+
+	/**
+	 * The subtype of the object of a journal as the core reads it (D3 of the
+	 * seam, as the writers' subtype_of()): its post type, else its taxonomy,
+	 * else its name; '' for none and for one that is no string.
+	 *
+	 * @param array $journal Journal.
+	 * @return string
+	 */
+	private static function subtype_in( array $journal ) {
+		$subtype = $journal['object']['identity']['post_type'] ?? $journal['object']['identity']['taxonomy'] ?? $journal['object']['identity']['name'] ?? '';
+		return is_string( $subtype ) ? $subtype : '';
 	}
 
 	/**
@@ -783,7 +812,7 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|null A finding (seq, object, message), or null.
 	 */
 	private static function check_item( array $item, array $lines, array $ctx ) {
-		$w = self::writer( $item['kind'] );
+		$w = self::writer( $item['kind'], $item['subtype'] ?? null );
 		if ( null === $w ) {
 			/* translators: %s: kind of the object, as the tools name it (post, term, …). */
 			return self::finding( $item, sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), $item['kind'] ) );
@@ -837,7 +866,8 @@ final class AB_MCP_Sync_Engine {
 
 	/**
 	 * The parents a run gives the terms of this site it writes: term here =>
-	 * the parent here its target names (AB_MCP_Sync_Term_Writer::target_of()),
+	 * the parent here its target names, by the rule planned_parent() of the
+	 * writer of its kind (AB_MCP_Sync_Term_Writer; N-c no. 1 of the seam),
 	 * for the check before the first write, which asks a loop of parents of
 	 * the state the run leaves (branch 9, Codex round 1, B4: two categories
 	 * that swap their places were locked against the state here). A term
@@ -851,22 +881,29 @@ final class AB_MCP_Sync_Engine {
 	private static function planned_parents( array $items, array $lines, array $ctx ) {
 		$out = array();
 		foreach ( $items as $one ) {
-			if ( 'term' !== ( isset( $one['kind'] ) ? (string) $one['kind'] : '' ) || 'update' !== ( isset( $one['op'] ) ? (string) $one['op'] : '' ) ) {
+			$w = self::writer( isset( $one['kind'] ) ? (string) $one['kind'] : '', $one['subtype'] ?? null );
+			if ( ! self::has_rule( $w, 'planned_parent' ) || 'update' !== ( isset( $one['op'] ) ? (string) $one['op'] : '' ) ) {
 				continue;
 			}
-			$line = self::line_of( $one, $lines );
-			if ( is_wp_error( $line ) ) {
-				continue;
+			$parent = $w::planned_parent( $one, self::line_of( $one, $lines ), $ctx );
+			if ( null !== $parent ) {
+				$out[ (int) $one['live_ref'] ] = $parent;
 			}
-			$prepared = AB_MCP_Sync_Term_Writer::target_of( $line, $one, $ctx );
-			// A parent the run makes first has no id here yet: the term counts
-			// as it is here (fail closed; the boundary asks it again).
-			if ( is_wp_error( $prepared ) || ! empty( $prepared['pending'] ) ) {
-				continue;
-			}
-			$out[ (int) $one['live_ref'] ] = (int) $prepared['args']['parent'];
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether the writer of a kind has a rule of the plan (N-c of the seam):
+	 * the core asks the rule where its writer has it, else its other branch
+	 * holds.
+	 *
+	 * @param string|null $w    writer().
+	 * @param string      $rule Name of the rule (planned_parent).
+	 * @return bool
+	 */
+	private static function has_rule( $w, $rule ) {
+		return null !== $w && method_exists( $w, $rule );
 	}
 
 	/**
@@ -1006,6 +1043,52 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * Put the entrance of the forward way of the code, or take it away
+	 * (null): AB_MCP_Sync_Code_Ops as its file loads, nothing else.
+	 *
+	 * @param string|null $code The name of the class.
+	 */
+	public static function admit_code( $code ) {
+		self::$code = is_string( $code ) && class_exists( $code ) ? $code : null;
+	}
+
+	/**
+	 * Whether a step is one of the code, and what the entrance of the
+	 * forward way answers for it (D5 of the seam), in one line as
+	 * AB_MCP_Sync_Code_Ops::item() decides it: with the entrance its
+	 * answer; without it null where the plan of the run holds no key code
+	 * (a run of the contents: the core goes on as before), else the text
+	 * the core has for a kind no step writes, as boundary() fails a step
+	 * with it: the step fails, nothing is staged or swapped, and the check
+	 * of the run names it.
+	 *
+	 * @param array $plan The plan of the run.
+	 * @param int   $seq  The step.
+	 * @return array|null|WP_Error|string
+	 */
+	private static function code_item( array $plan, $seq ) {
+		if ( null !== self::$code ) {
+			return call_user_func( array( self::$code, 'item' ), $plan, $seq );
+		}
+		/* translators: %s: kind of the object, as the tools name it (post, term, …). */
+		return array_key_exists( 'code', $plan ) ? sprintf( __( 'No step of this version writes the kind %s.', 'alphabridge-mcp' ), 'code' ) : null;
+	}
+
+	/**
+	 * run_verify(): counts() of the entrance, else each write step (D5 of the seam).
+	 *
+	 * @param array $run The run.
+	 * @param array $one A step of it.
+	 * @return bool
+	 */
+	private static function code_counts( array $run, array $one ) {
+		if ( null !== self::$code ) {
+			return call_user_func( array( self::$code, 'counts' ), $run, $one );
+		}
+		return 'write' === $one['op'];
+	}
+
+	/**
 	 * Phase 5: one write boundary (decision 17), under the lock of the call
 	 * (next()); the takeover lock of the object given back in every way.
 	 *
@@ -1016,12 +1099,15 @@ final class AB_MCP_Sync_Engine {
 	 */
 	private static function run_write( array $run, array $step, array $ctx ) {
 		$plan = is_array( $run['plan'] ) ? $run['plan'] : array();
-		// A step of a run of the code (Z8b branch 5): its one entrance
-		// (AB_MCP_Sync_Code_Ops::run(), Z24), by the unit the plan names for
-		// it; a plan of the code that names none refuses (never an object).
-		$unit = AB_MCP_Sync_Code_Ops::item( $plan, $step['seq'] );
+		// A step of a run of the code (Z8b branch 5): its one entrance (run()
+		// of the class in $code, Z24; D5), by the unit the plan names for it;
+		// without the entrance it fails, without a unit it refuses (never an object).
+		$unit = self::code_item( $plan, $step['seq'] );
+		if ( is_string( $unit ) ) {
+			return self::fail_step( (int) $run['run_id'], (int) $step['seq'], 'planned', $unit );
+		}
 		if ( null !== $unit ) {
-			return is_wp_error( $unit ) ? $unit : AB_MCP_Sync_Code_Ops::run( $run, $step, $unit );
+			return is_wp_error( $unit ) ? $unit : call_user_func( array( self::$code, 'run' ), $run, $step, $unit );
 		}
 		$item = null;
 		foreach ( isset( $plan['objects'] ) && is_array( $plan['objects'] ) ? $plan['objects'] : array() as $one ) {
@@ -1061,7 +1147,7 @@ final class AB_MCP_Sync_Engine {
 				return self::fail_step( $run_id, $seq, 'planned', $item->get_error_message() );
 			}
 		}
-		$w       = self::writer( $item['kind'] );
+		$w       = self::writer( $item['kind'], $item['subtype'] );
 		$live_id = 'update' === $item['op'] ? self::live_of( $w, $item['live_ref'] ) : null;
 		$before  = null;
 		if ( null === $w ) {
@@ -2267,7 +2353,8 @@ final class AB_MCP_Sync_Engine {
 	/**
 	 * The orders of the parts of these kinds, by kind: what the tokens of a
 	 * plan and of a way back cover with the rest of the order of a run
-	 * (Codex round 1 of branch 11, C2).
+	 * (Codex round 1 of branch 11, C2); the order of the writer of the whole
+	 * kind, the default one for a kind registered by subtype.
 	 *
 	 * @param string[] $kinds Kinds.
 	 * @return array<string,string[]>
@@ -2275,7 +2362,7 @@ final class AB_MCP_Sync_Engine {
 	public static function part_orders( array $kinds ) {
 		$out = array();
 		foreach ( array_unique( array_map( 'strval', $kinds ) ) as $kind ) {
-			$out[ $kind ] = self::part_order( self::writer( $kind ) );
+			$out[ $kind ] = self::part_order( AB_MCP_Sync_Writers::whole( $kind ) );
 		}
 		ksort( $out, SORT_STRING );
 		return $out;
@@ -2551,12 +2638,16 @@ final class AB_MCP_Sync_Engine {
 			return $steps;
 		}
 		// The written objects with their kind: a post by its id, a term by
-		// term:<id> (two id spaces; branch 9).
+		// term:<id> (two id spaces; branch 9), and their journal, by whose
+		// writer (writer_of(), with its subtype) they are emptied. One whose
+		// writer is gone takes the key post with the journal of a post, so key
+		// and writer match: the writer of post empties it (C1 of the seam).
 		$ids = array();
 		foreach ( $steps as $one ) {
 			if ( 'write' === $one['op'] && 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 				$kind  = is_array( $one['parts'] ) && isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post';
-				$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );
+				$w     = self::writer_of( (array) $one['parts'] );
+				$ids[] = array( null === $w ? 'post' : $kind, self::live_of( $w, $one['result']['live_ref'] ), null === $w ? array() : (array) $one['parts'] );
 			}
 		}
 		// In parts, within the work of the call, the cursor kept in the result
@@ -2580,11 +2671,22 @@ final class AB_MCP_Sync_Engine {
 				/* translators: 1: written objects whose caches were emptied so far, 2: all written objects. */
 				return array( 'next' => sprintf( _n( 'The caches of %1$d of %2$d written object were emptied within the work of this call.', 'The caches of %1$d of %2$d written objects were emptied within the work of this call.', $count, 'alphabridge-mcp' ), $i, $count ) . ' Call action=next again to go on with them.' );
 			}
-			list( $kind, $id ) = $ids[ $i ];
-			$w                 = self::writer( $kind );
+			list( $kind, $id, $journal ) = $ids[ $i ];
+			$w                           = self::writer_of( $journal );
 			$result['objects'][ 'post' === $kind ? (string) $id : $kind . ':' . $id ] = $w::post_write( $id );
 		}
-		foreach ( array_unique( array_merge( AB_MCP_Sync_Post_Writer::TAXONOMIES, AB_MCP_Sync_Term_Writer::TAXONOMIES ) ) as $taxonomy ) {
+		// The taxonomies of the writers registered, a kind whole or by
+		// subtype (AB_MCP_Sync_Writers::all(); E4 of the seam).
+		$taxonomies = array();
+		foreach ( AB_MCP_Sync_Writers::all() as $kind => $classes ) {
+			foreach ( array_keys( $classes ) as $subtype ) {
+				$w = self::writer( $kind, $subtype );
+				if ( defined( $w . '::TAXONOMIES' ) ) {
+					$taxonomies = array_merge( $taxonomies, $w::TAXONOMIES );
+				}
+			}
+		}
+		foreach ( array_unique( $taxonomies ) as $taxonomy ) {
 			clean_term_cache( array(), $taxonomy, true );
 		}
 		unset( $result['cursor'] );
@@ -2630,7 +2732,7 @@ final class AB_MCP_Sync_Engine {
 		$writes = array();
 		$last   = array();
 		foreach ( $steps as $one ) {
-			if ( AB_MCP_Sync_Code_Ops::counts( $run, $one ) ) {
+			if ( self::code_counts( $run, $one ) ) {
 				$writes[] = $one;
 				if ( 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 					// The last step that wrote an object holds its target: the
@@ -2929,13 +3031,13 @@ final class AB_MCP_Sync_Engine {
 			/* translators: %d: step number. */
 			return array( 0, array( 'seq' => $one['seq'], 'message' => sprintf( __( 'The plan of this run does not read back, so step %d is judged neither as a step of the code nor as an object, and nothing of it counts as taken over. Check the site as it is in wp-admin; where the run is still open, abort it (wp_site_push action=abort).', 'alphabridge-mcp' ), $one['seq'] ) ) );
 		}
-		$unit = AB_MCP_Sync_Code_Ops::item( $run['plan'], $one['seq'] );
+		$unit = self::code_item( $run['plan'], $one['seq'] );
 		if ( null !== $unit ) {
-			$found = is_wp_error( $unit ) ? $unit->get_error_message() : AB_MCP_Sync_Code_Ops::finding( $one, $unit, $until );
+			$found = is_wp_error( $unit ) ? $unit->get_error_message() : ( is_string( $unit ) ? $unit : call_user_func( array( self::$code, 'finding' ), $one, $unit, $until ) );
 			return false === $found ? null : array( 0, null === $found ? null : array( 'seq' => $one['seq'], 'message' => $found ) );
 		}
 		$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
-		$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
+		$w       = self::writer_of( (array) $one['parts'] );
 		$live_id = isset( $one['result']['live_ref'] ) ? self::live_of( $w, $one['result']['live_ref'] ) : 0;
 		$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];
 		$hash    = self::is_ref( $live_id ) && null !== $w && ! $later ? $w::live_hash( $live_id, $ctx['source'] ) : null;
@@ -3304,7 +3406,7 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|WP_Error
 	 */
 	private static function pair_for_new( array $run, array $item, $live_id, array $prepared, $state ) {
-		$w    = self::writer( $item['kind'] );
+		$w    = self::writer( $item['kind'], $item['subtype'] );
 		$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );
 		$made = AB_MCP_Sync_Pairs::create(
 			array(
@@ -4002,3 +4104,22 @@ final class AB_MCP_Sync_Engine {
 		return null !== self::$clock ? (float) call_user_func( self::$clock ) : microtime( true );
 	}
 }
+
+// The write side of this plugin, loaded here with its registration (D5 of
+// the seam): the files of the writers, then each kind of WRITERS whole, with
+// its class, as the file loads; a refusal is not answered here,
+// SyncWritersTest holds all. Then the files of the code, whose last lines
+// admit the entrances of its forward way and of its planning (as
+// AB_MCP_Sync_Code_Ops admits the one of its way back); none asks the registration.
+require_once __DIR__ . '/class-sync-post-writer.php';
+require_once __DIR__ . '/class-sync-term-writer.php';
+require_once __DIR__ . '/class-sync-attachment-writer.php';
+require_once __DIR__ . '/class-sync-menu-writer.php';
+require_once __DIR__ . '/class-sync-widget-area-writer.php';
+require_once __DIR__ . '/class-sync-css-writer.php';
+require_once __DIR__ . '/class-sync-option-writer.php';
+foreach ( AB_MCP_Sync_Engine::WRITERS as $ab_mcp_kind => $ab_mcp_writer ) {
+	AB_MCP_Sync_Writers::register( $ab_mcp_kind, AB_MCP_Sync_Writers::WHOLE, $ab_mcp_writer );
+}
+require_once __DIR__ . '/class-sync-code-ops.php';
+require_once __DIR__ . '/class-sync-code-plan.php';

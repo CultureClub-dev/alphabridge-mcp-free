@@ -70,6 +70,88 @@ final class AB_MCP_Sync_Menu_Writer {
 	/* ------------------------------------------------------------ prepare */
 
 	/**
+	 * The lock of the plan for an entry of a menu, or null (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		// The structure of the site (branch 11): no choice «as draft»; a
+		// widget area or a core option is changed, never made by a run (the
+		// additional CSS is locked to be made in the report already).
+		if ( $as_draft ) {
+			/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */
+			return $lock( sprintf( __( 'A %s has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ), (string) $entry['kind'] ) );
+		}
+		return null;
+	}
+
+	/**
+	 * What the plan holds of a menu beside what every kind has (rule of the
+	 * seam, D4, asked by AB_MCP_Sync_Push::plan()): the positions it takes.
+	 *
+	 * @param array $item The item of the plan.
+	 * @param array $line Its line of the package of objects (form).
+	 * @return array The item.
+	 */
+	public static function plan_item( array $item, array $line ) {
+		// The positions it takes (its form on the staging site), for the
+		// order of the menus (branch 11, Codex round 1, B2).
+		$item['takes'] = self::line_positions( $line );
+		return $item;
+	}
+
+	/**
+	 * The menus of the run each menu of the plan comes after: those that
+	 * hold here a position it takes (rule of the seam, D4, asked by
+	 * AB_MCP_Sync_Push::plan() over all its items). Entry number => the
+	 * entry numbers of those menus; none where a menu takes no such position.
+	 *
+	 * @param array $items The items of the plan by entry number (kind, op, live_ref, takes).
+	 * @return array<int,int[]>
+	 */
+	public static function after_holders( array $items ) {
+		// The menus of the run (branch 11, Codex round 1, B2): the positions
+		// are fields of one row (decision 24), and a menu's form names them.
+		// A menu that takes a position another menu of the run holds here
+		// comes after that menu (an order, no dependency: order()), which
+		// gives the position up first; else its step would change that menu,
+		// whose step would find it changed since the plan.
+		$after = array();
+		$menus = array();
+		foreach ( $items as $n => $item ) {
+			if ( 'menu' === $item['kind'] && 'update' === $item['op'] ) {
+				$menus[ (int) $item['live_ref'] ] = $n;
+			}
+		}
+		$held = array() === $menus ? array() : self::held_positions();
+		foreach ( $items as $n => $item ) {
+			foreach ( 'menu' === $item['kind'] && isset( $item['takes'] ) ? $item['takes'] : array() as $location ) {
+				$holder = isset( $held[ $location ] ) ? $held[ $location ] : null;
+				if ( null !== $holder && isset( $menus[ $holder ] ) && $menus[ $holder ] !== $n ) {
+					$after[ $n ][] = $menus[ $holder ];
+				}
+			}
+		}
+		return $after;
+	}
+
+	/**
+	 * The lock of the menus of the run that take each other's position (an
+	 * exchange: a loop of the orders after_holders() gives), for each of
+	 * them (rule of the seam, D4, asked by AB_MCP_Sync_Push::order() for
+	 * each such loop): menu:position_exchange (B2).
+	 *
+	 * @return array|null The lock (AB_MCP_Sync_Kinds::lock()).
+	 */
+	public static function exchange_lock() {
+		return AB_MCP_Sync_Kinds::lock( 'menu', 'position_exchange' );
+	}
+
+	/**
 	 * The positions a line names for its menu (its form on the staging
 	 * site), names only, for the order of the plan (Codex round 1 of branch
 	 * 11, B2); none where the form names none.
@@ -920,6 +1002,26 @@ final class AB_MCP_Sync_Menu_Item_Writer {
 	const SELF = '~self';
 
 	/* ------------------------------------------------------------ prepare */
+
+	/**
+	 * The lock of the plan for an entry of an item of a menu, or null (rule
+	 * of the seam, D4, asked by AB_MCP_Sync_Push::verdict()).
+	 *
+	 * @param array    $entry    The entry of the report.
+	 * @param bool     $as_draft Whether it is taken over as draft.
+	 * @param callable $lock     The lock of verdict(): reason, stage.
+	 * @return array|null
+	 */
+	public static function plan_lock( array $entry, $as_draft, callable $lock ) {
+		// The structure of the site (branch 11): no choice «as draft»; a
+		// widget area or a core option is changed, never made by a run (the
+		// additional CSS is locked to be made in the report already).
+		if ( $as_draft ) {
+			/* translators: %s: kind of the object, as the tools name it (menu, widget_area, option, …). */
+			return $lock( sprintf( __( 'A %s has no status draft: leave it out of as_draft.', 'alphabridge-mcp' ), (string) $entry['kind'] ) );
+		}
+		return null;
+	}
 
 	/**
 	 * What a step writes for one item: the fields for wp_update_nav_menu_item(),

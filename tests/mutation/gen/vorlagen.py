@@ -93,9 +93,6 @@ e('theme-json-cache', 'post_write(): the global styles empty the caches of theme
 e('theme-call', 'precheck(): a template, a template part and the global styles ask their theme', PW,
   "\t\tif ( in_array( $type, self::THEMED, true ) ) {\n\t\t\t$refusal = self::theme_refusal(",
   "\t\tif ( false ) {\n\t\t\t$refusal = self::theme_refusal(", 'it', LOCKS)
-e('theme-plan', 'verdict(): the plan names a template of a theme that is not the active one locked (all leaves it out)', PU,
-  "\t\t\tif ( null !== $other ) {\n\t\t\t\t$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );",
-  "\t\t\tif ( false ) {\n\t\t\t\t$held = AB_MCP_Sync_Kinds::lock( 'post', 'theme_mismatch' );", 'it', LOCKS)
 e('theme-active', 'inactive_theme(): the theme of the object is the active one here (post:theme_mismatch)', PW,
   "\t\tif ( $active !== $theme || $stored !== $theme ) {",
   "\t\tif ( $stored !== $theme ) {", 'it', FILTERED)

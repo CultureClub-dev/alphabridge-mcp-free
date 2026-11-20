@@ -809,15 +809,6 @@ return array(
 		'expect'  => '/testWhichEntryOfAReportIsAStepLockedOrNothing/',
 	),
 	array(
-		'id'      => 'lauf/plan-type',
-		'clause'  => 'verdict(): a type the engine does not write is locked with Z8d',
-		'file'    => $pu,
-		'search'  => "\t\t} elseif ( ! in_array( (string) ( \$entry['subtype'] ?? '' ), AB_MCP_Sync_Post_Writer::TYPES, true ) ) {",
-		'replace' => "\t\t} elseif ( false ) {",
-		'run'     => $unit( 'SyncRunTest', 'testWhichEntryOfAReportIsAStepLockedOrNothing' ),
-		'expect'  => '/testWhichEntryOfAReportIsAStepLockedOrNothing/',
-	),
-	array(
 		'id'      => 'lauf/plan-as-draft',
 		'clause'  => 'verdict(): the choice as_draft goes with the item',
 		'file'    => $pu,
