@@ -37,6 +37,8 @@
  * As the setup, not as a promise about the plan: each way back and the
  * continuation run at least one step under next, so each reaches
  * revert_boundary(); a plan of no step would leave a case green without it.
+ * In (I2 b) the way back of the steps of the kind post runs more steps than
+ * it has of post and page, so a step of a type without a writer reaches it.
  *
  * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
@@ -381,9 +383,9 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		self::fail( 'The run closes.' );
 	}
 
-	/** The rows of these terms of A in term_taxonomy, by the keys given. */
+	/** The rows of these terms of A in term_taxonomy, by the keys given, and under terms their row in terms (name, slug). */
 	private static function terms_a( array $ids ): array {
-		return array_map( static fn( int $id ): array => AB_MCP_IT_Sites::rows( 'a', 'term_taxonomy', array( 'term_id' => (string) $id ) ), $ids );
+		return array_map( static fn( int $id ): array => AB_MCP_IT_Sites::rows( 'a', 'term_taxonomy', array( 'term_id' => (string) $id ) ) + array( 'terms' => AB_MCP_IT_Sites::rows( 'a', 'terms', array( 'term_id' => (string) $id ) ) ), $ids );
 	}
 
 	/** An answer that is no internal error (ab_mcp_internal), whatever else it is. */
@@ -534,9 +536,9 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 	 * confirmed: neither answer an internal error (their content read to go
 	 * on, not asserted, R2), then next as often as the confirmation names
 	 * steps planned (read), each answer an array; as the setup, at least one
-	 * of them runs a step, so revert_boundary() is reached (not the plan).
+	 * of them runs a step, so revert_boundary() is reached (not the plan): how many ran.
 	 */
-	private static function way_back( int $push, ?array $steps ): void {
+	private static function way_back( int $push, ?array $steps ): int {
 		$args = array(
 			'action' => 'plan',
 			'run_id' => $push,
@@ -552,6 +554,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 			$ran += (int) isset( $answer['step'] );
 		}
 		self::assertGreaterThan( 0, $ran, 'A step of the way back ran under next, so revert_boundary() was reached (the setup, not a promise about the plan).' );
+		return $ran;
 	}
 
 	/**
@@ -611,7 +614,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		foreach ( AB_MCP_Sync_Run::steps( $push ) as $step ) {
 			if ( 'write' === $step['op'] ) {
 				if ( 'post' === $step['parts']['object']['kind'] ) {
-					$of_post[] = (int) $step['seq'];
+					$of_post[ (int) $step['seq'] ] = $step['parts']['object']['identity']['post_type'];
 				} else {
 					$others[] = (int) $step['seq'];
 				}
@@ -619,7 +622,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		}
 		self::assertSame( array( 7, 7 ), array( count( $of_post ), count( $others ) ), 'Seven steps of the kind post, seven of the other kinds (the setup).' );
 		self::only_post();
-		self::way_back( $push, $of_post );
+		self::assertGreaterThan( count( array_intersect( $of_post, array( 'post', 'page' ) ) ), self::way_back( $push, array_keys( $of_post ) ), 'More steps of the kind post ran under next than of post and page (a step goes back once), so one of a type without a writer reached revert_boundary() (the setup, not a promise about the plan).' );
 		foreach ( $others as $seq ) {
 			self::way_back( $push, array( $seq ) );
 		}
