@@ -1,12 +1,21 @@
 <?php
 /**
- * The way back where the writer of a kind is not registered (I3 of the
- * seam, step T5; I2 follows in the next part): on two WordPress sites as
+ * The way back where the writer of a kind is not registered (I2 and I3 of
+ * the seam, step T5): on two WordPress sites as
  * tests/integration/SyncPlanWithoutWriterTest.php (B the staging site, A
- * this process), a way back begun with every writer, interrupted, then led
- * on with post alone registered, by its subtypes post and page (as U1
- * allows it), here only (after the move, a kind this plugin no longer has):
+ * this process), a way back planned or led on with post alone registered,
+ * by its subtypes post and page (as U1 allows it), here only (after the
+ * move, a kind this plugin no longer has):
  *
+ * - (I2) the journals a run with every writer left of fourteen objects,
+ *   each paired and changed on staging: a post, a page and one of each
+ *   other kind and type (I1). Taken back (a) as the whole run and (b) over
+ *   steps, the steps of the kind post chosen together, then each other
+ *   step alone: neither the plan nor the confirmation of a way back is an
+ *   internal error, each next answers without a WP_Error, post and page go
+ *   back, and nothing of another kind or type is written or put back. The
+ *   plans with their previews, the confirmations, the states and texts of
+ *   the steps and the ends of the runs are read to go on, not asserted.
  * - (I3) the way back of three categories, interrupted at its first step
  *   and led on with action=plan and its token: no answer from then on is an
  *   internal error, each next answers without a WP_Error, and nothing of a
@@ -22,7 +31,7 @@
  * object of a kind without a writer is written or put back. How the way
  * back plans, continues and ends the steps of such a kind is the state
  * of the first step, not what must hold after the move; that is open.
- * Once R2 is decided, the case (I3) is changed with it.
+ * Once R2 is decided, the cases (I2, I3) are changed with it.
  *
  * @package AlphaBridge_MCP
  */
@@ -57,6 +66,17 @@ require_once AB_MCP_DIR . 'includes/sync/class-sync-push.php';
 require_once AB_MCP_DIR . 'includes/tools/class-tools-staging.php';
 
 final class SyncWayBackWithoutWriterTest extends TestCase {
+
+	/**
+	 * The uploads of both sites in I2 (the option upload_path), a root of
+	 * this class alone, removed before each case: another class may leave
+	 * files in wp-content/uploads, and the image is to have one name on both
+	 * sites (as SyncMediaTest has its own).
+	 */
+	private const UPLOADS = 'wp-content/uploads-rueckweg-ohne-schreiber';
+
+	/** The date of every object of I2 on both sites, so that they are paired equal. */
+	private const DATE = '2026-10-01 10:00:00';
 
 	/** @var array|null The table of the writers as the engine registered it. */
 	private $kept = null;
@@ -106,10 +126,13 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		return (int) AB_MCP_IT_Sites::site( 'a' )['admin']['user_id'];
 	}
 
-	/** The protected store of both sites removed. */
+	/** The protected store of both sites and the uploads of this class on both removed. */
 	private static function wipe(): void {
 		$root = (string) AB_MCP_IT_Sites::state()['root'];
 		self::remove_tree( $root . '/ab-mcp-store', $root );
+		foreach ( array( 'a', 'b' ) as $site ) {
+			self::remove_tree( AB_MCP_IT_Sites::docroot( $site ) . '/' . self::UPLOADS, $root );
+		}
 	}
 
 	private static function remove_tree( string $path, string $root ): void {
@@ -331,7 +354,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
 		$run = self::gated( 'wp_site_push', $args + array( 'confirm_token' => $preview['confirm_token'] ) );
 		self::assertIsArray( $run, is_wp_error( $run ) ? $run->get_error_message() : '' );
-		for ( $i = 0; $i < 8; $i++ ) {
+		for ( $i = 0; $i < 24; $i++ ) {
 			$answer = self::gated( 'wp_site_push', array( 'action' => 'next', 'run_id' => (int) $run['run_id'] ) );
 			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_message() : '' );
 			if ( in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
@@ -351,7 +374,234 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		self::assertNotSame( 'ab_mcp_internal', is_wp_error( $answer ) ? $answer->get_error_code() : null, $what . ( is_wp_error( $answer ) ? ' ' . $answer->get_error_message() : '' ) );
 	}
 
+	/** The same steps on both sites, each in a process of its own, then the caches of this process forgotten: the results by site. */
+	private static function both( array $steps ): array {
+		$out = array(
+			'a' => AB_MCP_IT_Sync_Steps::run( 'a', $steps ),
+			'b' => AB_MCP_IT_Sync_Steps::run( 'b', $steps ),
+		);
+		wp_cache_flush();
+		wp_upload_dir( null, false, true );
+		return $out;
+	}
+
+	/** The block of a paragraph. */
+	private static function para( string $text ): string {
+		return '<!-- wp:paragraph --><p>' . $text . '</p><!-- /wp:paragraph -->';
+	}
+
+	/** The arguments of a published post of a type, of the date of I2. */
+	private static function post( string $type, string $name, string $content ): array {
+		return array(
+			'post_type'     => $type,
+			'post_status'   => 'publish',
+			'post_title'    => ucfirst( $name ),
+			'post_name'     => $name,
+			'post_content'  => $content,
+			'post_author'   => 1,
+			'post_date'     => self::DATE,
+			'post_date_gmt' => self::DATE,
+		);
+	}
+
+	/**
+	 * The setup of I2, with every writer: fourteen objects alike on both
+	 * sites and paired, then changed on B, each a takeover (update) in one
+	 * run led to its close: a post, a page, a category, a menu with a link,
+	 * an image, the tagline, a text widget in sidebar-1, the additional CSS,
+	 * a reusable block, a navigation, the part header, the template single
+	 * and the global styles of the theme (both sites run the same theme;
+	 * the three the site editor saves get the date of the others on both).
+	 *
+	 * @return array{0:int,1:array,2:array,3:array} The run, the ids of A by name, the rows of A before the run and as it wrote them.
+	 */
+	private static function mixed(): array {
+		self::pair();
+		self::both( array( array( 'op' => 'update_option', 'name' => 'upload_path', 'value' => self::UPLOADS ) ) );
+		$theme                = get_stylesheet();
+		$widget               = array(
+			2              => array( 'title' => 'Hinweis', 'text' => 'Alt', 'filter' => false, 'visual' => false ),
+			'_multiwidget' => 1,
+		);
+		$areas                = get_option( 'sidebars_widgets' );
+		$areas['sidebar-1'][] = 'text-2';
+		$link                 = array( 'menu-item-title' => 'Shop', 'menu-item-url' => 'https://example.test/shop/', 'menu-item-type' => 'custom', 'menu-item-status' => 'publish', 'menu-item-position' => 1 );
+		$nav                  = static fn( string $label ): string => '<!-- wp:navigation-link {"label":"' . $label . '","url":"https://example.test/","kind":"custom","isTopLevelLink":true} /-->';
+		$made                 = self::both(
+			array(
+				array( 'op' => 'insert_post', 'args' => self::post( 'post', 'notes', self::para( 'Alt' ) ), 'as' => 'post' ),
+				array( 'op' => 'insert_post', 'args' => self::post( 'page', 'about', self::para( 'Alt' ) ), 'as' => 'page' ),
+				array( 'op' => 'insert_post', 'args' => self::post( 'wp_block', 'hinweis', self::para( 'Alt' ) ), 'as' => 'wp_block' ),
+				array( 'op' => 'insert_post', 'args' => self::post( 'wp_navigation', 'hauptmenu', $nav( 'Start' ) ), 'as' => 'wp_navigation' ),
+				array( 'op' => 'insert_term', 'name' => 'Topics', 'taxonomy' => 'category', 'as' => 'term' ),
+				array( 'op' => 'nav_menu', 'name' => 'Main', 'as' => 'menu' ),
+				array( 'op' => 'nav_menu_item', 'menu' => '$menu', 'args' => $link, 'as' => 'menu_item' ),
+				array( 'op' => 'upload', 'name' => 'bild.jpg', 'mime' => 'image/jpeg', 'image' => array( 'w' => 8, 'h' => 8, 'rgb' => array( 10, 80, 160 ) ), 'args' => array( 'post_title' => 'Bild' ), 'as' => 'attachment' ),
+				array( 'op' => 'update_option', 'name' => 'blogdescription', 'value' => 'Things' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $widget ),
+				array( 'op' => 'update_option', 'name' => 'sidebars_widgets', 'value' => $areas ),
+				array( 'op' => 'custom_css', 'css' => 'body { color: #111111; }', 'as' => 'custom_css' ),
+				array( 'op' => 'rest', 'method' => 'POST', 'route' => '/wp/v2/template-parts/' . $theme . '//header', 'body' => array( 'content' => self::para( 'Kopf' ) ), 'as' => 'wp_template_part' ),
+				array( 'op' => 'rest', 'method' => 'POST', 'route' => '/wp/v2/templates/' . $theme . '//single', 'body' => array( 'content' => self::para( 'Einzeln' ) ), 'as' => 'wp_template' ),
+				array( 'op' => 'global_styles_id', 'as' => 'wp_global_styles' ),
+			)
+		);
+		$ids = array();
+		foreach ( array( 'a', 'b' ) as $site ) {
+			foreach ( array( 'post', 'page', 'wp_block', 'wp_navigation', 'term', 'menu', 'menu_item', 'attachment', 'custom_css', 'wp_template_part', 'wp_template', 'wp_global_styles' ) as $name ) {
+				$ids[ $site ][ $name ] = (int) ( is_array( $made[ $site ][ $name ] ) ? $made[ $site ][ $name ]['data']['wp_id'] : $made[ $site ][ $name ] );
+			}
+			$ids[ $site ] += array( 'option' => 'blogdescription', 'widget_area' => 'sidebar-1' );
+			$dated         = array();
+			foreach ( array( 'wp_template_part', 'wp_template', 'wp_global_styles' ) as $name ) {
+				$dated[] = array( 'op' => 'raw_post', 'post' => $ids[ $site ][ $name ], 'set' => array( 'post_date' => self::DATE, 'post_date_gmt' => self::DATE ) );
+			}
+			AB_MCP_IT_Sync_Steps::run( $site, $dated );
+		}
+		wp_cache_flush();
+		self::paired( self::staged() );
+		$b                       = $ids['b'];
+		$widget[2]['text']       = 'Neu';
+		$link['menu-item-title'] = 'Laden';
+		self::b(
+			array(
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b['post'], 'post_content' => self::para( 'Neu' ) ) ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b['page'], 'post_content' => self::para( 'Neu' ) ) ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b['wp_block'], 'post_content' => self::para( 'Neu' ) ) ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b['wp_navigation'], 'post_content' => $nav( 'Start' ) . $nav( 'Kontakt' ) ) ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b['attachment'], 'post_title' => 'Bild 2026' ) ),
+				array( 'op' => 'update_term', 'term' => $b['term'], 'taxonomy' => 'category', 'args' => array( 'description' => 'Fresh topics.' ) ),
+				array( 'op' => 'update_term', 'term' => $b['menu'], 'taxonomy' => 'nav_menu', 'args' => array( 'description' => 'Fresh menu.' ) ),
+				array( 'op' => 'nav_menu_item', 'menu' => $b['menu'], 'item' => $b['menu_item'], 'args' => $link ),
+				array( 'op' => 'update_option', 'name' => 'blogdescription', 'value' => 'Other things' ),
+				array( 'op' => 'update_option', 'name' => 'widget_text', 'value' => $widget ),
+				array( 'op' => 'custom_css', 'css' => 'body { color: #222222; }' ),
+				array( 'op' => 'rest', 'method' => 'POST', 'route' => '/wp/v2/template-parts/' . $theme . '//header', 'body' => array( 'content' => self::para( 'Kopf neu' ) ) ),
+				array( 'op' => 'rest', 'method' => 'POST', 'route' => '/wp/v2/templates/' . $theme . '//single', 'body' => array( 'content' => self::para( 'Einzeln neu' ) ) ),
+				array( 'op' => 'rest', 'method' => 'POST', 'route' => '/wp/v2/global-styles/' . $b['wp_global_styles'], 'body' => array( 'styles' => array( 'color' => array( 'background' => '#112233' ) ) ) ),
+			)
+		);
+		$report  = self::report( self::staged() );
+		$entries = array_values( array_filter( $report['all'], static fn( array $e ): bool => 'take_over' === $e['action'] ) );
+		self::assertCount( 14, $entries, 'The fourteen objects, each a takeover (the setup, with every writer).' );
+		$before  = self::rows_a( $ids['a'] );
+		$push    = self::forward( self::args( $report, $entries ) );
+		$written = self::rows_a( $ids['a'] );
+		foreach ( $before as $name => $rows ) {
+			self::assertNotSame( $rows, $written[ $name ], "The forward run wrote the $name, so a way back would show." );
+		}
+		return array( $push, $ids['a'], $before, $written );
+	}
+
+	/** The rows of A of the objects of I2 by name: a post by its id, the category and the menu in terms and term_taxonomy, the tagline and the widget area as options. */
+	private static function rows_a( array $ids ): array {
+		$out = array();
+		foreach ( $ids as $name => $id ) {
+			if ( in_array( $name, array( 'term', 'menu' ), true ) ) {
+				$out[ $name ] = array( AB_MCP_IT_Sites::rows( 'a', 'terms', array( 'term_id' => (string) $id ) ), AB_MCP_IT_Sites::rows( 'a', 'term_taxonomy', array( 'term_id' => (string) $id ) ) );
+			} elseif ( 'option' === $name ) {
+				$out[ $name ] = AB_MCP_IT_Sites::rows( 'a', 'options', array( 'option_name' => 'blogdescription' ) );
+			} elseif ( 'widget_area' === $name ) {
+				$out[ $name ] = array( AB_MCP_IT_Sites::rows( 'a', 'options', array( 'option_name' => 'widget_text' ) ), AB_MCP_IT_Sites::rows( 'a', 'options', array( 'option_name' => 'sidebars_widgets' ) ) );
+			} else {
+				$out[ $name ] = AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $id ) );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The way back of the run, of these steps or of every one, planned and
+	 * confirmed: neither answer an internal error (their content read to go
+	 * on, not asserted, R2), then next as often as the confirmation names
+	 * steps planned (read), each answer an array.
+	 */
+	private static function way_back( int $push, ?array $steps ): void {
+		$args = array(
+			'action' => 'plan',
+			'run_id' => $push,
+		) + ( null === $steps ? array() : array( 'steps' => $steps ) );
+		$plan = self::gated( 'wp_site_revert', $args );
+		self::not_internal( $plan, 'The plan of the way back.' );
+		$led = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $plan['confirm_token'] ) );
+		self::not_internal( $led, 'The confirmation of the way back.' );
+		for ( $i = 0; $i < $led['counts']['planned']; $i++ ) {
+			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $led['run_id'] ) );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		}
+	}
+
+	/**
+	 * After the ways back with post alone: the post and the page as before
+	 * the run but for the time of the change (the way back sets it anew),
+	 * every other object of A as the run wrote it.
+	 */
+	private static function back_and_left( array $ids, array $before, array $written ): void {
+		$unchanged = static fn( array $rows ): array => array_map( static fn( array $row ): array => array_diff_key( $row, array_flip( array( 'post_modified', 'post_modified_gmt' ) ) ), $rows );
+		foreach ( self::rows_a( $ids ) as $name => $rows ) {
+			if ( in_array( $name, array( 'post', 'page' ), true ) ) {
+				self::assertSame( $unchanged( $before[ $name ] ), $unchanged( $rows ), "The $name went back: post and page are registered." );
+			} else {
+				self::assertSame( $written[ $name ], $rows, "Nothing of the $name written or put back: its rows as the run wrote them." );
+			}
+		}
+	}
+
 	/* -------------------------------------------------------------- cases */
+
+	/**
+	 * Prüft: (I2 a) the way back of a whole mixed run whose journals name a
+	 * post, a page and one object of each other kind and type, planned with
+	 * post alone registered, by its subtypes: neither the plan nor the
+	 * confirmation is an internal error, each next answers without a
+	 * WP_Error, the post and the page go back, and the rows of the twelve
+	 * other objects of A stay as the run wrote them, byte for byte. Read to
+	 * go on, not asserted (R2): the plan, the preview and the confirmation,
+	 * the states and texts of the steps, the end of the run.
+	 * Sonst: Free would put an object of a kind or type back over a writer
+	 * it no longer has (a template or a navigation through its writer of
+	 * posts), or end the way back with an error.
+	 */
+	public function testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse(): void {
+		list( $push, $ids, $before, $written ) = self::mixed();
+		self::only_post();
+		self::way_back( $push, null );
+		self::back_and_left( $ids, $before, $written );
+	}
+
+	/**
+	 * Prüft: (I2 b) the same journals taken back over steps: first the
+	 * steps of the kind post chosen together (the post, the page and the
+	 * five types), then each other step alone, each way back planned with
+	 * post alone registered: as in (a), no plan or confirmation an internal
+	 * error, each next an array, the post and the page back, the twelve
+	 * others as the run wrote them. Read to go on, not asserted (R2): the
+	 * plans, previews and confirmations, the states and texts of the steps,
+	 * the end of each run of the way back.
+	 * Sonst: a step chosen over steps, alone or with others, would put back
+	 * an object of a kind or type Free no longer has, or end with an error.
+	 */
+	public function testEachStepTakenBackOverStepsPutsBackThePostAndThePageAndNothingElse(): void {
+		list( $push, $ids, $before, $written ) = self::mixed();
+		$of_post = array();
+		$others  = array();
+		foreach ( AB_MCP_Sync_Run::steps( $push ) as $step ) {
+			if ( 'write' === $step['op'] ) {
+				if ( 'post' === $step['parts']['object']['kind'] ) {
+					$of_post[] = (int) $step['seq'];
+				} else {
+					$others[] = (int) $step['seq'];
+				}
+			}
+		}
+		self::assertSame( array( 7, 7 ), array( count( $of_post ), count( $others ) ), 'Seven steps of the kind post, seven of the other kinds (the setup).' );
+		self::only_post();
+		self::way_back( $push, $of_post );
+		foreach ( $others as $seq ) {
+			self::way_back( $push, array( $seq ) );
+		}
+		self::back_and_left( $ids, $before, $written );
+	}
 
 	/**
 	 * Prüft: (I3) a way back with open steps of a kind whose writer is gone

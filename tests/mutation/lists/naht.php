@@ -24,7 +24,11 @@
  * code only through the place of the planning (n-begin-bind-fest, held by I4
  * (a)); admit_code() puts only a class that is loaded, in the engine
  * (n-platz-engine-wert, held by I4 (c)) and in Push (n-platz-push-wert, held
- * by I4 (a)). Written by hand.
+ * by I4 (a)). T5 part 3: row_now() gives 'unread' for a kind without a
+ * writer, so the plan of a way back reads no row through a writer it
+ * lacks (n-zeile-jetzt), and revert_boundary() fails the step of such a
+ * kind without putting anything back (n-rueckweg); both held by I2 (a) in
+ * SyncWayBackWithoutWriterTest. Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
  * It is equivalent while a kind is either whole or by subtype, never both
@@ -55,11 +59,13 @@ $swap = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/p
 $clip = array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncMediaTest::testANewVideoWithANewPosterImageThatHangsUnderItGoesOverAndBack( |$)/' );
 $i4   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncCodeWithoutEntranceTest::' . $test . '( |$)/' );
 $i6   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncPlanWithoutWriterTest::' . $test . '( |$)/' );
+$wb   = static fn( string $test ): array => array( 'vendor/bin/phpunit', '--no-progress', '-c', 'tests/integration/phpunit.xml.dist', '--filter', '/[^A-Za-z0-9_]SyncWayBackWithoutWriterTest::' . $test . '( |$)/' );
 
 $sw = 'includes/sync/class-sync-writers.php';
 $en = 'includes/sync/class-sync-engine.php';
 $pu = 'includes/sync/class-sync-push.php';
 $tw = 'includes/sync/class-sync-term-writer.php';
+$rv = 'includes/sync/class-sync-revert.php';
 
 return array(
 	array(
@@ -304,5 +310,23 @@ return array(
 		'replace' => 'self::$code = is_string( $code ) ? $code : null;',
 		'run'     => $i4( 'testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun' ),
 		'expect'  => '/testWithoutTheEntranceOfThePlanningNoRunOfTheCodeIsPlannedOrBegun/',
+	),
+	array(
+		'id'      => 'naht/n-zeile-jetzt',
+		'clause'  => 'row_now(): a kind without a writer gives unread, so the plan of a way back reads no row through a writer it lacks',
+		'file'    => $rv,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\treturn 'unread';",
+		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\treturn 'unread';",
+		'run'     => $wb( 'testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse' ),
+		'expect'  => '/testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse/',
+	),
+	array(
+		'id'      => 'naht/n-rueckweg',
+		'clause'  => 'revert_boundary(): the step of a kind without a writer fails with the sentence of the core, nothing put back',
+		'file'    => $en,
+		'search'  => "\t\tif ( null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'begun', sprintf( __( 'No step of this version writes the kind %s; nothing is put back.'",
+		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'begun', sprintf( __( 'No step of this version writes the kind %s; nothing is put back.'",
+		'run'     => $wb( 'testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse' ),
+		'expect'  => '/testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse/',
 	),
 );
