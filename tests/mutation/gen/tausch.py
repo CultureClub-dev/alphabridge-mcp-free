@@ -591,6 +591,11 @@ e('e-uhr', 'restored(): a clock that gives no time refuses the step of the way b
   "\t\tif ( 0.0 === $in['until'] ) {", "\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
 e('e-platz', 'restored(): the place of the new version not given (open() or put_tree() refuses) refuses the step of the way back before its journal begun; it stays planned, nothing moves (question 1 B of Teil E; skeptic E1, B1)', CS,
   "$begun = is_wp_error( $slot ) ? $slot :", '$begun = false ? $slot :', 'coderun', 'testTheWayBackWithoutAPlaceForTheNewVersionRefusesAndStaysPlanned')
+# Finding 4636576533 (R12): restored() decides the store before its journal begun, also where the target is empty.
+e('r12-rueckweg-entscheid', 'restored(): the store is decided before the journal begun, also where the target is empty, so that in_backup() reads the backup under the deadline of a call that decided it (R12; finding 4636576533)', CS,
+  "\t\tif ( ! AB_MCP_Protected_Store::available() ) {\n\t\t\treturn AB_MCP_Protected_Store::refusal();", "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Protected_Store::refusal();", 'coderun', 'testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow')
+e('r12-rueckweg-ablehnung', 'restored(): without the store the step of the way back refuses with the refusal of the store before its journal begun; it stays planned, nothing moves (R12; finding 4636576533)', CS,
+  "\t\tif ( ! AB_MCP_Protected_Store::available() ) {", "\t\tif ( ! AB_MCP_Protected_Store::available() && false ) {", 'coderun', 'testTheWayBackOfAnEmptyTargetWithoutTheStoreRefusesAndStaysPlanned')
 # ------------------------------------------- the Behebung after the skeptic E1 (B3, B4, C2)
 e('e-plan-schritte', 'Tausch::back(): the way of the other steps (steps without the swap) only in a plan, never where the step of the way back, its continuation or way (a) take the same refusal again (skeptic E1, B3)', CS,
   "\t\t\tif ( 'plan' === $at ) {", "\t\t\tif ( true ) {", 'coderun', 'testAJournalThatNoLongerReadsAsASwapFailsItsStepOfTheWayBackWithNothingMoved')

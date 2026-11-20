@@ -783,6 +783,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - Nach einer gescheiterten Umbenennung sagt die Antwort nur, dass sie scheiterte (Option B), nicht, wo die neue
     Fassung liegt; das Ergebnis des Schritts nennt den Platz, wo er gefüllt blieb (auch wo die Rückkehr der neuen
     Fassung scheitert und das Ziel leer ist).
+  - Der Rückweg-Schritt entscheidet den Speicher vor dem Journal `begun`, auch bei leerem Ziel (R12, wie
+    `read_deadline()`; Befund 4636576533); ohne Speicher lehnt er mit dessen Ablehnung ab, nichts wird bewegt, und der
+    Schritt bleibt `planned`. Die Zeit des Entscheids geht vom Rest des Aufrufs ab; eine zusätzliche Fristprüfung vor
+    `begun` gibt es nicht (wie beim belegten Ziel). Läuft die Zeit danach ab, endet der Schritt `unclear`: bei
+    belegtem Ziel kann zuerst `at_target()` scheitern (Satz von `code:close_target`), bei leerem Ziel bzw. beim
+    Sicherungsnachweis gilt der Satz von `code:close_backup`.
   - Den Platz der neuen Fassung nimmt der Rückweg-Schritt vor dem Journal `begun` (wo das Ziel nicht leer ist);
     verweigert ihn der Speicher, bleibt der Schritt `planned`. Bewegt der Schritt danach nichts (die alte Fassung ist
     schon am Ziel, oder ein Nachweis scheitert), bleibt die Gruppe `back-<lauf>-<schritt>` leer stehen, so lange wie

@@ -2275,10 +2275,20 @@ final class AB_MCP_Sync_Code_Swap {
 		if ( 0.0 === $in['until'] ) {
 			return self::clock_refusal();
 		}
+		// The store decided before the journal begun, as read_deadline() decides
+		// it before its deadline (R12), also where the target is empty:
+		// moved_back() reads the backup under the deadline of this call
+		// (in_backup()), and such a reader never decides it. Where there is
+		// none, its refusal as it is: nothing is written or moved, and the step
+		// stays planned (finding 4636576533).
+		if ( ! AB_MCP_Protected_Store::available() ) {
+			return AB_MCP_Protected_Store::refusal();
+		}
 		// The place of the new version before the journal begun, as the swap
 		// takes the place of its backup (skeptic E1, B1): where the store
 		// refuses it, nothing is written and the step stays planned, so the
-		// next call tries again. Not where the target is empty.
+		// next call tries again. Only where the target is not empty; the store
+		// is decided above in either case.
 		$slot  = true === self::place_empty( $journal['target'] ) ? null : AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $in['run_id'], 'label' => 'back-' . $in['run_id'] . '-' . $in['unit']['seq'] ) );
 		$slot  = is_string( $slot ) ? AB_MCP_Protected_Store::put_tree( 'backups', $slot, basename( $journal['target'] ), $journal['target'] ) : $slot;
 		$begun = is_wp_error( $slot ) ? $slot : self::calls()->journal( $in['run_id'], $in['unit']['seq'], array( 'state' => 'begun' ), 'planned' );

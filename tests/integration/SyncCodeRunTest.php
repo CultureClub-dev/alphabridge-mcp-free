@@ -272,6 +272,27 @@ final class SyncCodeRunTest extends TestCase {
 		return AB_MCP_REST_Controller::run_tool( $name, self::def( $name ), $a );
 	}
 
+	/**
+	 * A tool through the gate of the plugin in a process of its own, as a
+	 * call of a client is one: nothing before it decided the protected store
+	 * there (finding 4636576533). A refusal or an exception of the tool ends
+	 * the child with status 1, and calls() throws.
+	 */
+	private static function gated_in_child( string $name, array $a ): array {
+		$plan = array(
+			'require' => array( AB_MCP_DIR . 'includes/tools/class-tools-staging.php', AB_MCP_DIR . 'includes/sync/class-sync-revert.php' ),
+			'calls'   => array(
+				array(
+					'call'   => 'AB_MCP_REST_Controller::run_tool',
+					'args'   => array( $name, self::def( $name ), $a ),
+					'as'     => 'answer',
+					'expect' => 'result',
+				),
+			),
+		);
+		return AB_MCP_IT_Process::calls( 'a', $plan, 240 )['results']['answer'];
+	}
+
 	private static function refused( $result, string $code ): string {
 		self::assertInstanceOf( WP_Error::class, $result, is_array( $result ) ? (string) json_encode( $result ) : gettype( $result ) );
 		self::assertSame( $code, $result->get_error_code(), $result->get_error_message() );
@@ -2609,6 +2630,56 @@ final class SyncCodeRunTest extends TestCase {
 	}
 
 	/**
+	 * Prüft: finding 4636576533 (R12): the step of the way back decides the
+	 * protected store before its journal begun, also where the target is
+	 * empty (a swap broken off between its renames). Without the store it
+	 * refuses with the refusal of the store: the step stays planned, the
+	 * target stays empty, the old version lies in the backup as the journal
+	 * names it, and the mark stays open. With the store back, the next call
+	 * puts the old version back.
+	 * Sonst: the step would begin with the store undecided, read the backup
+	 * under its deadline and end unclear with the target empty, so that no
+	 * later call puts the old version back.
+	 */
+	public function testTheWayBackOfAnEmptyTargetWithoutTheStoreRefusesAndStaysPlanned(): void {
+		list( $run_id, , $target ) = self::ready_to_swap();
+		$old = self::bytes_of( $target );
+		self::swap_with(
+			$run_id,
+			array(
+				array(
+					'method' => 'rename',
+					'nth'    => 2,
+					'kind'   => 'throw',
+				),
+			)
+		);
+		AB_MCP_Test_Seam::restore_all();
+		$kept = self::step( $run_id, 3 )['parts']['old'];
+		$back = self::planned_back( $run_id );
+		// No store: the folder beside WordPress lies in the web root.
+		$docroot                  = $_SERVER['DOCUMENT_ROOT'];
+		$_SERVER['DOCUMENT_ROOT'] = AB_MCP_IT_Sites::state()['root'];
+		AB_MCP_Protected_Store::forget();
+		$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) );
+		self::assertFalse( AB_MCP_Protected_Store::available(), 'There is no store in this call.' );
+		$says = self::refused( $answer, 'ab_mcp_store_unavailable' );
+		self::assertSame( AB_MCP_Protected_Store::refusal()->get_error_message(), $says, 'The refusal of the store as it is.' );
+		$_SERVER['DOCUMENT_ROOT'] = $docroot;
+		AB_MCP_Protected_Store::forget();
+		clearstatcache();
+		$now = lstat( $kept['path'] );
+		self::assertSame( array( 'planned', false ), array( self::back_step( $back )['state'], file_exists( $target ) ), 'Nothing begun, and the target is still empty.' );
+		self::assertSame( array( $kept['dev'], $kept['ino'], $old ), array( $now['dev'], $now['ino'], self::bytes_of( $kept['path'] ) ), 'The old version lies whole in the backup, the folder the journal names.' );
+		self::assertSame( 'open', self::mark_of_swap( $run_id )['state'] );
+		$done = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $back ) );
+		self::assertIsArray( $done, is_wp_error( $done ) ? $done->get_error_code() . ': ' . $done->get_error_message() : '' );
+		self::assertSame( 'done', self::back_step( $back )['state'], 'Tried again with the store, the step puts the old version back.' );
+		clearstatcache();
+		self::assertSame( $old, self::bytes_of( $target ), 'The old version is back at the target.' );
+	}
+
+	/**
 	 * Prüft: G-5-14, the mark gone: the folder of the mark of a swap done goes
 	 * a day after the mark closed (AB_MCP_Protected_Store::cleanup(); here
 	 * moved aside under a name that is no mark). Its way back then finds no
@@ -2901,6 +2972,8 @@ final class SyncCodeRunTest extends TestCase {
 			self::assertTrue( rename( $backup, $backup . '-weg' ), 'The backup gone.' );
 			self::assertTrue( AB_MCP_Sync_Run::update_step( $run_id, 4, array( 'state' => 'begun' ), 'planned' ), 'Its next step begun by a call that ended.' );
 			self::assertSame( 'interrupted', self::gated( 'wp_site_push', array( 'action' => 'status', 'run_id' => $run_id ) )['state'] );
+			// The store undecided, as a call of its own finds it (finding 4636576533).
+			AB_MCP_Protected_Store::forget();
 			$closed = AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true );
 			self::assertIsArray( $closed, is_wp_error( $closed ) ? $closed->get_error_code() . ': ' . $closed->get_error_message() : '' );
 			self::assertSame( array( 'closed_checked', 'done', 'unclear' ), array( $closed['state'], self::step( $run_id, 3 )['state'], self::step( $run_id, 4 )['state'] ), 'Closed as checked; the swap is not asked again.' );
@@ -2929,6 +3002,8 @@ final class SyncCodeRunTest extends TestCase {
 				)
 			);
 		}
+		// The store undecided, as a call of its own finds it (finding 4636576533).
+		AB_MCP_Protected_Store::forget();
 		$closed = AB_MCP_Sync_Run::close_checked( $run_id, self::admin(), true );
 		clearstatcache();
 		if ( 'the mark does not close' === $case ) {
@@ -3098,7 +3173,7 @@ final class SyncCodeRunTest extends TestCase {
 				self::assertTrue( self::theme_let_go(), 'WordPress switches away from the theme.' );
 			}
 		}
-		$back = self::way_back_of( $run_id );
+		$back = self::way_back_of( $run_id, array(), 'way (b) fresh' === $way );
 		self::assertSame( array( $run_id, 'closed_reverted' ), array( (int) $back['begun']['run_id'], $back['back']['state'] ), 'The way back on the same run, closed as reverted.' );
 		$step = self::back_step( $run_id );
 		$says = $step['result']['message'];
@@ -3134,19 +3209,20 @@ final class SyncCodeRunTest extends TestCase {
 		}
 		if ( 'plugin' === $kind ) {
 			$main = $unit['ref'] . '/' . $unit['ref'] . '.php';
-			self::assertSame( 'P2' === $point && 'way (b)' === $way, str_contains( $says, sprintf( 'The plugin %1$s ran when its swap began and is not read as active now, and step 3 is not in accept of its way back (wp_site_revert action=plan), so the way back leaves it inactive. Activate it in wp-admin (Plugins → Activate) or with wp_activate_plugin; either runs its activation routine.', $main ) ), 'The plugin WordPress let go of, named with its way: ' . $says );
+			self::assertSame( 'P2' === $point && 'by hand' !== $way, str_contains( $says, sprintf( 'The plugin %1$s ran when its swap began and is not read as active now, and step 3 is not in accept of its way back (wp_site_revert action=plan), so the way back leaves it inactive. Activate it in wp-admin (Plugins → Activate) or with wp_activate_plugin; either runs its activation routine.', $main ) ), 'The plugin WordPress let go of, named with its way: ' . $says );
 			return;
 		}
-		self::assertSame( 'P2' === $point && 'way (b)' === $way, str_contains( $says, $sentence ), 'A theme read as not running, named with its way: ' . $says );
+		self::assertSame( 'P2' === $point && 'by hand' !== $way, str_contains( $says, $sentence ), 'A theme read as not running, named with its way: ' . $says );
 		self::assertSame( 'P2' === $point ? 'twentytwentyfive' : 'ab-it-kind', AB_MCP_IT_Code::theme_options( 'a' )['stylesheet'], 'The theme that runs.' );
 	}
 
-	/** The three points of a swap aborted hard, for a plugin and for a theme; between the renames (P2) once with way (a) before way (b), once with the way by hand without the entrance. */
+	/** The three points of a swap aborted hard, for a plugin and for a theme; between the renames (P2) once with way (a) before way (b), once so with each call of way (b) in a process of its own (finding 4636576533), once with the way by hand without the entrance. */
 	public static function aborted_hard(): array {
 		$out = array();
 		foreach ( array( 'plugin', 'theme' ) as $kind ) {
 			$out[ "$kind, before the first rename" ]         = array( $kind, 'P1', 'way (b)' );
 			$out[ "$kind, between the renames" ]             = array( $kind, 'P2', 'way (b)' );
+			$out[ "$kind, between the renames, in a fresh process" ] = array( $kind, 'P2', 'way (b) fresh' );
 			$out[ "$kind, between the renames, by hand" ]    = array( $kind, 'P2', 'by hand' );
 			$out[ "$kind, after the second rename" ]         = array( $kind, 'P3', 'way (b)' );
 		}
@@ -3412,12 +3488,12 @@ final class SyncCodeRunTest extends TestCase {
 	/**
 	 * The way back of a run as a client takes it (plan Z22): wp_site_revert
 	 * plan (with $more, accept), its token, next until the run of the way
-	 * back is closed.
+	 * back is closed; with $fresh each next in a process of its own.
 	 *
 	 * @return array{preview:array,begun:array,back:array} The preview, the run of the way back as
 	 *         it began, its last answer.
 	 */
-	private static function way_back_of( int $run_id, array $more = array() ): array {
+	private static function way_back_of( int $run_id, array $more = array(), bool $fresh = false ): array {
 		$preview = self::gated( 'wp_site_revert', array( 'action' => 'plan', 'run_id' => $run_id ) + $more );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_code() . ': ' . $preview->get_error_message() : '' );
 		self::assertTrue( $preview['confirm_required'] );
@@ -3425,7 +3501,11 @@ final class SyncCodeRunTest extends TestCase {
 		self::assertIsArray( $begun, is_wp_error( $begun ) ? $begun->get_error_code() . ': ' . $begun->get_error_message() : '' );
 		$back = null;
 		for ( $i = 0; $i < 12; $i++ ) {
-			$back = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $begun['run_id'] ) );
+			// The store undecided before each call, as a call of a client finds
+			// it: no call before it in its request decided it (finding
+			// 4636576533; plan and next ran in one process here).
+			AB_MCP_Protected_Store::forget();
+			$back = $fresh ? self::gated_in_child( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $begun['run_id'] ) ) : self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $begun['run_id'] ) );
 			self::assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_code() . ': ' . $back->get_error_message() : '' );
 			if ( in_array( $back['state'], AB_MCP_Sync_Schema::CLOSED, true ) ) {
 				return array(
