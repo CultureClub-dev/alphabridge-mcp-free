@@ -7,9 +7,57 @@
          failOnWarning="true"
          failOnRisky="true"
          beStrictAboutOutputDuringTests="true">
+    <!-- Two suites, one CI job each (.github/workflows/ci.yml, job
+         integration, matrix suite). Cut by subject and by the time of each
+         class in main run 44671051881 at 5227398 (step «Time of each class
+         of the integration suite», 38 classes, 3427.7 s): code, the code
+         swap, the protected store, aborts and the stand-ins, 12 classes,
+         1662.0 s; content, contents and runs, 26 classes, 1765.7 s. Each
+         list longest first. Every new class goes into exactly one of the
+         two lists; tests/CiIntegrationSuitesTest.php is red otherwise.
+         Without testsuite both run, every class (README.md). -->
     <testsuites>
-        <testsuite name="integration">
-            <directory>.</directory>
+        <testsuite name="code">
+            <file>SyncCodeRunTest.php</file>
+            <file>CodeStageTest.php</file>
+            <file>StoreRemoverTest.php</file>
+            <file>ProtectedStoreTest.php</file>
+            <file>CodeFixturesTest.php</file>
+            <file>ReadDeadlineTest.php</file>
+            <file>StoreInputsTest.php</file>
+            <file>StoreTreesTest.php</file>
+            <file>AbortHelperTest.php</file>
+            <file>StoreBookingsTest.php</file>
+            <file>WporgStandInTest.php</file>
+            <file>TestFetcherIsolationTest.php</file>
+        </testsuite>
+        <testsuite name="content">
+            <file>SyncRunTest.php</file>
+            <file>SyncStructureTest.php</file>
+            <file>SyncProposalTest.php</file>
+            <file>SyncEnvTest.php</file>
+            <file>SyncContentTest.php</file>
+            <file>SyncTemplatesTest.php</file>
+            <file>SyncMediaTest.php</file>
+            <file>SyncUnitPairsTest.php</file>
+            <file>SyncPackageTest.php</file>
+            <file>StagingTransferTest.php</file>
+            <file>SyncReportTest.php</file>
+            <file>SyncManifestTest.php</file>
+            <file>SyncLocksTest.php</file>
+            <file>SyncPackageSeriesTest.php</file>
+            <file>SyncTrustTest.php</file>
+            <file>SyncCoreReadsTest.php</file>
+            <file>SyncCanonTest.php</file>
+            <file>SyncMediaListTest.php</file>
+            <file>SyncSchemaTest.php</file>
+            <file>TwoSitesSmokeTest.php</file>
+            <file>SyncSafeTest.php</file>
+            <file>SyncCoreReasonsTest.php</file>
+            <file>SyncPairsTest.php</file>
+            <file>SyncSchemasTest.php</file>
+            <file>SyncHtmlRefsTest.php</file>
+            <file>SyncRewriteTest.php</file>
         </testsuite>
     </testsuites>
     <!-- After each test the time limit of the command line again

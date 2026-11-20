@@ -210,6 +210,28 @@ final class EditionTrialTest extends TestCase {
 		self::assertFalse( AB_MCP_Site_Mode::terms_pending() );
 	}
 
+	public function testAnEditionThatIsNotAStringMustAgreeToTheTerms(): void {
+		self::edition( self::stringable( 'pro' ) );
+		self::assertTrue( AB_MCP_Site_Mode::terms_required(), 'No string, no paid licence.' );
+
+		$exit = self::post( 'handle_site_mode', self::full_post_without_terms() );
+
+		self::assertSame( 'mode_terms', self::notice_of( $exit ) );
+		self::assertFalse( AB_MCP_Site_Mode::is_full() );
+		self::assertNull( AB_MCP_Site_Mode::confirmation() );
+	}
+
+	public function testAnEditionThatIsNotAStringIsRecordedAsTheFreeOne(): void {
+		self::edition( self::stringable( 'pro' ) );
+
+		$exit = self::post( 'handle_site_mode', array( 'agree_terms' => '1' ) + self::full_post_without_terms() );
+
+		self::assertSame( 'mode_full', self::notice_of( $exit ) );
+		$record = AB_MCP_Site_Mode::confirmation();
+		self::assertTrue( $record['terms_agreed'] );
+		self::assertSame( 'free', $record['edition'] );
+	}
+
 	/* ---------------------------------- H3, the box «On: full power» */
 
 	public function testATrialReadsWhatProWrites(): void {
