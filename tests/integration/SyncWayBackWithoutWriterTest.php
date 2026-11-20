@@ -24,6 +24,10 @@
  *   preview, the states and texts of the steps and the end of the run are
  *   read to go on, not asserted.
  *
+ * As the setup, not as a promise about the plan: each way back and the
+ * continuation run at least one step under next, so each reaches
+ * revert_boundary(); a plan of no step would leave a case green without it.
+ *
  * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
  *
@@ -32,6 +36,9 @@
  * back plans, continues and ends the steps of such a kind is the state
  * of the first step, not what must hold after the move; that is open.
  * Once R2 is decided, the cases (I2, I3) are changed with it.
+ * Open with R2 as well: a step goes back once only, so the step of such a
+ * kind that failed for want of its writer is spent and is not planned
+ * again once the kind is registered anew.
  *
  * @package AlphaBridge_MCP
  */
@@ -493,7 +500,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		return array( $push, $ids['a'], $before, $written );
 	}
 
-	/** The rows of A of the objects of I2 by name: a post by its id, the category and the menu in terms and term_taxonomy, the tagline and the widget area as options. */
+	/** The rows of A of the objects of I2 by name: the post and the page in posts, every other post in posts, postmeta and term_relationships (a menu item, an attachment and a template keep data there), the category and the menu in terms and term_taxonomy, the tagline and the widget area as options. */
 	private static function rows_a( array $ids ): array {
 		$out = array();
 		foreach ( $ids as $name => $id ) {
@@ -503,8 +510,10 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 				$out[ $name ] = AB_MCP_IT_Sites::rows( 'a', 'options', array( 'option_name' => 'blogdescription' ) );
 			} elseif ( 'widget_area' === $name ) {
 				$out[ $name ] = array( AB_MCP_IT_Sites::rows( 'a', 'options', array( 'option_name' => 'widget_text' ) ), AB_MCP_IT_Sites::rows( 'a', 'options', array( 'option_name' => 'sidebars_widgets' ) ) );
-			} else {
+			} elseif ( in_array( $name, array( 'post', 'page' ), true ) ) {
 				$out[ $name ] = AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $id ) );
+			} else {
+				$out[ $name ] = array( AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $id ) ), AB_MCP_IT_Sites::rows( 'a', 'postmeta', array( 'post_id' => (string) $id ) ), AB_MCP_IT_Sites::rows( 'a', 'term_relationships', array( 'object_id' => (string) $id ) ) );
 			}
 		}
 		return $out;
@@ -514,7 +523,8 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 	 * The way back of the run, of these steps or of every one, planned and
 	 * confirmed: neither answer an internal error (their content read to go
 	 * on, not asserted, R2), then next as often as the confirmation names
-	 * steps planned (read), each answer an array.
+	 * steps planned (read), each answer an array; as the setup, at least one
+	 * of them runs a step, so revert_boundary() is reached (not the plan).
 	 */
 	private static function way_back( int $push, ?array $steps ): void {
 		$args = array(
@@ -525,10 +535,13 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		self::not_internal( $plan, 'The plan of the way back.' );
 		$led = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $plan['confirm_token'] ) );
 		self::not_internal( $led, 'The confirmation of the way back.' );
+		$ran = 0;
 		for ( $i = 0; $i < $led['counts']['planned']; $i++ ) {
 			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $led['run_id'] ) );
 			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			$ran += (int) isset( $answer['step'] );
 		}
+		self::assertGreaterThan( 0, $ran, 'A step of the way back ran under next, so revert_boundary() was reached (the setup, not a promise about the plan).' );
 	}
 
 	/**
@@ -661,10 +674,13 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		self::not_internal( $plan, 'The plan of the continuation.' );
 		$led = self::gated( 'wp_site_revert', $args + array( 'confirm_token' => $plan['confirm_token'] ) );
 		self::not_internal( $led, 'The confirmation of the continuation.' );
+		$ran = 0;
 		for ( $i = 0; $i < $led['counts']['planned']; $i++ ) {
 			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => $r ) );
 			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+			$ran += (int) isset( $answer['step'] );
 		}
+		self::assertGreaterThan( 0, $ran, 'A step of the continuation ran under next, so revert_boundary() was reached (the setup, not a promise about the plan).' );
 		self::assertSame( $written, self::terms_a( $on_a ), 'Nothing of a term put back, the interrupted step as little as the open ones.' );
 	}
 }
