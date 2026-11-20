@@ -1154,7 +1154,7 @@ final class AB_MCP_Sync_Push {
 		// others as planned (B2, menu:position_exchange), and none of them is
 		// written halfway.
 		foreach ( AB_MCP_Sync_Decision::cycles( $exchange ) as $members ) {
-			$lock = self::writer_rule( $items[ reset( $members ) ], 'exchange_lock', array() );
+			$lock = self::writer_rule( $items[ reset( $members ) ], 'exchange_lock', array(), AB_MCP_Sync_Kinds::lock( 'menu', 'position_exchange' ) );
 			foreach ( $members as $n ) {
 				if ( isset( $items[ $n ] ) ) {
 					$locked[] = array(
