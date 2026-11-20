@@ -59,7 +59,10 @@ Jobs `integration` and `mutation` in `.github/workflows/ci.yml`: MariaDB
 11.4 as a service, WordPress from its Git mirror `WordPress/WordPress` at
 commit `fc9832bef919c2a08541248db23af90d14ffb082` (tag 7.1.3), checked by
 its tree hash and the SHA-256 above, then `bin/setup.php`, `bin/serve.sh
-start` and the suite (or the mutation probes).
+start` and the suite (or the mutation probes). The suite runs in two jobs,
+`--testsuite code` and `--testsuite content` (`phpunit.xml.dist`; every new
+class goes into exactly one of the two lists, `CiIntegrationSuitesTest`);
+without `--testsuite`, as on a Mac, every class runs.
 
 ## Writing a case
 
@@ -146,7 +149,7 @@ byte for byte; the format is in the head of `tests/mutation/run.php`.
 Lists that run the integration suite need the sites up (`local.sh up`).
 Never commit while it runs.
 
-The CI runs the lists in twelve jobs, `--shard=k/12`. The shares follow
+The CI runs the lists in 13 jobs, `--shard=k/13`. The shares follow
 the measured durations in `tests/mutation/dauer.php` (mutation per entry,
 baseline per command), so that the longest job is as short as may be
 (`tests/mutation/verteilung.php`); entries and commands added since are

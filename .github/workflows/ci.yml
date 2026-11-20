@@ -175,20 +175,32 @@ jobs:
   # MariaDB under two table prefixes, each served by `php -S` and running the
   # plugin of this checkout. tests/integration/README.md has the same on a Mac.
   integration:
-    name: Two WordPress 7.1.3 sites on MariaDB
+    name: Two WordPress 7.1.3 sites on MariaDB (${{ matrix.suite }})
     runs-on: ubuntu-latest
     # 55: the integration job took 34:39 on free#155 (d1e0c77, run
     # 43477041565; suite 33:53 for 1491 tests), against 21:02 on main at
     # 90ab733 (run 43385812312; suite 20:25 for 1462 tests). Which classes
     # take the 13 minutes more is not measured yet; the step «Time of each
     # class of the integration suite» below prints it from the next run on.
-    # Same runner, no new jobs; before 35 (19:03-22:36 on free#141).
+    # Until the split below: same runner, no new jobs; before 35
+    # (19:03-22:36 on free#141).
     # 70: on free#155 the job took 43:13 at 63a3e27 (run 44154377078) and
     # 50:09 at f69155e (run 44249774571, 2545 tests); at 7871bf6 (run
     # 44429982611, attempt 1) the suite reached 2501 of 2559 tests after
     # 53:51 and the job stopped at 55. Second raise on this PR (35, 55, 70);
     # a further one splits the job or speeds up its slowest classes instead.
+    # Split (gratis/ci-grenzen): the job took 37.2 min at 694b00f, 50.1 at
+    # f69155e and was cut after 55.3 at 7871bf6; main run 44671051881 took
+    # 57.9 min at 5227398, the same tree as 7c4190e (45.8 min). Since then
+    # one job per suite of tests/integration/phpunit.xml.dist, cut by subject
+    # and by the time of each class in that run (code 27.7 min, content 29.4
+    # min). No third raise; a new class goes into one of the two lists
+    # (tests/CiIntegrationSuitesTest.php).
     timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [code, content]
     services:
       mariadb:
         image: mariadb:11.4
@@ -269,12 +281,12 @@ jobs:
           bash tests/integration/bin/serve.sh start
 
       - name: Integration suite
-        run: vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testdox --log-junit "$RUNNER_TEMP/junit-integration.xml" --log-events-text "$RUNNER_TEMP/events-integration.txt"
+        run: vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testsuite ${{ matrix.suite }} --testdox --log-junit "$RUNNER_TEMP/junit-integration.xml" --log-events-text "$RUNNER_TEMP/events-integration.txt"
 
       # As in the job unit: red unless the suite ran to its end, every test
       # accounted for, none failed.
       - name: The integration suite ran every test
-        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-integration.xml" "$RUNNER_TEMP/events-integration.txt" vendor/bin/phpunit -c tests/integration/phpunit.xml.dist
+        run: php tests/integration/bin/run-complete.php "$RUNNER_TEMP/junit-integration.xml" "$RUNNER_TEMP/events-integration.txt" vendor/bin/phpunit -c tests/integration/phpunit.xml.dist --testsuite ${{ matrix.suite }}
 
       # Seconds of each test class from the JUnit log, longest first, so a
       # change of the time limit above follows a measurement. Only reads.
@@ -293,8 +305,10 @@ jobs:
       # plugins, themes and uploads takes, with the number and size of their
       # files, and how large the series of the environment grows (lines,
       # bytes, parts). The numbers are read from the log of this step; the
-      # trees are generated on site a and removed again.
+      # trees are generated on site a and removed again. Once per run: in the
+      # job of the suite code.
       - name: Measure the manifests
+        if: matrix.suite == 'code'
         run: php tests/integration/bin/measure-manifest.php "$AB_IT_ROOT/state.json" a
 
       # Also when the job is cut at its time limit (cancelled, not failed).
