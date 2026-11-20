@@ -653,8 +653,9 @@ final class SyncSafeCallsTest extends TestCase {
 						$call = isset( $methods[ $name ] ) ? '' : ( $parents[ $base ][0] ?? '?' ) . '::' . $name;
 					} elseif ( '$w' === $class ) {
 						// The write side of a kind (AB_MCP_Sync_Engine::writer(), branch 9):
-						// one of WRITERS, classes declared here, and $w is assigned from
-						// writer() only (testTheWriteSideOfAKindIsAClassOfTheTakeover).
+						// one of the registration (AB_MCP_Sync_Writers), classes declared
+						// here, and $w is assigned from writer() or writer_of() only
+						// (testTheWriteSideOfAKindIsAClassOfTheTakeover).
 						$call = '';
 					} else {
 						$call = isset( $declared[ $class ] ) ? '' : $class . '::' . $name;
@@ -710,7 +711,7 @@ final class SyncSafeCallsTest extends TestCase {
 		// The calls through $w (branch 9) count as calls of a class declared
 		// under includes/sync/ (scan()): so every writer is one, and $w is
 		// assigned nowhere but from AB_MCP_Sync_Engine::writer() or
-		// writer_of(), which answer from WRITERS.
+		// writer_of(), which answer from the registration (AB_MCP_Sync_Writers).
 		foreach ( \AB_MCP_Sync_Engine::WRITERS as $kind => $class ) {
 			self::assertTrue( class_exists( $class ), $kind );
 			self::assertStringStartsWith( dirname( __DIR__ ) . '/includes/sync/', (string) ( new \ReflectionClass( $class ) )->getFileName(), $kind );
@@ -726,7 +727,7 @@ final class SyncSafeCallsTest extends TestCase {
 			foreach ( preg_split( '/\R/', $text ) as $n => $line ) {
 				if ( 1 === preg_match( '/\$w\s*=(?!=)/', $line ) ) {
 					++$assigned;
-					self::assertMatchesRegularExpression( '/\$w\s*=\s*(self::writer(_of)?|AB_MCP_Sync_Engine::writer)\(/', $line, basename( $file ) . ':' . ( $n + 1 ) );
+					self::assertMatchesRegularExpression( '/\$w\s*=\s*(self::writer(_of)?|AB_MCP_Sync_Engine::writer(_of)?)\(/', $line, basename( $file ) . ':' . ( $n + 1 ) );
 				}
 			}
 		}

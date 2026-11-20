@@ -178,28 +178,31 @@ final class AB_MCP_Sync_Engine {
 	/**
 	 * The write side of a kind, or null where no step writes the kind: the
 	 * class registered for the subtype, else for the whole kind
-	 * (AB_MCP_Sync_Writers::of(), the seam); without a subtype the whole kind.
+	 * (AB_MCP_Sync_Writers::of(), the seam). The subtype has no default
+	 * (the seam, stage 2): every call names it, and a call without it fails
+	 * loudly; '' (or null) is a line without a subtype, which answers from
+	 * the whole kind (the contract of AB_MCP_Sync_Writers).
 	 *
 	 * @param string      $kind    Kind of the plan (post, term).
-	 * @param string|null $subtype Subtype (a post type, a taxonomy, the name of an option), null for none.
+	 * @param string|null $subtype Subtype (a post type, a taxonomy, the name of an option; AB_MCP_Sync_Writers::WHOLE, a key of all(), for the whole kind), '' or null for none.
 	 * @return string|null The class name.
 	 */
-	public static function writer( $kind, $subtype = null ) {
+	public static function writer( $kind, $subtype ) {
 		return AB_MCP_Sync_Writers::of( $kind, (string) $subtype );
 	}
 
 	/**
 	 * The write side of the object of a journal (its kind), the post's for a
-	 * journal of branch 8 that names no other; by its subtype (subtype_in())
-	 * only where the whole kind has none, a kind registered by subtype. Also
-	 * for the way back (AB_MCP_Sync_Revert::live_ref_of()).
+	 * journal of branch 8 that names no other, by its subtype (subtype_in()):
+	 * the class registered for the subtype, else for the whole kind. Also
+	 * for the way back (AB_MCP_Sync_Revert::live_ref_of(), row_now()).
 	 *
 	 * @param array $journal Journal.
 	 * @return string|null The class name.
 	 */
 	public static function writer_of( array $journal ) {
 		$kind = isset( $journal['object']['kind'] ) ? (string) $journal['object']['kind'] : 'post';
-		return self::writer( $kind ) ?? self::writer( $kind, self::subtype_in( $journal ) );
+		return self::writer( $kind, self::subtype_in( $journal ) );
 	}
 
 	/**
@@ -875,7 +878,7 @@ final class AB_MCP_Sync_Engine {
 	private static function planned_parents( array $items, array $lines, array $ctx ) {
 		$out = array();
 		foreach ( $items as $one ) {
-			$w = self::writer( isset( $one['kind'] ) ? (string) $one['kind'] : '' );
+			$w = self::writer( isset( $one['kind'] ) ? (string) $one['kind'] : '', $one['subtype'] ?? null );
 			if ( ! self::has_rule( $w, 'planned_parent' ) || 'update' !== ( isset( $one['op'] ) ? (string) $one['op'] : '' ) ) {
 				continue;
 			}
@@ -2333,7 +2336,8 @@ final class AB_MCP_Sync_Engine {
 	/**
 	 * The orders of the parts of these kinds, by kind: what the tokens of a
 	 * plan and of a way back cover with the rest of the order of a run
-	 * (Codex round 1 of branch 11, C2).
+	 * (Codex round 1 of branch 11, C2); the order of the writer of the whole
+	 * kind, the default one for a kind registered by subtype.
 	 *
 	 * @param string[] $kinds Kinds.
 	 * @return array<string,string[]>
@@ -2341,7 +2345,7 @@ final class AB_MCP_Sync_Engine {
 	public static function part_orders( array $kinds ) {
 		$out = array();
 		foreach ( array_unique( array_map( 'strval', $kinds ) ) as $kind ) {
-			$out[ $kind ] = self::part_order( self::writer( $kind ) );
+			$out[ $kind ] = self::part_order( AB_MCP_Sync_Writers::whole( $kind ) );
 		}
 		ksort( $out, SORT_STRING );
 		return $out;
@@ -2617,12 +2621,14 @@ final class AB_MCP_Sync_Engine {
 			return $steps;
 		}
 		// The written objects with their kind: a post by its id, a term by
-		// term:<id> (two id spaces; branch 9).
+		// term:<id> (two id spaces; branch 9), and their journal, by whose
+		// writer (writer_of(), with its subtype) they are emptied.
 		$ids = array();
 		foreach ( $steps as $one ) {
 			if ( 'write' === $one['op'] && 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 				$kind  = is_array( $one['parts'] ) && isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post';
-				$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );
+				$w     = self::writer_of( (array) $one['parts'] );
+				$ids[] = array( null === $w ? 'post' : $kind, self::live_of( $w, $one['result']['live_ref'] ), (array) $one['parts'] );
 			}
 		}
 		// In parts, within the work of the call, the cursor kept in the result
@@ -2646,17 +2652,19 @@ final class AB_MCP_Sync_Engine {
 				/* translators: 1: written objects whose caches were emptied so far, 2: all written objects. */
 				return array( 'next' => sprintf( _n( 'The caches of %1$d of %2$d written object were emptied within the work of this call.', 'The caches of %1$d of %2$d written objects were emptied within the work of this call.', $count, 'alphabridge-mcp' ), $i, $count ) . ' Call action=next again to go on with them.' );
 			}
-			list( $kind, $id ) = $ids[ $i ];
-			$w                 = self::writer( $kind );
+			list( $kind, $id, $journal ) = $ids[ $i ];
+			$w                           = self::writer_of( $journal );
 			$result['objects'][ 'post' === $kind ? (string) $id : $kind . ':' . $id ] = $w::post_write( $id );
 		}
-		// The taxonomies of the writers registered for the kinds of WRITERS
-		// (E4 of the seam).
+		// The taxonomies of the writers registered, a kind whole or by
+		// subtype (AB_MCP_Sync_Writers::all(); E4 of the seam).
 		$taxonomies = array();
-		foreach ( array_keys( self::WRITERS ) as $kind ) {
-			$w = self::writer( $kind );
-			if ( null !== $w && defined( $w . '::TAXONOMIES' ) ) {
-				$taxonomies = array_merge( $taxonomies, $w::TAXONOMIES );
+		foreach ( AB_MCP_Sync_Writers::all() as $kind => $classes ) {
+			foreach ( array_keys( $classes ) as $subtype ) {
+				$w = self::writer( $kind, $subtype );
+				if ( defined( $w . '::TAXONOMIES' ) ) {
+					$taxonomies = array_merge( $taxonomies, $w::TAXONOMIES );
+				}
 			}
 		}
 		foreach ( array_unique( $taxonomies ) as $taxonomy ) {
@@ -2981,7 +2989,7 @@ final class AB_MCP_Sync_Engine {
 			return array( 0, null === $found ? null : array( 'seq' => $one['seq'], 'message' => $found ) );
 		}
 		$target  = isset( $one['parts']['object']['target'] ) ? (string) $one['parts']['object']['target'] : '';
-		$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );
+		$w       = self::writer_of( (array) $one['parts'] );
 		$live_id = isset( $one['result']['live_ref'] ) ? self::live_of( $w, $one['result']['live_ref'] ) : 0;
 		$later   = ( $last[ ( $one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) $live_id ] ?? (int) $one['seq'] ) !== (int) $one['seq'];
 		$hash    = self::is_ref( $live_id ) && null !== $w && ! $later ? $w::live_hash( $live_id, $ctx['source'] ) : null;
@@ -3350,7 +3358,7 @@ final class AB_MCP_Sync_Engine {
 	 * @return array|WP_Error
 	 */
 	private static function pair_for_new( array $run, array $item, $live_id, array $prepared, $state ) {
-		$w    = self::writer( $item['kind'] );
+		$w    = self::writer( $item['kind'], $item['subtype'] );
 		$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );
 		$made = AB_MCP_Sync_Pairs::create(
 			array(

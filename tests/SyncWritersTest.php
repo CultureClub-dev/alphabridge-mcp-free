@@ -5,7 +5,8 @@
  * registrations, each refusal with its code and nothing registered; U2 the
  * table of equality, the writers this plugin registers as the engine loads
  * against AB_MCP_Sync_Engine::WRITERS, also in a fresh process, and
- * AB_MCP_Sync_Engine::writer() with a subtype asking the registration (T2).
+ * AB_MCP_Sync_Engine::writer() with a subtype asking the registration (T2),
+ * AB_MCP_Sync_Writers::all() the table of the registration (T6).
  *
  * The registrations made as the engine loads are kept before each case and
  * put back after it (reflection), for the other tests of the process.
@@ -137,22 +138,22 @@ final class SyncWritersTest extends TestCase {
 			self::assertSame( $class, AB_MCP_Sync_Writers::whole( $kind ), $kind );
 			foreach ( self::SUBTYPES as $subtype ) {
 				self::assertSame( $class, AB_MCP_Sync_Writers::of( $kind, $subtype ), $kind . ' ' . $subtype );
-				self::assertSame( AB_MCP_Sync_Engine::writer( $kind ), AB_MCP_Sync_Writers::of( $kind, $subtype ), $kind . ' ' . $subtype );
+				self::assertSame( AB_MCP_Sync_Writers::whole( $kind ), AB_MCP_Sync_Writers::of( $kind, $subtype ), $kind . ' ' . $subtype );
 				self::assertSame( $class, AB_MCP_Sync_Engine::writer( $kind, $subtype ), 'writer() with the subtype: ' . $kind . ' ' . $subtype );
 				self::assertSame( AB_MCP_Sync_Writers::of( $kind, $subtype ), AB_MCP_Sync_Engine::writer( $kind, $subtype ), $kind . ' ' . $subtype );
 			}
-			self::assertSame( $class, AB_MCP_Sync_Engine::writer( $kind ), 'writer() without a subtype: ' . $kind );
+			self::assertSame( $class, AB_MCP_Sync_Writers::whole( $kind ), 'whole(): ' . $kind );
 			self::assertSame( AB_MCP_Sync_Engine::part_orders( array( $kind ) )[ $kind ], AB_MCP_Sync_Engine::part_order( AB_MCP_Sync_Writers::whole( $kind ) ), $kind );
 		}
 		foreach ( array( 'code', 'environment', 'no_such_kind' ) as $kind ) {
-			self::assertNull( AB_MCP_Sync_Engine::writer( $kind ), $kind );
+			self::assertNull( AB_MCP_Sync_Writers::whole( $kind ), $kind );
 			self::assertNull( AB_MCP_Sync_Writers::whole( $kind ), $kind );
 			self::assertNull( AB_MCP_Sync_Writers::of( $kind, '' ), $kind );
 			foreach ( self::SUBTYPES as $subtype ) {
 				self::assertNull( AB_MCP_Sync_Engine::writer( $kind, $subtype ), $kind . ' ' . $subtype );
 			}
 		}
-		self::assertSame( array( 'category', 'post_tag', 'post_format', 'wp_pattern_category', 'wp_theme', 'wp_template_part_area' ), array_values( array_unique( array_merge( ...array_map( static fn( $kind ) => defined( AB_MCP_Sync_Engine::writer( $kind ) . '::TAXONOMIES' ) ? constant( AB_MCP_Sync_Engine::writer( $kind ) . '::TAXONOMIES' ) : array(), array_keys( AB_MCP_Sync_Engine::WRITERS ) ) ) ) ), 'the taxonomies of the registered writers, in the order run_post() forms them (E4)' );
+		self::assertSame( array( 'category', 'post_tag', 'post_format', 'wp_pattern_category', 'wp_theme', 'wp_template_part_area' ), array_values( array_unique( array_merge( ...array_map( static fn( $kind ) => defined( AB_MCP_Sync_Writers::whole( $kind ) . '::TAXONOMIES' ) ? constant( AB_MCP_Sync_Writers::whole( $kind ) . '::TAXONOMIES' ) : array(), array_keys( AB_MCP_Sync_Engine::WRITERS ) ) ) ) ), 'the taxonomies of the registered writers, in the order run_post() forms them (E4)' );
 	}
 
 	public function testWriterAsksTheRegistrationBySubtype(): void {
@@ -160,9 +161,18 @@ final class SyncWritersTest extends TestCase {
 		self::assertSame( self::PW, AB_MCP_Sync_Engine::writer( 'post', 'page' ) );
 		self::assertSame( self::PW, AB_MCP_Sync_Engine::writer( 'post', 'post' ) );
 		self::assertNull( AB_MCP_Sync_Engine::writer( 'post', 'wp_block' ), 'a subtype not registered' );
-		self::assertNull( AB_MCP_Sync_Engine::writer( 'post' ), 'no whole kind' );
+		self::assertNull( AB_MCP_Sync_Writers::whole( 'post' ), 'no whole kind' );
 		self::assertNull( AB_MCP_Sync_Engine::writer( 'post', '' ), 'no whole kind' );
 		self::assertNull( AB_MCP_Sync_Engine::writer( 'term', 'category' ), 'a kind not registered' );
+	}
+
+	public function testAllIsTheTableOfTheRegistrationByKindAndSubtype(): void {
+		$this->restore();
+		self::assertSame( array_map( static fn( string $class ): array => array( AB_MCP_Sync_Writers::WHOLE => $class ), self::CLASSES ), AB_MCP_Sync_Writers::all(), 'this plugin: each kind whole with its class, in the order of WRITERS' );
+		AB_MCP_Sync_Writers::reset();
+		self::assertTrue( AB_MCP_Sync_Writers::register( 'post', array( 'post', 'page' ), self::PW ) );
+		self::assertTrue( AB_MCP_Sync_Writers::register( 'term', array( 'category' ), self::TW ) );
+		self::assertSame( array( 'post' => array( 'post' => self::PW, 'page' => self::PW ), 'term' => array( 'category' => self::TW ) ), AB_MCP_Sync_Writers::all(), 'by subtype' );
 	}
 
 	public function testAFreshProcessThatLoadsTheEngineHasEveryKindWhole(): void {

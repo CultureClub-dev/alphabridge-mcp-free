@@ -208,11 +208,11 @@ e('engine-revert-guard-terms', 'revert_boundary(): the lock of the way back cove
   "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array(), $covers['terms'] );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );",
   "\t\t$guard  = AB_MCP_Sync_Guard::begin( $run_id, $seq, $covers['posts'], $covers['taxonomies'], isset( $covers['options'] ) ? $covers['options'] : array() );\n\t\tif ( is_wp_error( $guard ) ) {\n\t\t\treturn self::fail_step( $run_id, $seq, 'begun', $guard->get_error_message() );", 'it', 'testAnotherWriterOfATermIsRefusedWhileItsStepWrites')
 e('engine-post-by-kind', 'run_post(): the caches of a written term by the writer of its kind', EN,
-  "\t\t\t\t$ids[] = array( null === self::writer( $kind ) ? 'post' : $kind, self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", "\t\t\t\t$ids[] = array( 'post', self::live_of( self::writer( $kind ), $one['result']['live_ref'] ) );", 'it', E_IT1)
+  "\t\t\t\t$ids[] = array( null === $w ? 'post' : $kind, self::live_of( $w, $one['result']['live_ref'] ), (array) $one['parts'] );", "\t\t\t\t$ids[] = array( 'post', self::live_of( $w, $one['result']['live_ref'] ), array() );", 'it', E_IT1)
 e('engine-verify-by-kind', 'written() of run_verify(): a written term against its target by the writer of its kind', EN,
-  "\t\t$w       = self::writer( isset( $one['parts']['object']['kind'] ) ? (string) $one['parts']['object']['kind'] : 'post' );", "\t\t$w       = self::writer( 'post' );", 'it', E_IT1)
+  "\t\t$w       = self::writer_of( (array) $one['parts'] );", "\t\t$w       = self::writer_of( array() );", 'it', E_IT1)
 e('engine-pair-by-kind', 'pair_for_new(): the base of a new term by the writer of its kind', EN,
-  "\t\t$w    = self::writer( $item['kind'] );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", "\t\t$w    = self::writer( 'post' );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", 'it', E_IT1)
+  "\t\t$w    = self::writer( $item['kind'], $item['subtype'] );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", "\t\t$w    = self::writer( 'post', 'post' );\n\t\t$hash = null === $w ? null : $w::live_hash( $live_id, self::context( $run )['source'] );", 'it', E_IT1)
 
 # --------------------------------------------- the plan
 e('plan-term-taxonomy', 'verdict(): a term of a taxonomy the term engine does not write is locked with Z8d', PU,

@@ -459,8 +459,8 @@ final class AB_MCP_Sync_Push {
 			$items[ $n ]['menu_after'] = $after;
 		}
 		// A path two attachments of the run name, by the rule shared_paths()
-		// of the writer of the kind (D4 of the seam): both are locked here.
-		foreach ( self::writer_rule( array( 'kind' => 'attachment', 'subtype' => '' ), 'shared_paths', array( $items ), array() ) as $path => $ns ) {
+		// of each writer of the kind (D4 of the seam): both are locked here.
+		foreach ( self::shared_paths( $items ) as $path => $ns ) {
 			$held = AB_MCP_Sync_Kinds::lock( 'attachment', 'shared_path' );
 			foreach ( $ns as $n ) {
 				if ( isset( $items[ $n ] ) ) {
@@ -1011,6 +1011,24 @@ final class AB_MCP_Sync_Push {
 			}
 			$asked[ $w ] = true;
 			$out        += self::writer_rule( $item, $rule, $args, array() );
+		}
+		return $out;
+	}
+
+	/**
+	 * The paths two attachments of the plan name (attachment:shared_path):
+	 * the answers of the rule shared_paths() of each writer registered for
+	 * the kind attachment, whole or by subtype (AB_MCP_Sync_Writers::all()),
+	 * merged by path (the first answer for a path holds); none where no
+	 * writer of the kind has the rule.
+	 *
+	 * @param array $items The items of the plan by entry number.
+	 * @return array<string,int[]> The entry numbers by path.
+	 */
+	private static function shared_paths( array $items ) {
+		$out = array();
+		foreach ( array_keys( AB_MCP_Sync_Writers::all()['attachment'] ?? array() ) as $subtype ) {
+			$out += self::writer_rule( array( 'kind' => 'attachment', 'subtype' => $subtype ), 'shared_paths', array( $items ), array() );
 		}
 		return $out;
 	}

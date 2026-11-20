@@ -120,6 +120,6 @@ final class SyncWriterOfTest extends TestCase {
 		self::assertSame( $subtype, self::subtype_in( $journal ), 'the subtype the core reads' );
 		self::assertSame( $class, self::writer_of( $journal ), 'writer_of()' );
 		self::assertSame( $class, AB_MCP_Sync_Engine::writer( $object['kind'] ?? 'post', $subtype ), 'writer( $kind, $subtype )' );
-		self::assertNull( AB_MCP_Sync_Engine::writer( $object['kind'] ?? 'post' ), 'no whole kind' );
+		self::assertNull( AB_MCP_Sync_Writers::whole( $object['kind'] ?? 'post' ), 'no whole kind' );
 	}
 }

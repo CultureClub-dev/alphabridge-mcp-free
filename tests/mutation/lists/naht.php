@@ -28,6 +28,12 @@
  * writer, so the plan of a way back reads no row through a writer it
  * lacks (n-zeile-jetzt), and revert_boundary() fails the step of such a
  * kind without putting anything back (n-rueckweg); both held by I2 (a) in
+ * SyncWayBackWithoutWriterTest. T6 part 1 (P3, the root): the writer asked
+ * with the subtype in phase 7 for each written object (n-p3-objekt) and for
+ * the taxonomies of each writer registered (n-p3-taxonomien), in the check
+ * of the run (n-p3-pruefung), for the pair of a new object (n-p3-paar-neu)
+ * and for the row the token of a way back binds (n-p3-zeile); each mutation
+ * asks without the subtype as before, each held by (P3) in
  * SyncWayBackWithoutWriterTest. Written by hand.
  *
  * Not here: n-ganz-vor-teil (of() asks the whole kind before the subtype).
@@ -328,5 +334,50 @@ return array(
 		'replace' => "\t\tif ( false && null === \$w ) {\n\t\t\t/* translators: %s: kind of the object, as the tools name it (post, term, …). */\n\t\t\treturn self::fail_step( \$run_id, \$seq, 'begun', sprintf( __( 'No step of this version writes the kind %s; nothing is put back.'",
 		'run'     => $wb( 'testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse' ),
 		'expect'  => '/testTheWayBackOfAWholeMixedRunPutsBackThePostAndThePageAndNothingElse/',
+	),
+	array(
+		'id'      => 'naht/n-p3-objekt',
+		'clause'  => 'run_post(): phase 7 empties each written object by the writer of its journal, with its subtype',
+		'file'    => $en,
+		'search'  => "\t\t\t\$w                           = self::writer_of( \$journal );",
+		'replace' => "\t\t\t\$w                           = self::writer( \$kind, '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-taxonomien',
+		'clause'  => 'run_post(): phase 7 empties the taxonomies of each writer registered, whole or by subtype',
+		'file'    => $en,
+		'search'  => "\t\t\t\t\$w = self::writer( \$kind, \$subtype );",
+		'replace' => "\t\t\t\t\$w = self::writer( \$kind, '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-pruefung',
+		'clause'  => 'written(): the check of the run hashes each written object by the writer of its journal, with its subtype',
+		'file'    => $en,
+		'search'  => "\t\t\$w       = self::writer_of( (array) \$one['parts'] );",
+		'replace' => "\t\t\$w       = self::writer( (string) ( \$one['parts']['object']['kind'] ?? 'post' ), '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-paar-neu',
+		'clause'  => 'pair_for_new(): the pair of a new object is based on its hash by the writer of its subtype',
+		'file'    => $en,
+		'search'  => "\t\t\$w    = self::writer( \$item['kind'], \$item['subtype'] );",
+		'replace' => "\t\t\$w    = self::writer( \$item['kind'], '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
+	),
+	array(
+		'id'      => 'naht/n-p3-zeile',
+		'clause'  => 'row_now(): the token of a way back binds the row of an object by the writer of its journal, with its subtype',
+		'file'    => $rv,
+		'search'  => "\t\t\$w = AB_MCP_Sync_Engine::writer_of( array( 'object' => \$object ) );",
+		'replace' => "\t\t\$w = AB_MCP_Sync_Engine::writer( isset( \$object['kind'] ) ? (string) \$object['kind'] : 'post', '' );",
+		'run'     => $wb( 'testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost' ),
+		'expect'  => '/testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost/',
 	),
 );

@@ -18,7 +18,9 @@
  *   a stage is refused.
  * - of( $kind, $subtype ): the class of the subtype, else of the whole kind,
  *   else null. whole( $kind ): the class of the whole kind; null for a kind
- *   registered by subtype, even with one class for every subtype.
+ *   registered by subtype, even with one class for every subtype. all(): the
+ *   table, the class by kind, then by subtype (WHOLE for the whole kind), in
+ *   the order of registration.
  * - Codes of a refusal: ab_mcp_sync_writer_invalid (a name),
  *   ab_mcp_sync_writer_class (no class loaded), ab_mcp_sync_writer_locked
  *   (an entry with a stage), ab_mcp_sync_writer_whole (whole and by
@@ -80,6 +82,13 @@ final class AB_MCP_Sync_Writers {
 	 */
 	public static function whole( $kind ) {
 		return self::$writers[ (string) $kind ][ self::WHOLE ] ?? null;
+	}
+
+	/**
+	 * @return array<string,array<string,string>> The class by kind, then by subtype (WHOLE: the whole kind), in the order of registration.
+	 */
+	public static function all() {
+		return self::$writers;
 	}
 
 	/**

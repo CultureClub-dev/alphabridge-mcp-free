@@ -24,6 +24,16 @@
  *   preview, the states and texts of the steps and the end of the run are
  *   read to go on, not asserted.
  *
+ * (P3, step T6) A run with post alone registered, by its subtypes, forward
+ * and back: a post (its text, and a category set on B), a page (its text)
+ * and a new page. No answer is an error, the run closes as done, the
+ * category of the post is written on A, phase 7 empties the caches of its
+ * taxonomies, and the pair of the new page is based on its hash here; the
+ * token of the way back binds the row of the post (a change after the
+ * preview refuses the confirmation), and the way back, run to its end,
+ * leaves the post and the page as before the run. No stand-in for the test
+ * of the move with the real registrations.
+ *
  * As the setup, not as a promise about the plan: each way back and the
  * continuation run at least one step under next, so each reaches
  * revert_boundary(); a plan of no step would leave a case green without it.
@@ -355,7 +365,7 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		return $begun;
 	}
 
-	/** A run of these plan arguments, confirmed and led to its close with every writer, each answer no error: its id. */
+	/** A run of these plan arguments, confirmed and led to its close, each answer no error: its id. */
 	private static function forward( array $args ): int {
 		$preview = self::gated( 'wp_site_push', $args );
 		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
@@ -682,5 +692,90 @@ final class SyncWayBackWithoutWriterTest extends TestCase {
 		}
 		self::assertGreaterThan( 0, $ran, 'A step of the continuation ran under next, so revert_boundary() was reached (the setup, not a promise about the plan).' );
 		self::assertSame( $written, self::terms_a( $on_a ), 'Nothing of a term put back, the interrupted step as little as the open ones.' );
+	}
+
+	/**
+	 * Prüft: (P3) a run of a post (its text, and a category set on B), a
+	 * page (its text) and a new page, planned and led with post alone
+	 * registered, by its subtypes: no answer is an error, the run closes as
+	 * done, the category of the post is on A, phase 7 empties the caches of
+	 * the taxonomy category, and the pair of the new page has its hash here
+	 * as its base. Its way back: the post changed on A after the preview,
+	 * the confirmation is refused (ab_mcp_confirm_mismatch); the change
+	 * undone, the way back runs to its end without an error, and the post
+	 * and the page are as before the run but for the time of the change,
+	 * the category of the post as well. Read, not asserted: the end of the
+	 * way back (the new page stays as a rest).
+	 * Sonst: a writer asked without the subtype ends phase 7 with an
+	 * internal error, empties no taxonomy, finds each written post changed,
+	 * bases the new pair on 64 zeros, or binds no row in the way back.
+	 */
+	public function testARunOfAPostAndPagesWithPostAloneGoesOverAndBackAndItsWayBackBindsThePost(): void {
+		self::pair();
+		$made = self::both(
+			array(
+				array( 'op' => 'insert_term', 'name' => 'Themen', 'taxonomy' => 'category', 'as' => 'kat' ),
+				array( 'op' => 'insert_post', 'args' => self::post( 'post', 'notiz', self::para( 'Alt' ) ), 'as' => 'post' ),
+				array( 'op' => 'insert_post', 'args' => self::post( 'page', 'ueber', self::para( 'Alt' ) ), 'as' => 'page' ),
+			)
+		);
+		$a = array_map( 'intval', $made['a'] );
+		$b = array_map( 'intval', $made['b'] );
+		self::paired( self::staged() );
+		self::b(
+			array(
+				array( 'op' => 'set_terms', 'post' => $b['post'], 'terms' => array( $b['kat'] ), 'taxonomy' => 'category' ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b['post'], 'post_content' => self::para( 'Neu' ) ) ),
+				array( 'op' => 'update_post', 'args' => array( 'ID' => $b['page'], 'post_content' => self::para( 'Neu' ) ) ),
+				array( 'op' => 'insert_post', 'args' => self::post( 'page', 'kontakt', self::para( 'Neu' ) ) ),
+			)
+		);
+		$report  = self::report( self::staged() );
+		$args    = self::args( $report, array( self::entry( $report, 'post', 'post', 'notiz' ), self::entry( $report, 'post', 'page', 'ueber' ), self::entry( $report, 'post', 'page', 'kontakt' ) ) );
+		$ids     = array( 'post' => $a['post'], 'page' => $a['page'] );
+		$terms   = static fn(): array => AB_MCP_IT_Sites::rows( 'a', 'term_relationships', array( 'object_id' => (string) $a['post'] ) );
+		$before  = array( self::rows_a( $ids ), $terms() );
+		$emptied = array();
+		$spy     = static function ( $term_ids, $taxonomy ) use ( &$emptied ): void {
+			if ( in_array( 'run_post', array_column( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ), 'function' ), true ) ) {
+				$emptied[] = (string) $taxonomy;
+			}
+		};
+		self::only_post();
+		add_action( 'clean_term_cache', $spy, 10, 2 );
+		try {
+			$push = self::forward( $args );
+		} finally {
+			remove_action( 'clean_term_cache', $spy, 10 );
+		}
+		$run = AB_MCP_Sync_Run::get( $push );
+		self::assertSame( 'closed_done', $run['state'], 'Every written object hashes to its target.' );
+		self::assertSame( array( (string) get_term( $a['kat'], 'category' )->term_taxonomy_id ), array_column( $terms(), 'term_taxonomy_id' ), 'The category of the post is written on A.' );
+		self::assertContains( 'category', $emptied, 'Phase 7 empties the caches of the taxonomy of the post.' );
+		$new = (int) AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'post_name' => 'kontakt' ) )[0]['ID'];
+		self::assertSame( \AB_MCP_Sync_Post_Writer::live_hash( $new, AB_MCP_Sync_Engine::context( $run )['source'] ), \AB_MCP_Sync_Pairs::find_live( (string) $run['source_id'], 'post', (string) $new )['base_live'], 'The pair of the new page is based on its hash here, not on 64 zeros.' );
+		// The way back: the post changed after its preview refuses the
+		// confirmation; that change undone, a way back anew to its end.
+		$back    = array(
+			'action' => 'plan',
+			'run_id' => $push,
+		);
+		$preview = self::gated( 'wp_site_revert', $back );
+		self::assertIsArray( $preview, is_wp_error( $preview ) ? $preview->get_error_message() : '' );
+		$wrote = (string) AB_MCP_IT_Sites::rows( 'a', 'posts', array( 'ID' => (string) $a['post'] ) )[0]['post_content'];
+		AB_MCP_IT_Sync_Steps::run( 'a', array( array( 'op' => 'raw_post', 'post' => $a['post'], 'set' => array( 'post_content' => self::para( 'Fremd' ) ) ) ) );
+		wp_cache_flush();
+		$refused = self::gated( 'wp_site_revert', $back + array( 'confirm_token' => $preview['confirm_token'] ) );
+		self::assertSame( 'ab_mcp_confirm_mismatch', is_wp_error( $refused ) ? $refused->get_error_code() : null, 'The token of the way back binds the row of the post.' );
+		AB_MCP_IT_Sync_Steps::run( 'a', array( array( 'op' => 'raw_post', 'post' => $a['post'], 'set' => array( 'post_content' => $wrote ) ) ) );
+		wp_cache_flush();
+		$answer = self::revert( $push );
+		for ( $i = 0; $i < 12 && ! in_array( $answer['state'], AB_MCP_Sync_Schema::CLOSED, true ); $i++ ) {
+			$answer = self::gated( 'wp_site_revert', array( 'action' => 'next', 'run_id' => (int) $answer['run_id'] ) );
+			self::assertIsArray( $answer, is_wp_error( $answer ) ? $answer->get_error_code() . ': ' . $answer->get_error_message() : '' );
+		}
+		self::assertContains( $answer['state'], AB_MCP_Sync_Schema::CLOSED, 'The way back runs to its end.' );
+		self::back_and_left( $ids, $before[0], array() );
+		self::assertSame( $before[1], $terms(), 'The category of the post is back as before the run.' );
 	}
 }
