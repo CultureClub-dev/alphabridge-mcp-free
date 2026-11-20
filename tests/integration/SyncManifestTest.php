@@ -403,7 +403,7 @@ final class SyncManifestTest extends TestCase {
 		self::assertSame( array( 'equal', 'none', array() ), self::said( $env['theme_choice:theme_choice'] ) );
 
 		$e = $env['plugin:ab-it-basis'];
-		self::assertSame( array( 'differs', 'locked', array( 'env:plugin' ) ), self::said( $e ), 'F4: the same version, other files.' );
+		self::assertSame( array( 'differs', 'none', array() ), self::said( $e ), 'F4: the same version, other files; without a pair no side is named and nothing is locked by a stage (Z8b branch 5).' );
 		self::assertSame( array( 'files' ), $e['differs'] );
 		self::assertSame( array( 'ab-it-basis.php' ), $e['paths']['differs'] );
 		self::assertSame( array( 'neu-a.php', 'neu-b.php' ), $e['paths']['only_staging'] );
@@ -510,7 +510,7 @@ final class SyncManifestTest extends TestCase {
 		self::assertSame( (int) $schreiber['id'], $e['pair']['id'] );
 
 		$e = $env['plugin:ab-it-daten'];
-		self::assertSame( array( 'changed_on_staging', 'locked', array( 'env:plugin' ) ), self::said( $e ) );
+		self::assertSame( array( 'changed_on_staging', 'take_over', array() ), self::said( $e ), 'Z8b branch 5: the files changed on staging and unchanged here are what the swap takes over.' );
 		self::assertSame( array( 'data/export.csv' ), $e['paths']['only_live'], 'F47: the path the new version does not have.' );
 		self::assertStringContainsString( 'into the backup', $e['words'] );
 

@@ -79,6 +79,146 @@ final class AB_MCP_Store_Inputs {
 		'pattern'   => '/^[0-9a-f]{64}\z/',
 	);
 
+	/** The id of a package, as the import names it (AB_MCP_Sync_Key::ID). */
+	const PACKAGE = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => null,
+		'pattern'   => '/^[0-9a-f]{32}\z/',
+	);
+
+	/** The name of a unit of code: one name of a folder or file, as a tree of the store takes it (no path, no control character). */
+	const UNIT_NAME = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => 255,
+		'pattern'   => '#^[^/\\\\\x00-\x1F\x7F]+\z#',
+	);
+
+	/** The kind of a unit of code the swap takes over. */
+	const UNIT_KIND = array(
+		'type'      => 'string',
+		'empty'     => false,
+		'max_bytes' => null,
+		'in'        => array( 'plugin', 'theme' ),
+	);
+
+	/** A step of a run after its check (the first step): its number. */
+	const STEP = array(
+		'type'   => 'int',
+		'digits' => false,
+		'min'    => 2,
+		'max'    => null,
+	);
+
+	/**
+	 * A unit of a plan of the code: which unit, staged or swapped, made or
+	 * replaced, its pair as planned, the unit of the staging site by its
+	 * hash, whether its code runs here and whether the person released it
+	 * (rows plan.code and swap.prepare).
+	 */
+	const CODE_UNIT = array(
+		'type'   => 'record',
+		'fields' => array(
+			'seq'          => self::STEP,
+			'op'           => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'stage', 'swap' ),
+			),
+			'stage_seq'    => array( 'nullable' => true ) + self::STEP,
+			'n'            => self::RUN,
+			'kind'         => self::UNIT_KIND,
+			'ref'          => self::UNIT_NAME,
+			'unit_op'      => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'create', 'update', 'edit' ),
+			),
+			'pair_id'      => array( 'nullable' => true ) + self::RUN,
+			'pair_hash'    => array( 'nullable' => true ) + self::SHA256,
+			'staging_hash' => self::SHA256,
+			'version'      => array(
+				'type'   => 'record',
+				'fields' => array(
+					'staging' => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => 1024,
+						'nullable'  => true,
+					),
+					'live'    => array(
+						'type'      => 'string',
+						'empty'     => true,
+						'max_bytes' => 1024,
+						'nullable'  => true,
+					),
+				),
+				'extra'  => false,
+			),
+			'runs'         => array( 'type' => 'bool' ),
+			'accept'       => array( 'type' => 'bool' ),
+		),
+		'extra'  => false,
+	);
+
+	/** The packages of the environment of a report, in order (rows plan.code and swap.prepare). */
+	const CODE_ENV = array(
+		'type'      => 'list',
+		'empty'     => false,
+		'item'      => self::PACKAGE,
+		'unique'    => true,
+		'max_items' => null,
+	);
+
+	/**
+	 * A stage in the protected store: its group, tree and hash, where it came
+	 * from and how large it is (rows step.stage and swap.prepare).
+	 */
+	const STAGE_REF = array(
+		'type'   => 'record',
+		'fields' => array(
+			'gid'    => self::PACKAGE,
+			'name'   => self::UNIT_NAME,
+			'hash'   => self::SHA256,
+			'source' => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'wordpress.org', 'packages' ),
+			),
+			'files'  => self::RUN,
+			'bytes'  => self::COUNT,
+		),
+		'extra'  => false,
+	);
+
+	/** A version in the journal of a swap: where it lies, its group and name in the store, its hash and its identity (form, device, inode). */
+	const SWAP_TREE = array(
+		'type'   => 'record',
+		'fields' => array(
+			'path' => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+			),
+			'gid'  => self::PACKAGE,
+			'name' => self::UNIT_NAME,
+			'hash' => self::SHA256,
+			'form' => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'folder', 'file' ),
+			),
+			'dev'  => self::COUNT,
+			'ino'  => self::COUNT,
+		),
+		'extra'  => false,
+	);
+
 	/** The names in a folder, as scandir() gives them: texts, none twice. */
 	const NAMES = array(
 		'type'      => 'list',
@@ -789,17 +929,238 @@ final class AB_MCP_Store_Inputs {
 			'field'    => 'the bytes of a file of a group: its size, of a gzip file the raw size its trailer names (ISIZE)',
 			'form'     => self::COUNT,
 		),
+		/* -------- the run of the code and what it reads (Z8b branch 5) */
+		'plan.code'                => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Ops::item(), from the plan of the run (AB_MCP_Sync_Run::get())',
+			'field'    => 'code of the plan of a run of the code: the packages of the environment of its report (the signed manifests), its packages of code, and each step of a unit: which unit, staged or swapped, made or replaced, its pair as planned, the unit of the staging site by its hash, whether its code runs here and whether the person released it (accept)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'env'      => self::CODE_ENV,
+					'packages' => array(
+						'type'      => 'list',
+						'empty'     => true,
+						'item'      => self::PACKAGE,
+						'unique'    => true,
+						'max_items' => null,
+					),
+					'units'    => array(
+						'type'      => 'list',
+						'empty'     => false,
+						'item'      => self::CODE_UNIT,
+						'unique'    => false,
+						'max_items' => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'step.stage'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Ops::staged(), from the journal of a step that stages a unit (steps.parts)',
+			'field'    => 'the stage a step names: its unit, and the group, tree and hash of the stage in the protected store, where it came from and how large it is; what the check of the stage and the swap of the unit go on with',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'unit'  => array(
+						'type'   => 'record',
+						'fields' => array(
+							'kind' => self::UNIT_KIND,
+							'ref'  => self::UNIT_NAME,
+							'op'   => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => null,
+								'in'        => array( 'stage' ),
+							),
+						),
+						'extra'  => false,
+					),
+					'stage' => self::STAGE_REF,
+				),
+				'extra'  => false,
+			),
+		),
+		'step.swap'                => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::journal_of() (for back() and AB_MCP_Sync_Code_Ops::finding()), from the journal of a swap step (steps.parts), as rename_marked() wrote it',
+			'field'    => 'the swap a step names: its unit, when it began, its target, the old and the new version, and the main files that ran at its begin; what its way back moves',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'unit'   => array(
+						'type'   => 'record',
+						'fields' => array(
+							'kind' => self::UNIT_KIND,
+							'ref'  => self::UNIT_NAME,
+							'op'   => array(
+								'type'      => 'string',
+								'empty'     => false,
+								'max_bytes' => null,
+								'in'        => array( 'swap' ),
+							),
+						),
+						'extra'  => false,
+					),
+					'since'  => self::COUNT,
+					'target' => array(
+						'type'      => 'string',
+						'empty'     => false,
+						'max_bytes' => null,
+					),
+					'old'    => self::SWAP_TREE,
+					'new'    => self::SWAP_TREE,
+					'active' => array(
+						'type'      => 'list',
+						'empty'     => true,
+						'item'      => array(
+							'type'      => 'string',
+							'empty'     => false,
+							'max_bytes' => null,
+						),
+						'unique'    => true,
+						'max_items' => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'site.active_plugins'      => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::active_plugins(), the row of the option active_plugins unpacked without classes',
+			'field'    => 'the main files of the plugins that run on this site: whether code of a unit runs (the release of its swap), and which of its main files run at the begin and at the end of a swap',
+			'form'     => array(
+				'type'  => 'map',
+				'empty' => true,
+				'key'   => self::COUNT,
+				'value' => array(
+					'type'      => 'string',
+					'empty'     => false,
+					'max_bytes' => null,
+				),
+			),
+		),
+		'site.theme'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::theme(), the rows of the options stylesheet and template',
+			'field'    => 'the theme that runs on this site and its parent: whether code of a theme runs',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 1024,
+			),
+		),
+		'unit.version'             => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Ops::order(), the version of a unit on the staging site (its signed line) and on this site (its line of the report, its head)',
+			'field'    => 'a version as version_compare() is asked on it: whether the staging site has an older version than this site (no takeover goes down a version, E9)',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => 64,
+				'pattern'   => '/^[0-9][0-9A-Za-z.+_-]*\z/',
+			),
+		),
+		/* ------------------------------ the swap of a unit (Z8b branch 5) */
+		'swap.opcache'             => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::invalidate(), the answer of AB_MCP_Own_Files::invalidate_opcache()',
+			'field'    => 'whether a PHP file was taken out of OPcache: only invalidated or not_active let a swap of running code go on (Z13)',
+			'form'     => array(
+				'type'      => 'string',
+				'empty'     => false,
+				'max_bytes' => null,
+				'in'        => array( 'invalidated', 'not_active', 'not_possible' ),
+			),
+		),
+		'swap.probe'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::reached(), the answer of AB_MCP_Php_Probe::run() before a swap',
+			'field'    => 'the rows of the test requests, each with its target and result: which targets were reached before a swap (Z14)',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'targets' => array(
+						'type'      => 'list',
+						'empty'     => false,
+						'item'      => array(
+							'type'   => 'record',
+							'fields' => array(
+								'target' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+								),
+								'result' => array(
+									'type'      => 'string',
+									'empty'     => false,
+									'max_bytes' => null,
+									'in'        => array( 'ok', 'fatal', 'stopped', 'unreachable', 'not_probed' ),
+								),
+							),
+							'extra'  => true,
+						),
+						'unique'    => false,
+						'max_items' => null,
+					),
+				),
+				'extra'  => true,
+			),
+		),
+		'swap.lock'                => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::lock_held(), the row of the option of AB_MCP_Change_Lock; AB_MCP_Change_Lock::held_elsewhere(), that option as get_option() gives it',
+			'field'    => 'the time the lock for changes of the code was taken or last renewed, as WordPress writes it: whether the lock a swap holds has its row (V7), and the time a refusal names where another holds it',
+			'form'     => array(
+				'type'   => 'int',
+				'digits' => true,
+				'min'    => 1,
+				'max'    => null,
+			),
+		),
+		'swap.prepare'             => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Code_Swap::prepare(), from its caller: the item of the step (AB_MCP_Sync_Code_Ops::item()), the stage of its journal (staged()) and the time of the call',
+			'field'    => 'what a swap is asked with: the run, the unit of the swap step, the packages of the environment of the report, the stage the journal of its stage step names, and when the swap has to be over (on the clock of the swap): whether prepare() takes any lock at all',
+			'form'     => array(
+				'type'   => 'record',
+				'fields' => array(
+					'run_id' => self::RUN,
+					'unit'   => self::CODE_UNIT,
+					'env'    => self::CODE_ENV,
+					'stage'  => self::STAGE_REF,
+					'until'  => array(
+						'type' => 'number',
+						'min'  => 0,
+						'max'  => null,
+					),
+				),
+				'extra'  => false,
+			),
+		),
+		'read.until'               => array(
+			'consumer' => 'code',
+			'source'   => 'AB_MCP_Sync_Deadline::at(), from its caller: AB_MCP_Sync_Code_Swap::checked(), until less keep (R12)',
+			'field'    => 'the deadline of the readings of a swap after its test requests, a time of the clock of the budget (seconds, 0 or more): whether a reading of the stage and of the signed manifest takes its next step, or stops',
+			'form'     => array(
+				'type' => 'number',
+				'min'  => 0,
+				'max'  => null,
+			),
+		),
 	);
 
 	/**
 	 * The value of an input in the form of its row, or null (unknown); null
 	 * also for an id the table has not.
 	 *
-	 * @param string $id    Row.
-	 * @param mixed  $value Value as read.
+	 * @param string     $id       Row.
+	 * @param mixed      $value    Value as read.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at() (AB_MCP_Shape::read(); R12 of Z8b branch 5).
 	 * @return mixed|null
 	 */
-	public static function read( $id, $value ) {
-		return is_string( $id ) && isset( self::TABLE[ $id ] ) ? AB_MCP_Shape::read( $value, self::TABLE[ $id ]['form'] ) : null;
+	public static function read( $id, $value, $deadline = null ) {
+		return is_string( $id ) && isset( self::TABLE[ $id ] ) ? AB_MCP_Shape::read( $value, self::TABLE[ $id ]['form'], $deadline ) : null;
 	}
 }

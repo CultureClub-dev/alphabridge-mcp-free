@@ -41,6 +41,13 @@ final class StoreClockAndReadersTest extends TestCase {
 		'includes/sync/class-sync-manifest.php',
 		'includes/sync/class-sync-code-stage.php',
 		'includes/sync/class-sync-code-package.php',
+		'includes/sync/class-sync-code-kind.php',
+		'includes/sync/class-sync-code-ops.php',
+		'includes/sync/class-sync-code-plan.php',
+		'includes/sync/class-sync-code-swap.php',
+		'includes/sync/class-sync-push.php',
+		'includes/sync/class-sync-deadline.php',
+		'includes/sync/class-sync-step.php',
 	);
 
 	/**
@@ -85,6 +92,24 @@ final class StoreClockAndReadersTest extends TestCase {
 			'AB_MCP_Sync_Code_Stage_Calls::run' => 'the time limit of php -l within one call (LINT_TIMEOUT); an end of it is unavailable, never passed',
 		),
 		'includes/sync/class-sync-code-package.php' => array(),
+		'includes/sync/class-sync-code-kind.php'    => array(),
+		'includes/sync/class-sync-code-ops.php'     => array(),
+		'includes/sync/class-sync-code-plan.php'    => array(),
+		'includes/sync/class-sync-code-swap.php'    => array(
+			'AB_MCP_Sync_Code_Swap::clock'        => 'the budget of a swap within one call (prepare(): the time left, twice the test requests before and the reserve, E5 2), with its seam $clock for tests; checked: no finite number is unknown (code:clock), nothing is swapped',
+			'AB_MCP_Sync_Code_Swap::probe_before' => 'the deadline of the test requests before a swap (AB_MCP_Php_Probe::run(), until) from the time left of the same call less the reserve; never stored',
+		),
+		'includes/sync/class-sync-push.php'         => array(),
+		'includes/sync/class-sync-deadline.php'     => array(
+			'AB_MCP_Sync_Deadline::now' => 'the deadline of the readings of a swap within one call (R12 of branch 5: until − keep, the readings of the stage and of the signed manifest), on the clock of the budget of AB_MCP_Sync_Env, the swap\'s in the tests; checked: no finite number is unknown (ab_mcp_read_clock), the reading stops before its next step; never stored, and no validity of a package or proof of the store is decided by it',
+		),
+		// The helpers of the steps (R12b part 3.1) read the clock of the budget
+		// only through AB_MCP_Sync_Deadline::left(), never a clock of their own.
+		'includes/sync/class-sync-step.php'         => array(),
+		'includes/sync/class-sync-engine.php'       => array(
+			'AB_MCP_Sync_Engine::now'        => 'the budget of work of one call (self::$work: when a call stops writing, checking or verifying and the seconds its answer names to wait), with its seam $clock for tests; measured within one call, never stored or read by a later call',
+			'AB_MCP_Sync_Engine::run_verify' => 'the deadline of the PHP probe of the verify (AB_MCP_Php_Probe::run(), until) from the time left of the same call; never stored',
+		),
 		'includes/sync/class-sync-file-manifest.php' => array(
 			'AB_MCP_Sync_File_Manifest::now' => 'the budget of a reading of a unit within one call (its deadline, due()), which branch 4 uses for the live unit, the unit built and the tree to check; checked: no finite number is unknown, the reading ends as at the end of its time (Codex confirmation 1, B-3)',
 		),
@@ -131,7 +156,24 @@ final class StoreClockAndReadersTest extends TestCase {
 		'AB_MCP_Sync_Backup::group'             => array( array( 'backup.run' ), array( self::IT ) ),
 		'AB_MCP_Sync_Engine::context'           => array( array( 'period.clock' ), array( self::RUN ) ),
 		'AB_MCP_Sync_Engine::restore_part'      => array( array( 'period.clock' ), array( self::RUN ) ),
+		'AB_MCP_Sync_Code_Ops::item'            => array( array( 'plan.code' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Ops::order'           => array( array( 'unit.version' ), array( self::IT ), 'its one consumer is AB_MCP_Sync_Code_Plan::version_op(), on which unit() locks; the driver goes through it' ),
+		'AB_MCP_Sync_Code_Ops::run'             => array( array( 'runs.run_id' ), array( 'tests/SyncCodeOpsTest.php::testAStepOfARunNotOfItsFormOrWithFieldsNotReadStagesNothing' ), 'the run of a step is the row the call read under its lock (fresh()); a run_id not of its form refuses before anything is staged or swapped, the step stays planned' ),
+		'AB_MCP_Sync_Code_Ops::staged'          => array( array( 'step.stage' ), array( self::IT ) ),
 		'AB_MCP_Sync_Code_Package::index'      => array( array( 'code.index' ), array( self::IT ) ),
+		'AB_MCP_Sync_Code_Plan::of'             => array( array( 'plan.code' ), array( self::UNIT ), 'the plan made is read back in the form of its row before it is returned; a plan not of it makes no run (the same row item() reads at every step)' ),
+		'AB_MCP_Sync_Code_Swap::active_plugins' => array( array( 'site.active_plugins' ), array( self::IT ) ),
+		'AB_MCP_Sync_Code_Swap::theme'          => array( array( 'site.theme' ), array( self::IT ) ),
+		'AB_MCP_Sync_Code_Swap::invalidate'     => array( array( 'swap.opcache' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::lock_held'      => array( array( 'swap.lock' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::reached'        => array( array( 'swap.probe' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::journal_of'     => array( array( 'step.swap' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::prepare'        => array( array( 'swap.prepare' ), array( self::UNIT ) ),
+		'AB_MCP_Sync_Code_Swap::rename_marked'  => array( array( 'period.clock' ), array(), 'the beginning of the swap (since, for the note of the replacement and the journal) from AB_MCP_Sync_Run::now(), which reads the clock and is driven there; the engine asks the same clock first (AB_MCP_Sync_Engine::context()), and one that gives no time here ends before the note with clock_unknown(), nothing written or moved (the fault ways of the swap, part D2)' ),
+		'AB_MCP_Sync_Code_Swap::swapped'        => array( array( 'period.clock' ), array(), 'whether the clock of the run gives a time, from AB_MCP_Sync_Run::now(), which reads the clock and is driven there, before the writes that prepare the swap in the protected store (Codex D4, finding 4); one that gives no time ends with clock_unknown(), nothing written or moved; rename_marked() reads it again for the time the swap begins (SyncCodeRunTest, the clock after prepare() and during the rights)' ),
+		'AB_MCP_Sync_Code_Swap::run'            => array( array( 'swap.prepare' ), array(), 'the same value prepare() reads first and refuses where it is not of its form (code:swap_args, driven there with every wrong form) before any lock is taken; run() takes from it only the early refusal of a unit made new, and a value not of its form goes on to that refusal of prepare()' ),
+		'AB_MCP_Sync_Deadline::at'              => array( array( 'read.until' ), array( self::UNIT ) ),
+		'AB_MCP_Change_Lock::held_elsewhere'    => array( array( 'swap.lock' ), array(), 'its one consumer is the words of ab_mcp_change_busy: a time not of its form names no time; driven in tests/standalone-lifecycle/activation-guard-test.php (C1)' ),
 		'AB_MCP_Sync_Code_Stage::from_org'      => array( array( 'stage.version' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Stage::head_refusal'  => array( array( 'stage.head' ), array( self::UNIT ) ),
 		'AB_MCP_Sync_Code_Stage::state_of'      => array( array( 'stage.state' ), array( self::IT ) ),

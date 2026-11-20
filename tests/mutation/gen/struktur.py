@@ -392,7 +392,7 @@ e('engine-part-order', 'put_back(): the parts of a kind back in its order', EN,
   "\t\tforeach ( self::part_order( $w ) as $prefix ) {",
   "\t\tforeach ( array( 'row', 'meta:', 'terms:' ) as $prefix ) {", 'it', IT_NEWMENU)
 e('engine-shared-back', 'revert: the fields a new object took in shared rows go back', EN,
-  "\t\t\t\t$shared = self::shared_back( $run_id, $seq, $journal, $live_id, $what );",
+  "\t\t\t\t$shared = self::shared_back( $run_id, $seq, $journal, $live_id, $took['run'] );",
   "\t\t\t\t$shared = null;", 'it', IT_NEWMENU)
 e('engine-made-rest', 'revert: a unit with an instance the run made is a rest', EN,
   "\t\tif ( null !== $pair_id && array() !== $made ) {",

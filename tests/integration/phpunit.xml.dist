@@ -12,4 +12,9 @@
             <directory>.</directory>
         </testsuite>
     </testsuites>
+    <!-- After each test the time limit of the command line again
+         (support/class-it-time-limit.php, required by bootstrap.php). -->
+    <extensions>
+        <bootstrap class="AB_MCP_IT_Time_Limit"/>
+    </extensions>
 </phpunit>

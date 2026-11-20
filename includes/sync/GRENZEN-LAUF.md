@@ -105,6 +105,14 @@ Ablehnung entsteht, nennt sie den Weg.
   Entscheid A vom 07.11.2026, unten; Prüffälle
   `testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun`,
   `testARequestThatEndsInsideAMetaCallLeavesThePartForTheWayBackOfTheSameRun`).
+  Gibt ein solcher Request die Sperre am Ende frei (`AB_MCP_Sync_Run::under_lock()`
+  `finally`, `AB_MCP_Change_Lock::release()`), löscht er die Sperrzeile über
+  `WP_Upgrader::release_lock()`, ohne ihren Wert anzusehen. Hat inzwischen ein
+  anderer Request sie übernommen, löscht er dessen Zeile; ein dritter Request
+  kann dann neben dem Übernehmer beginnen. Für den Tausch: G-5-24 in
+  `GRENZEN-CODE.md`; Freigabe nur der eigenen Zeile ist ein Posten vor dem
+  ersten Release, das den Tausch enthält (Fable-Prüfstelle B1, Entscheid der
+  Steuerung 17.11.2026).
 - Ein lesender Aufruf sieht an `AB_MCP_Sync_Run::lock_fresh()` (Sperrzeile
   `ab_mcp_pro_code_change.lock`, jünger als `TIMEOUT`), ob ein anderer
   Request die Sperre hält: eine frische Zeile heisst «ein Schritt läuft»
@@ -949,13 +957,16 @@ Ablehnung entsteht, nennt sie den Weg.
   gilt als nicht vorhanden und steht in `unread` (auch in `status`): kein
   verändernder Aufruf entscheidet auf einem Lauf mit nicht lesbarem Plan oder
   nicht lesbarer Reservierung (`ab_mcp_sync_run_unread`, nichts geändert),
-  und der Plan des Rückwegs lehnt einen Schritt mit nicht lesbarem Journal ab
-  (`ab_mcp_sync_revert_unread`, Weg: `steps` ohne ihn, das Objekt von Hand
-  prüfen; die Sicherung hält den Stand davor). Eine Antwort zeigt einen
+  und der Rückweg liest Lauf und Schritte über den einen Leser
+  (`AB_MCP_Sync_Run::wrote()`): ein Datensatz, der nicht zurückliest, wird
+  abgelehnt (`ab_mcp_sync_run_unread`, `ab_mcp_sync_revert_unread`; Weg: den
+  Host die Tabelle prüfen lassen, das Objekt von Hand prüfen, beim Planen
+  `steps` ohne den Schreibschritt), nie als leer gelesen. Eine Antwort zeigt einen
   Teilnamen ausserhalb von UTF-8 so, wie `wp_json_encode()` ihn für JSON
   umwandelt; das Journal hält die Bytes. Prüffälle
   `testAJournalWithAMetaKeyThatIsNoUtf8ReadsBackAsItsBytesAndItsPartGoesBack`,
-  `testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed` (Unit),
+  `testARecordOfARunWhoseMarkerDoesNotReadBackIsReadAsAbsentAndNamed`,
+  `testTheReaderOfTheWayBackRefusesWhatDoesNotReadBackAndNeverReadsItAsEmpty` (Unit),
   `testARecordOfTheRunThatDoesNotReadBackIsDecidedOnByNoCall` (Integration).
 
 ## Lauf und Plan (Entscheide 15, 16, 32)
@@ -1056,6 +1067,17 @@ Ablehnung entsteht, nennt sie den Weg.
   `testAnInterruptedWayBackOfTheSameRunIsLedOnWithTheTokenAndTheSiteIsFreeAfterwards`,
   `testAnInterruptedRunOfTheWayBackIsLedOnWithTheTokenOrClosedAsCheckedAndFreesTheSite`).
   Ein geschlossener Rückweglauf wird nicht zurückgenommen.
+  Ein Lauf mit Code-Schritten (Zweig 5, Teil E) geht dabei nur durch den
+  einen Eingang des Codes (`AB_MCP_Sync_Revert::code()`, belegt von
+  `AB_MCP_Sync_Code_Ops`): seine Vorschau, jeder Rückweg-Schritt und die
+  Fortsetzung eines unterbrochenen Rückwegs; ohne Eingang lehnen sie ab
+  (`ab_mcp_sync_revert_code`), und der Lauf bleibt, wie er ist
+  (`GRENZEN-CODE.md`, G-5-14). Weg (a) für einen solchen Lauf geht seit
+  Abschnitt 2 von Teil E über denselben Eingang: `close_checked_on()` fragt
+  vor jedem Schreiben jeden begonnenen Schreib- oder Rückweg-Schritt
+  (`code( 'checked', … )`); geschlossen wird nur, wo die neue Fassung am Ziel
+  und die alte ganz in der Sicherung oder die alte am Ziel belegt ist (die
+  Marke schliesst), sonst bleibt der Lauf `interrupted` (G-5-15).
 - Die Erfassung je Lauf (Momente M2 und M8): `calls` zählt jeden Aufruf ab
   der bestätigten Anlage (Anlage, Schritte, Statusabfragen, Wiederholungen),
   `duration` ist `closed − created`. Vorschau-Aufrufe vor der Anlage zählen

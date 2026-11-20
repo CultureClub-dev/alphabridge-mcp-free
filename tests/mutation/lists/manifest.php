@@ -583,9 +583,9 @@ return array(
 	),
 	array(
 		'id'      => 'manifest/unit-live-changed',
-		'clause'  => 'E1 unit_item(): the files changed on both sides: code:live_changed, no choice',
+		'clause'  => 'E1 unit_way(): the files changed on both sides: code:live_changed, no choice',
 		'file'    => $de,
-		'search'  => "\t\tif ( isset( \$states['files'] ) && 'conflict' === \$states['files'] ) {",
+		'search'  => "\t\tif ( 'conflict' === \$files ) {",
 		'replace' => "\t\tif ( false ) {",
 		'run'     => $unit( 'SyncEnvTest', 'testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase' ),
 		'expect'  => '/testThePartsOfAUnitWithAPairAreJudgedEachAgainstItsOwnBase/',

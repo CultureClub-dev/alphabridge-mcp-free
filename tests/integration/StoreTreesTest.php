@@ -344,7 +344,9 @@ final class StoreTreesTest extends TestCase {
 		self::assertSame( array(), self::names( $root . '/tmp' ) );
 		// Changed by hand: not used.
 		file_put_contents( $put['path'] . '/inc/teil.php', '<?php // anders' );
-		self::assertSame( 'ab_mcp_store_tree_changed', AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] )->get_error_code() );
+		$changed = AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] );
+		self::assertSame( 'ab_mcp_store_tree_changed', $changed->get_error_code() );
+		self::unconfirmed_tree( $changed->get_error_message(), 'a tree changed by hand' );
 		self::assertSame( 'ab_mcp_store_tree_missing', AB_MCP_Protected_Store::tree( 'stage', $gid, 'fehlt', $put['hash'] )->get_error_code() );
 		self::assertSame( 'ab_mcp_store_area', AB_MCP_Protected_Store::put_tree( 'out', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src )->get_error_code() );
 		self::assertSame( 'ab_mcp_store_tree_path', AB_MCP_Protected_Store::put_tree( 'stage', $gid, 'b', 'wp-content/plugins/b', $src )->get_error_code() );
@@ -540,6 +542,9 @@ final class StoreTreesTest extends TestCase {
 			self::assertSame( $case[1], $res->get_error_code(), $what );
 			self::assertSame( array(), self::names( $dir ), $what . ': nothing of the tree stays.' );
 			self::assertSame( array(), self::names( $root . '/tmp' ), $what . ': no temp file.' );
+			if ( 'ab_mcp_store_tree_changed' === $case[1] ) {
+				self::unconfirmed_copy( $res->get_error_message(), $what );
+			}
 		}
 		// A link in the source: not read whole, nothing copied.
 		self::source( $src, '2.0.0' );
@@ -548,6 +553,96 @@ final class StoreTreesTest extends TestCase {
 		self::assertSame( 'ab_mcp_store_tree_unread', $res->get_error_code() );
 		self::assertSame( 'link', $res->get_error_data()['cause'] );
 		self::assertSame( array(), self::names( $dir ) );
+	}
+
+	/**
+	 * The text of a copy put_tree() does not take (K4g, A2 of the Codex
+	 * check of K4f): what the store knows and no more. It differs or was not
+	 * read back whole; its removal was tried, the result not asked.
+	 */
+	private static function unconfirmed_copy( string $message, string $what ): void {
+		self::assertSame( 'The copy in the protected store could not be confirmed as what was read from the source before it: it differs, or it could not be read back whole. So the call does not take it and tried to remove it; whether all of it is gone was not checked. Check that nothing writes into the source right now; if it keeps happening, ask the host whether the disk of the store is slow or something else writes into its folder. Then put the tree anew. If part of the copy remains, use a new group (for a unit of wp_site_push, start a new run).', $message, $what );
+		foreach ( array( 'is not what was read before it', 'the source changed while it was copied', 'a file was not written whole', 'nothing of it stays', 'under another name' ) as $gone ) {
+			self::assertStringNotContainsString( $gone, $message, "$what: not said any more (K4g, K4h): $gone" );
+		}
+		self::assertMatchesRegularExpression( '/\\b[Aa]sk the host\\b/', $message, "$what: a way." );
+	}
+
+	public function testACopyNotReadBackWithinItsTimeIsNotTakenAndNotCalledChanged(): void {
+		// K4g, A2: the source is read whole and copied byte for byte; the
+		// reading of the copy runs out of its time (TREE_BUDGET), which is
+		// no proof that anything differs. The clock of the reading
+		// (AB_MCP_Sync_Env::$clock) stands still until the copy lies in its
+		// group and then goes on 50 seconds each time it is asked.
+		require_once dirname( __DIR__, 2 ) . '/includes/sync/class-sync-env.php';
+		list( $gid, $dir ) = self::group( 'stage', 6 );
+		$src   = self::source( self::src(), '2.0.0' );
+		$place = $dir . '/' . self::UNIT;
+		$now   = 1000.0;
+		$asked = 0;
+		\AB_MCP_Sync_Env::$clock = static function () use ( &$now, &$asked, $place ) {
+			if ( is_dir( $place ) ) {
+				$now += 50.0;
+				++$asked;
+			}
+			return $now;
+		};
+		try {
+			$res = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
+		} finally {
+			\AB_MCP_Sync_Env::$clock = null;
+		}
+		self::assertGreaterThanOrEqual( 2, $asked, 'The clock went on while the copy was read back.' );
+		self::assertInstanceOf( \WP_Error::class, $res );
+		self::assertSame( 'ab_mcp_store_tree_changed', $res->get_error_code() );
+		self::unconfirmed_copy( $res->get_error_message(), 'the copy not read back in time' );
+		self::assertSame( array(), self::names( $dir ), 'Here its removal went through.' );
+		// With the time it needs the same source goes in: nothing had changed.
+		$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
+		self::assertIsArray( $put, is_wp_error( $put ) ? $put->get_error_message() : '' );
+		self::assertTrue( $put['copied'] );
+	}
+
+	/**
+	 * The text of a tree tree() does not give out (K4g, A2): it claims no
+	 * difference where the tree may only not have been read whole, and no
+	 * way that does not go for every tree (a backup is not made again).
+	 */
+	private static function unconfirmed_tree( string $message, string $what ): void {
+		self::assertSame( 'The tree in the protected store could not be confirmed against the hash it was asked with: its manifest differs, or it could not be read whole (as when the time of the call runs out). So it is not given out. Try again; if it keeps failing, ask the host whether something else writes into the folder of the store or whether its disk is slow.', $message, $what );
+		foreach ( array( 'is not what was put there', 'Make it again' ) as $gone ) {
+			self::assertStringNotContainsString( $gone, $message, "$what: not said any more (K4g): $gone" );
+		}
+		self::assertMatchesRegularExpression( '/\\bTry again\\b.*\\bask the host\\b/', $message, "$what: a way." );
+	}
+
+	public function testATreeNotReadWithinItsTimeIsNotGivenOutAndComesBackOnTheNextCall(): void {
+		// K4g, A2: the tree is as it was put; its reading runs out of its
+		// time. Not given out, not called changed, and the way the text
+		// names (try again) goes.
+		require_once dirname( __DIR__, 2 ) . '/includes/sync/class-sync-env.php';
+		list( $gid ) = self::group( 'stage', 6 );
+		$src = self::source( self::src(), '2.0.0' );
+		$put = AB_MCP_Protected_Store::put_tree( 'stage', $gid, self::UNIT, self::plugins() . '/' . self::UNIT, $src );
+		self::assertIsArray( $put, is_wp_error( $put ) ? $put->get_error_message() : '' );
+		$kept = self::snapshot( $put['path'] );
+		$now  = 1000.0;
+		\AB_MCP_Sync_Env::$clock = static function () use ( &$now ) {
+			$now += 50.0;
+			return $now;
+		};
+		try {
+			$late = AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] );
+		} finally {
+			\AB_MCP_Sync_Env::$clock = null;
+		}
+		self::assertInstanceOf( \WP_Error::class, $late );
+		self::assertSame( 'ab_mcp_store_tree_changed', $late->get_error_code() );
+		self::unconfirmed_tree( $late->get_error_message(), 'a tree not read in time' );
+		self::assertSame( $kept, self::snapshot( $put['path'] ), 'Nothing of it was changed.' );
+		$back = AB_MCP_Protected_Store::tree( 'stage', $gid, self::UNIT, $put['hash'] );
+		self::assertIsArray( $back, is_wp_error( $back ) ? $back->get_error_message() : '' );
+		self::assertSame( $put['hash'], $back['hash'], 'Tried again: the same tree.' );
 	}
 
 	public function testAnEndOfTheProcessInTheMiddleOfACopyLeavesAHalfTreeThatIsNeverUsed(): void {
@@ -745,6 +840,52 @@ final class StoreTreesTest extends TestCase {
 		self::assertSame( $s['old'], self::snapshot( $s['backup'] ), 'The old one in the backup.' );
 	}
 
+	/**
+	 * Prüft: Codex D1, findings 6 and 7: the command of a point moves
+	 * nothing where one of its checks fails, also typed into a shell without
+	 * set -e (here: bash without -e, the lines of the section as they come),
+	 * and prints OK only where all of it held; each point that moves
+	 * something says, after its command, to clear OPcache or restart PHP.
+	 * Sonst: a check that fails without a word would not stop the next mv,
+	 * which then moves the backup into the folder at the target; or PHP
+	 * would go on running the new code from OPcache after the old files are
+	 * back.
+	 */
+	public function testTheCommandOfAPointMovesNothingWhereACheckFailsAlsoWithoutSetEAndNamesOpcache(): void {
+		$plain = static function ( string $guide, string $point ): array {
+			$lines = AB_MCP_IT_Handweg::commands( (string) file_get_contents( $guide ), $point );
+			self::assertCount( 1, $lines, $point . ': one command line.' );
+			return AB_MCP_IT_Process::run( array( 'bash', '-c', implode( "\n", $lines ) ), '', 60, self::root() );
+		};
+		// The swap stopped after the renames, the target holds the new
+		// version: the command of «between the renames» checks that the
+		// target is missing, which fails, so its mv does not run.
+		$s = $this->swap_with_mark();
+		self::assertTrue( rename( $s['target'], $s['backup'] ) );
+		self::assertTrue( rename( $s['stage'], $s['target'] ) );
+		$run = $plain( $s['mark']['guide'], 'zwischen-den-umbenennungen' );
+		self::assertNotSame( 0, $run['exit'] );
+		self::assertSame( $s['new'], self::snapshot( $s['target'] ), 'The new version stays at the target, nothing moved into it.' );
+		self::assertSame( $s['old'], self::snapshot( $s['backup'] ), 'The old one stays whole in the backup.' );
+		self::assertStringNotContainsString( 'OK', $run['stdout'], 'No OK where a check failed.' );
+		// Where its checks hold, the same command puts the old version back
+		// and prints OK.
+		self::assertTrue( rename( $s['target'], $s['stage'] ) );
+		$run = $plain( $s['mark']['guide'], 'zwischen-den-umbenennungen' );
+		self::assertSame( 0, $run['exit'], $run['stderr'] );
+		self::assertSame( $s['old'], self::snapshot( $s['target'] ), 'The old version at the target.' );
+		self::assertSame( "OK\n", $run['stdout'] );
+		// OPcache after each command that moves something, none where nothing
+		// moved.
+		$text = (string) file_get_contents( $s['mark']['guide'] );
+		foreach ( array( 'vor-den-umbenennungen' => false, 'zwischen-den-umbenennungen' => true, 'nach-den-umbenennungen' => true, 'waehrend-des-ruecktauschs' => true, 'nach-der-aktivierung' => true ) as $point => $moves ) {
+			$at      = strpos( $text, '[' . $point . "]\n" );
+			$section = substr( $text, (int) $at, (int) strpos( $text, "\n\n", (int) $at ) - (int) $at );
+			self::assertNotFalse( $at, $point );
+			self::assertSame( $moves, false !== strpos( $section, "\nThen clear OPcache of this site, or have PHP restarted (at the host: PHP-FPM or the web server): where PHP does not check its files for changes (opcache.validate_timestamps=0), it can still run the code it read before." ), $point . ': OPcache after its command.' );
+		}
+	}
+
 	public function testTheInstructionNamesWhatMovedAndForAnActivePluginTheWayAndTheRace(): void {
 		$s    = $this->swap_with_mark( array( self::UNIT . '/' . self::UNIT . '.php' ) );
 		$text = (string) file_get_contents( $s['mark']['guide'] );
@@ -755,8 +896,8 @@ final class StoreTreesTest extends TestCase {
 			self::assertNotEmpty( AB_MCP_IT_Handweg::commands( $text, $point ), $point );
 		}
 		self::assertStringContainsString( 'The plugin ' . self::UNIT . '/' . self::UNIT . '.php was active when the swap began.', $text );
-		self::assertStringContainsString( 'way (a) with its approval in accept', $text );
-		self::assertStringContainsString( 'Plugins → Activate in wp-admin by hand', $text );
+		self::assertStringContainsString( 'Where it is inactive afterwards: Plugins → Activate in wp-admin by hand.', $text );
+		self::assertStringNotContainsString( 'way (a)', $text, 'Way (a) switches nothing on (skeptic F2+G, C5).' );
 		self::assertStringContainsString( 'A request to the page Plugins at the same time can still deactivate the plugin after the swap; the next report shows it then.', $text );
 		$mark = json_decode( (string) file_get_contents( $s['mark']['mark'] ), true );
 		self::assertSame( array( self::UNIT . '/' . self::UNIT . '.php' ), $mark['active'], 'The mark holds the main files active at the beginning.' );
@@ -812,6 +953,10 @@ final class StoreTreesTest extends TestCase {
 			'role'    => array( 'trees' => array( array( 'role' => 'neu' ) + $base['trees'][0] ) ),
 			'hash'    => array( 'trees' => array( array( 'hash' => 'xyz' ) + $base['trees'][0] ) ),
 			'active'  => array( 'active' => array( "a\nb" ) ),
+			// Part D3b-2 of the rest (T5): the rules of mark_fields() without a case so far.
+			'form'    => array( 'trees' => array( array( 'form' => 'link' ) + $base['trees'][0] ) ),
+			'inode'   => array( 'trees' => array( array( 'ino' => '2' ) + $base['trees'][0] ) ),
+			'note'    => array( 'note' => str_repeat( 'n', 1001 ) ),
 		);
 		$before = self::names( $root . '/marks' );
 		foreach ( $bad as $what => $change ) {
@@ -917,6 +1062,22 @@ final class StoreTreesTest extends TestCase {
 		$text = (string) file_get_contents( $s['mark']['guide'] );
 		self::assertStringContainsString( 'The unit was not in the site before', $text );
 		self::assertStringNotContainsString( 'Backup (the old version)', $text );
+		// Its first lines, after the command that only reads (Codex on
+		// 3014d8b, finding 2): the two states of a new unit that are surely
+		// the one of a section, each sent to a section this file has, and
+		// every other state to none.
+		self::assertSame(
+			array(
+				"$ ls -di '" . $s['target'] . "' '" . $s['stage'] . "'",
+				'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.',
+				'- Nothing is at the target, and the new version is at the place of the stage: section [vor-den-umbenennungen]. Its command only checks.',
+				'- The new version is at the target, and nothing is at the place of the stage: section [nach-den-umbenennungen].',
+				'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id 6; where it refuses it (it says why), put the version of before back in wp-admin by hand.',
+				'',
+			),
+			array_slice( explode( "\n", $text ), 3, 6 ),
+			'The first lines of the instruction of a new unit.'
+		);
 	}
 
 	/* ---------------------- Behebung 1, B1: the names of trees as WordPress has them */
@@ -1147,6 +1308,7 @@ final class StoreTreesTest extends TestCase {
 		$res = AB_MCP_Protected_Store::put_tree( 'stage', $gid, 'einzeln.php', self::plugins() . '/einzeln.php', $src );
 		AB_MCP_Test_Seam::restore_all();
 		self::assertSame( 'ab_mcp_store_tree_changed', $res->get_error_code(), 'The same size, other bytes: not the file read before.' );
+		self::unconfirmed_copy( $res->get_error_message(), 'a file changed while copied' );
 		self::assertSame( array(), self::names( $dir ) );
 	}
 

@@ -27,6 +27,7 @@ FILEVAR = {EN: '$en', RE: '$re', EX: '$ex', IM: '$im', P: '$p', NET: '$net'}
 RUNS = {
     'env': ('unit', 'SyncEnvTest'),
     'it': ('it', 'SyncEnvTest'),
+    'same': ('unit', 'SyncNetKeyedSameTest'),
 }
 
 entries = []
@@ -145,7 +146,7 @@ e('themes-first', 'theme_dirs(): a stylesheet in two roots from the first', EN,
   "\t\t\t\t\tif ( ! array_key_exists( $stylesheet, $out ) ) {", "\t\t\t\t\tif ( true ) {", 'env', THEME)
 HEAD = 'testTheHeadOfAFileIsReadAsGetFileDataReadsIt'
 e('head-cr', 'head(): a carriage return ends a line', EN,
-  "\t\t$text = str_replace( \"\\r\", \"\\n\", is_string( $text ) ? $text : '' );", "\t\t$text = is_string( $text ) ? $text : '';", 'env', HEAD)
+  "\t\t$text = str_replace( \"\\r\", \"\\n\", $text );", "\t\t$text = (string) $text;", 'env', HEAD)
 e('head-8k', 'head(): the first 8 KiB only', EN,
   "@file_get_contents( $path, false, null, 0, 8192 )", "@file_get_contents( $path )", 'env', HEAD)
 e('head-end', 'head(): without the end of a comment or of PHP', EN,
@@ -261,31 +262,138 @@ KEYED = 'testANameWithTheNameOfACredentialBeforeAnEqualsSignOrAColonIsHeldWhatev
 KEYED_IF = "\t\t\tif ( $site && self::keyed( $layer[1], $extra ) ) {"
 e('r3-net-keyed', 'over_name(): the name of a credential before = or :, for a name of the site (A1)', NET, KEYED_IF, "\t\t\tif ( false ) {", 'env', KEYED)
 e('r3-net-keyed-only', 'over_name(): only where it is asked for (a name of the inventory keeps its rule) (A1)', NET, KEYED_IF, KEYED_IF.replace('$site && ', ''), 'env', KEYED)
-SIGNS = "\t\tif ( ! preg_match_all( '/[=:;\"\\']/', $text, $m, PREG_OFFSET_CAPTURE ) ) {"
-e('r3-keyed-colon', 'keyed(): before a colon (A1)', NET, SIGNS, SIGNS.replace('[=:', '[=', 1), 'env', KEYED)
-e('r3-keyed-equals', 'keyed(): before an equals sign (A1)', NET, SIGNS, SIGNS.replace('[=:', '[:', 1), 'env', KEYED)
+# keyed() since R12b part 1a (section 5a of the order): read in one pass; the
+# way of 8daf33f stays only for a name or a key of another type than a string
+# (keyed_cast(), F3-3), so it is no place of these clauses. Each clause of the
+# 17 entries at its new place, held by the same tests of SyncEnvTest; then the
+# mutations of the new methods (5a.5, «Rotnachweis»), held by the comparison
+# with the copy of 8daf33f (SyncNetKeyedSameTest).
+NET_SRC = open(os.path.join(ROOT, NET)).read()
+
+
+def span(first, last):
+    """The text of the net from first (once in it) to the end of the next last after it."""
+    if 1 != NET_SRC.count(first):
+        sys.exit('span: %d times in %s: %s' % (NET_SRC.count(first), NET, first))
+    at = NET_SRC.index(first)
+    return NET_SRC[at:NET_SRC.index(last, at) + len(last)]
+
+
+def swap(text, old, new, times):
+    """old replaced by new in text, exactly so many times."""
+    if times != text.count(old):
+        sys.exit('swap: %s occurs %d times, %d expected' % (old, text.count(old), times))
+    return text.replace(old, new)
+
+
 QUOTED = 'testANameWithTheNameOfACredentialBeforeASemicolonOrAQuoteIsHeldWhateverFollows'
-e('r4-keyed-semicolon', 'keyed(): before a semicolon (A1, serialized)', NET, SIGNS, SIGNS.replace(':;', ':', 1), 'env', QUOTED)
-e('r4-keyed-double-quote', 'keyed(): before a double quote (A1, a quoted key)', NET, SIGNS, SIGNS.replace(';\"', ';', 1), 'env', QUOTED)
-e('r4-keyed-single-quote', 'keyed(): before a single quote (A1, a quoted key)', NET, SIGNS, SIGNS.replace('\\\']', ']', 1), 'env', QUOTED)
-EACH = "\t\tforeach ( $m[0] as $hit ) {\n\t\t\t$before"
-e('r3-keyed-each-first', 'keyed(): each = and :, not only the first (A1, Codex round 3)', NET, EACH, EACH.replace('$m[0] as', 'array_slice( $m[0], 0, 1 ) as'), 'env', KEYED)
-e('r3-keyed-each-last', 'keyed(): each = and :, not only the last (A1)', NET, EACH, EACH.replace('$m[0] as', 'array_slice( $m[0], -1 ) as'), 'env', KEYED)
-BEFORE = "\t\t\t$before = rtrim( (string) substr( $text, 0, (int) $hit[1] ), \" \\t\\n\\r\\x0B\\f\" );"
-e('r3-keyed-space', 'keyed(): white space before the sign left out (A1)', NET, BEFORE, "\t\t\t$before = (string) substr( $text, 0, (int) $hit[1] );", 'env', KEYED)
-FORMS = "\t\t\tforeach ( array( strtolower( $before ), AB_MCP_Redactor::normalize_key( $before ) ) as $form ) {"
-e('r3-keyed-lower', 'keyed(): the text before it in lower case (A1)', NET, FORMS, FORMS.replace('strtolower( $before ), ', ''), 'env', KEYED)
-e('r3-keyed-normal', 'keyed(): the text before it as normalize_key() reads it (A1)', NET, FORMS, FORMS.replace(', AB_MCP_Redactor::normalize_key( $before )', ''), 'env', KEYED)
-KEYS = "\t\t$keys = array_merge( AB_MCP_Redactor::CREDENTIAL_EXACT, AB_MCP_Redactor::EXTRA_NAMES, $extra );"
+SET = '=:;"\\\''
+# The signs are sought twice: the first, and each after a part.
+NEXT = "\t\t\t$at           = $run['from'] + strcspn( $text, '" + SET + "', $run['from'] );"
+SIGNS = span("\t\t$at   = strcspn( $text, '" + SET + "' );", NEXT)
+e('r3-keyed-colon', 'keyed(): before a colon (A1)', NET, SIGNS, swap(SIGNS, SET, '=;"\\\'', 2), 'env', KEYED)
+e('r3-keyed-equals', 'keyed(): before an equals sign (A1)', NET, SIGNS, swap(SIGNS, SET, ':;"\\\'', 2), 'env', KEYED)
+e('r4-keyed-semicolon', 'keyed(): before a semicolon (A1, serialized)', NET, SIGNS, swap(SIGNS, SET, '=:"\\\'', 2), 'env', QUOTED)
+e('r4-keyed-double-quote', 'keyed(): before a double quote (A1, a quoted key)', NET, SIGNS, swap(SIGNS, SET, '=:;\\\'', 2), 'env', QUOTED)
+e('r4-keyed-single-quote', 'keyed(): before a single quote (A1, a quoted key)', NET, SIGNS, swap(SIGNS, SET, '=:;"', 2), 'env', QUOTED)
+e('r3-keyed-each-first', 'keyed(): each = and :, not only the first (A1, Codex round 3)', NET, NEXT, "\t\t\t$at           = $size;", 'env', KEYED)
+NONE = "\t\tif ( $at === $size ) {\n\t\t\treturn false;\n\t\t}\n"
+e('r3-keyed-each-last', 'keyed(): each = and :, not only the last (A1)', NET, NONE, NONE + "\t\t$at = $size - 1 - strcspn( strrev( $text ), '" + SET + "' );\n", 'env', KEYED)
+e('r3-keyed-space', 'keyed(): white space before the sign left out (A1)', NET, "\t\t\t$last = rtrim( $part, \" \\t\\n\\r\\x0B\\f\" );", "\t\t\t$last = $part;", 'env', KEYED)
+e('r3-keyed-lower', 'keyed(): the text before it in lower case (A1)', NET, "\t\t\tif ( self::keyed_ends( substr( $lower, $from, $end - $from ), $keys ) ) {", "\t\t\tif ( false ) {", 'env', KEYED)
+e('r3-keyed-normal', 'keyed(): the text before it as normalize_key() reads it (A1)', NET, "\t\t\tif ( null === $normal || true === $normal ) {", "\t\t\tif ( null === $normal ) {", 'env', KEYED)
+KEYS = "\t\t$keys = self::keyed_lengths( array_merge( AB_MCP_Redactor::CREDENTIAL_EXACT, AB_MCP_Redactor::EXTRA_NAMES, $extra ) );"
 e('r3-keyed-exact', 'keyed(): the names of CREDENTIAL_EXACT (A1)', NET, KEYS, KEYS.replace('AB_MCP_Redactor::CREDENTIAL_EXACT, ', ''), 'env', KEYED)
 e('r3-keyed-extra-names', 'keyed(): the names of EXTRA_NAMES (A1)', NET, KEYS, KEYS.replace('AB_MCP_Redactor::EXTRA_NAMES, ', ''), 'env', KEYED)
 e('r3-keyed-redact-keys', 'keyed(): the names of ab_mcp_redact_keys (A1)', NET, KEYS, KEYS.replace(', $extra', ''), 'env', KEYED)
-ENDS = "\t\t\t\t\tif ( '' !== (string) $key && str_ends_with( $form, (string) $key ) ) {"
-e('r3-keyed-empty', 'keyed(): an empty name is none (A1)', NET, ENDS, ENDS.replace("'' !== (string) $key && ", ''), 'env', KEYED)
-e('r3-keyed-ends', 'keyed(): the text before it ends in the name, not only holds it (A1)', NET, ENDS, ENDS.replace('str_ends_with', 'str_contains'), 'env', KEYED)
-WORD = "\t\t\tif ( preg_match( '/[A-Za-z0-9_\\-.\\x80-\\xFF]+\\z/', $before, $word ) && AB_MCP_Sync_Credentials::names_credential( $word[0], $extra ) ) {"
-e('r3-keyed-word', 'keyed(): the last word before it names a credential as the check does (A1)', NET, WORD, "\t\t\tif ( false ) {", 'env', KEYED)
-e('r3-keyed-word-last', 'keyed(): the last word, right before the sign (A1)', NET, WORD, WORD.replace('+\\z/', '+/'), 'env', KEYED)
+# keyed(): an empty name is none (A1): no entry since R12b part 1a, see the
+# head of the list (the guard in keyed_lengths() changes no answer).
+# Not only at its end: a name anywhere in the end of the text read.
+ENDS = span("\t\tif ( 0 === $size || ! isset( $index[ $text[ $size - 1 ] ] ) ) {", "\t\treturn false;\n\t}\n")
+e('r3-keyed-ends', 'keyed(): the text before it ends in the name, not only holds it (A1)', NET, ENDS,
+  "\t\tif ( 0 === $size ) {\n\t\t\treturn false;\n\t\t}\n\t\tforeach ( $index as $lengths ) {\n\t\t\tforeach ( $lengths as $firsts ) {\n\t\t\t\tforeach ( $firsts as $names ) {\n\t\t\t\t\tforeach ( array_keys( $names ) as $name ) {\n\t\t\t\t\t\tif ( str_contains( $text, (string) $name ) ) {\n\t\t\t\t\t\t\treturn true;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\treturn false;\n\t}\n", 'env', KEYED)
+e('r3-keyed-word', 'keyed(): the last word before it names a credential as the check does (A1)', NET, "\t\t\tif ( self::keyed_word( $last, $extra, $words ) ) {", "\t\t\tif ( false ) {", 'env', KEYED)
+WORD_AT = "\t\t$word = substr( $last, -$size );"
+BACK = span("\t\t$size = strlen( $last ) - strlen( rtrim( $last, \"\\x80..\\xFFA..Za..z0..9_.-\" ) );", WORD_AT)
+e('r3-keyed-word-last', 'keyed(): the last word, right before the sign (A1)', NET, BACK,
+  "\t\tif ( ! preg_match( '/[A-Za-z0-9_\\-.\\x80-\\xFF]+/', $last, $first ) ) {\n\t\t\treturn false;\n\t\t}\n\t\t$word = $first[0];", 'env', KEYED)
+# The new methods (5a.5): the comparison finds each change.
+# Each with the fastest test of the class that finds it by an answer
+# (belege/r12b-1a2-rot-2.log: which of its tests are red for each).
+SAME = 'testDrawnAndChangedInputsAnswerAsBefore'
+FIXED = 'testTheFixedCasesOfTheOrderAnswerAsBefore'
+TYPES = 'testTypesOtherThanStringsTakeTheWayAsBefore'
+NEWC = 'testTheNewCasesOfPartOneBAnswerAsBefore'
+NAMES = 'testTheNamesOfTheTestsOfSyncEnvAnswerAsBefore'
+e('r12b-keyed-text-cast', 'keyed(): a name of another type than a string the way of before (F3-3)', NET,
+  "\t\tif ( ! is_string( $text ) || ! self::keyed_strings( $extra ) ) {", "\t\tif ( ! self::keyed_strings( $extra ) ) {", 'same', TYPES)
+e('r12b-keyed-keys-cast', 'keyed_strings(): a key of another type than a string the way of before (F3-3)', NET,
+  "\t\t\tif ( ! is_string( $key ) ) {\n\t\t\t\treturn false;", "\t\t\tif ( false ) {\n\t\t\t\treturn false;", 'same', TYPES)
+LENGTHS = "\t\tforeach ( $index[ $text[ $size - 1 ] ] as $length => $firsts ) {"
+e('r12b-keyed-length', 'keyed_ends(): each length of a name with that last byte, the shortest too (5a.5)', NET, LENGTHS,
+  LENGTHS.replace('$index[ $text[ $size - 1 ] ] as', 'array_slice( $index[ $text[ $size - 1 ] ], 1, null, true ) as'), 'same', FIXED)
+e('r12b-keyed-length-order', 'keyed_lengths(): the shortest length first, as keyed_ends() stops at one longer than the text (5a.5)', NET,
+  "\t\t\tksort( $lengths );\n", '', 'same', FIXED)
+e('r12b-keyed-tail', 'keyed(): the end read as long as the longest name (5a.5)', NET,
+  "\t\t\t$tail = max( $tail, array_key_last( $lengths ) );", "\t\t\t$tail = max( $tail, array_key_first( $lengths ) );", 'same', SAME)
+e('r12b-keyed-from', 'keyed(): the end in lower case read from the start of the text at most (5a.5)', NET,
+  "\t\t\tif ( $from < 0 ) {", "\t\t\tif ( false ) {", 'same', NAMES)
+e('r12b-keyed-first', 'keyed(): only the first part of a run cut at its start (E7)', NET,
+  "\t\t\t$run['first'] = false;\n", '', 'same', FIXED)
+e('r12b-keyed-take-first', 'keyed_take(): a later part kept for the signs after it uncut at its start (E7)', NET,
+  "\t\t\t\t$forms[ $way ] = self::keyed_form( $part, $plain, 0 === $way, $run['first'], false );", "\t\t\t\t$forms[ $way ] = self::keyed_form( $part, $plain, 0 === $way, true, false );", 'same', NEWC)
+NOW = "\t\t$now = self::keyed_form( $last, $plain, 0 === $way, $run['first'], true );"
+e('r12b-keyed-now-end', 'keyed_normal(): the part before the sign cut at its end as normalize_key() cuts it (E2, E7)', NET,
+  NOW, NOW.replace("$run['first'], true", "$run['first'], false"), 'same', NEWC)
+e('r12b-keyed-prefix', 'keyed_cut(): normalize_key() reads after a prefix \\0…\\0 (E6)', NET,
+  "\t\tif ( \"\\0\" !== $text[0] ) {\n\t\t\treturn 0;", "\t\tif ( true ) {\n\t\t\treturn 0;", 'same', FIXED)
+e('r12b-keyed-prefix-second', 'keyed(): the prefix \\0…\\0 ends at the second \\0 where it stands before the sign (E6)', NET,
+  "\t\t\t$second = strpos( $text, \"\\0\", 1 );", "\t\t\t$second = false;", 'same', FIXED)
+e('r12b-keyed-prefix-run', 'keyed(): a new run where the prefix ends at another \\0 (E6)', NET,
+  "\t\t\tif ( null === $run || $cut !== $run['cut'] ) {", "\t\t\tif ( null === $run ) {", 'same', FIXED)
+e('r12b-keyed-utf-raw', 'keyed_normal(): the blanks cut by trim() once the text is no UTF-8 (E8)', NET,
+  "\t\t\t$run['raw'] = $utf;\n", '', 'same', NEWC)
+e('r12b-keyed-utf-check', 'keyed_utf(): a part that is no UTF-8 is none (E8)', NET,
+  "\t\tif ( false === $found && PREG_BAD_UTF8_ERROR === preg_last_error() ) {\n\t\t\treturn false;", "\t\tif ( false === $found && PREG_BAD_UTF8_ERROR === preg_last_error() ) {\n\t\t\treturn true;", 'same', NEWC)
+e('r12b-keyed-utf-trim', 'keyed_blanks(): trim() where the text is no UTF-8 (E8)', NET,
+  "\t\tif ( ! $utf ) {\n\t\t\tif ( $lead ) {", "\t\tif ( false ) {\n\t\t\tif ( $lead ) {", 'same', NEWC)
+e('r12b-keyed-utf-replace', 'keyed_form(): str_replace() where the joining pattern meets no UTF-8 (E8)', NET,
+  "\t\t\t$joined = null;", "\t\t\treturn null;", 'same', NEWC)
+e('r12b-keyed-utf-low', 'keyed_normal(): the run joined by the pattern only while what it holds is UTF-8 (E8)', NET,
+  "\t\tif ( $run['low'][ $way ] && null !== $now[0] ) {", "\t\tif ( null !== $now[0] ) {", 'same', NEWC)
+e('r12b-keyed-word-short', 'keyed_word(): the whole last word, not one byte less (E11)', NET, WORD_AT, "\t\t$word = substr( $last, 1 - $size );", 'same', NEWC)
+e('r12b-keyed-word-long', 'keyed_word(): the last word, not one byte more (E11)', NET, WORD_AT, "\t\t$word = substr( $last, -$size - 1 );", 'same', NEWC)
+e('r12b-keyed-take-whole', 'keyed_normal(): a part kept whole for the signs after it, the blanks at its end inside (E10, B4)', NET,
+  "\t\treturn self::keyed_take( $part, $plain, $sign, $run, $tail );", "\t\treturn self::keyed_take( $last, $plain, $sign, $run, $tail );", 'same', FIXED)
+TAKEN = "\t\t\t\t$run['acc'][ $way ][0] = substr( $run['acc'][ $way ][0] . $forms[ $way ][0] . $sign, -$tail );"
+e('r12b-keyed-take-sign', 'keyed_take(): the sign inside the text for the signs after it (E5)', NET, TAKEN, TAKEN.replace(' . $sign', ''), 'same', FIXED)
+PLAIN = "\t\t$plain = strspn( $part, '!#$%&()*+,./0123456789<>?@[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~' ) === strlen( $part );"
+e('r12b-keyed-plain', 'keyed_normal(): a part left as it is only of bytes normalize_key() leaves, not a dash (E10)', NET, PLAIN, swap(PLAIN, ',./', ',-./', 1), 'same', NEWC)
+CAMEL = "\t\t$split = preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $split );"
+e('r12b-keyed-camel', 'keyed_form(): camelCase split (E9)', NET, CAMEL, CAMEL.replace("'$1_$2'", "'$1$2'"), 'same', NEWC)
+e('r12b-keyed-form-lower', 'keyed_form(): in lower case (E3)', NET, "\t\t$lower  = strtolower( $split );", "\t\t$lower  = $split;", 'same', NEWC)
+BLANKS = "\t\t$pattern = '/^[\\s\\p{Z}\\x{200B}\\x{FEFF}]+|[\\s\\p{Z}\\x{200B}\\x{FEFF}]+$/u';"
+e('r12b-keyed-blanks-lead', 'keyed_blanks(): U+200B and U+FEFF cut at the start of the text (E7)', NET, BLANKS, swap(BLANKS, '/^[\\s\\p{Z}\\x{200B}\\x{FEFF}]+|', '/^[\\s\\p{Z}]+|', 1), 'same', NEWC)
+# R12b part 1a.3 (Codex A1): a pattern of normalize_key() that fails at a limit
+# of PCRE over the whole text before a sign only; held by the fixed cases of
+# that test (at the limit, and with the defaults for the exact reading). Not
+# as an entry: the form joined by str_replace() in keyed_other() (no case on
+# PCRE 10.48 where RD:310 fails over the whole text only,
+# belege/r12b-1a3-suche-ohne-ersetzen.log, r12b-1a3-verbinden.log; kept so
+# that the proof needs nothing of PCRE), its check of the form of the run,
+# which keyed_normal() made before, and null where the form cut by trim()
+# fails (held, the exception of E12).
+LIMIT = 'testAPatternThatFailsAtALimitOfPcreOnlyOverTheWholeTextLosesNoName'
+OTHER = "\t\tif ( $other && self::keyed_ends( AB_MCP_Redactor::normalize_key( substr( $text, 0, $run['from'] + strlen( $last ) ) ), $keys ) ) {"
+e('r12b-keyed-other-read', 'keyed_normal(): at a limit of PCRE the text before the sign read as normalize_key() reads it (A1)', NET, OTHER, "\t\tif ( false ) {", 'same', LIMIT)
+e('r12b-keyed-other-exact', 'keyed_normal(): there the answer of normalize_key(), not the form of a fallback alone (C1)', NET, OTHER, "\t\tif ( $other ) {", 'same', LIMIT)
+e('r12b-keyed-other-before', 'keyed_normal(): the whole text before the sign read, not its last part (A1)', NET, OTHER,
+  swap(OTHER, "substr( $text, 0, $run['from'] + strlen( $last ) )", "substr( $text, $run['from'], strlen( $last ) )", 1), 'same', LIMIT)
+TRIMMED = "\t\t\t$nows = array( $now, self::keyed_form( $last, $plain, false, $run['first'], true ) );"
+e('r12b-keyed-other-trim', 'keyed_other(): this part cut by trim() as well (A1)', NET, TRIMMED, "\t\t\t$nows = array( $now, $now );", 'same', LIMIT)
+JOINED = "\t\t\tif ( $run['low'][ $way ] && null !== $form[0] && self::keyed_ends( substr( $run['acc'][ $way ][0] . $form[0], -$tail ), $keys ) ) {"
+e('r12b-keyed-other-pattern', 'keyed_other(): the blanks cut by trim() and joined by the pattern (A1)', NET, JOINED, "\t\t\tif ( false ) {", 'same', LIMIT)
+e('r12b-keyed-other-acc', 'keyed_other(): the parts before as the run holds them cut by trim() (A1)', NET, JOINED, swap(JOINED, "$run['acc'][ $way ][0]", "$run['acc'][0][0]", 1), 'same', LIMIT)
 THERE = 'testALineOfThisSiteWhoseNameTheStagingSiteHoldsIsHeldBeforeItIsStored'
 HN = "\t\t\tif ( is_array( $line ) && isset( $line['env'], $line['ref'], $line['held'] ) && in_array( $line['env'], self::NAMED, true ) && 1 === preg_match( self::HASHED, (string) $line['ref'] ) ) {"
 e('r2-held-names-held', 'held_names(): the lines held only (A1)', EN, HN, HN.replace(", $line['held'] )", ' )'), 'env', THERE)
@@ -453,7 +561,7 @@ e('series-seq', 'environment(): the parts in their order, without a gap', RE, SE
 e('series-walk', 'environment(): the parts of one reading', RE, SERIES, SERIES.replace(" ( null !== $walk && $walk !== $page['walk'] ) ||", ''), 'it', SER)
 e('series-last', 'environment(): the last part last', RE, SERIES, SERIES.replace(" || ( count( $ids ) === $i + 1 ) !== $page['last']", ''), 'it', SER)
 e('series-taken', 'environment(): each a package of the environment taken over here', RE,
-  "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'env' );", "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'inventory' );", 'it', MAIN)
+  "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'env', $deadline );", "\t\t\t$part = AB_MCP_Sync_Import::taken( $id, 'inventory', $deadline );", 'it', MAIN)
 e('env-min', 'live_environment(): with less than ENV_MIN seconds left the next call reads it', RE,
   "\t\t\tif ( $left < self::ENV_MIN ) {", "\t\t\tif ( false ) {", 'it', 'testTheEnvironmentOfThisSiteIsReadInPartsWithTheSameEntries')
 e('env-on', 'live_environment(): a part goes on from the state of the one before', RE,
@@ -483,7 +591,7 @@ e('r1-export-held', 'make_env(): the lines held counted (A1, two sites)', EX,
 e('r1-import-held', 'unpacked(): a name of the environment held by the rules of this site listed (A1, two sites)', IM,
   "\t\t\t\t\tif ( null !== $code ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", "\t\t\t\t\tif ( false ) {\n\t\t\t\t\t\t$out[] = array( $object['env'],", 'it', RULES)
 e('r1-report-held', 'environment(): the lines the import held by the SHA-256 of their name (A1, two sites)', RE,
-  "\t\t\tforeach ( AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'] ) as $line ) {", "\t\t\tforeach ( array_slice( $part['lines'], 1 ) as $line ) {", 'it', RULES)
+  "\t\t\t$held = AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'], null, $deadline );", "\t\t\t$held = array_slice( $part['lines'], 1 );", 'it', RULES)
 IT_THERE = 'testANameOnlyTheRulesOfTheStagingSiteHoldIsHeldInThePartsOfThisSiteAsWell'
 e('r2-report-head-held', 'call(): the head keeps the names the staging site holds, before this site reads its own (A1, two sites)', RE,
   "\t\t\t'held'        => AB_MCP_Sync_Env::held_names( $env['lines'] ),", "\t\t\t'held'        => array(),", 'it', IT_THERE)
@@ -566,7 +674,9 @@ out.append('''<?php
  * Written by tests/mutation/gen/inventar.py from the source; change the
  * entries there and run it again.
  *
- * Held by the unit suite (SyncEnvTest) and, for what two WordPress sites
+ * Held by the unit suite (SyncEnvTest; the new methods of keyed() since R12b
+ * part 1a by SyncNetKeyedSameTest, the comparison with the copy of 8daf33f)
+ * and, for what two WordPress sites
  * show, by the integration suite (SyncEnvTest; the sites running,
  * AB_IT_ROOT set). Not listed: the lock of a root by its own name in entry()
  * (since Z8b branch 2 uploads is the only root counted, so the mutation is
@@ -584,7 +694,12 @@ out.append('''<?php
  * test can see (the kind and the SHA-256 in held_line(), isset( held ) in
  * held_here(), the place in held_alike(), the kind of a held line in
  * shaped(), the kind and the SHA-256 in held_names()); GRENZEN-BERICHT.md,
- * Zweig 7.
+ * Zweig 7. Since R12b part 1a not listed either: the guard against an empty
+ * key in keyed_lengths() (keyed(): an empty name is none). An empty key would
+ * lie under the last byte '', which no text ends in, so keyed_ends() never
+ * reads it: without the guard a warning comes, no other answer; the
+ * comparison with the copy of 8daf33f holds the clause (E4: keyed( '.:',
+ * array( '' ) ) and the empty keys of its groups (iv) and (v)).
  *
  * @package AlphaBridge_MCP
  */

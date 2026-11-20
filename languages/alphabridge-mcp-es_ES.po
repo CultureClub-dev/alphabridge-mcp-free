@@ -4038,10 +4038,6 @@ msgid "the plugin %s (network-wide)"
 msgstr "el plugin %s (en toda la red)"
 
 #, php-format
-msgid "Not started: another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for %1$d s. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when the other one has answered. If none is running, a request that ended early left the lock behind; from %2$s UTC the next call takes it over."
-msgstr "No iniciado: otro cambio del código que ejecuta este sitio a través de AlphaBridge (una activación, un despliegue o un archivo PHP o fragmento escrito o deshecho) lleva %1$d s en curso. Los cambios del código que ejecuta el sitio van uno detrás de otro, para que el camino de vuelta de uno no pueda deshacer el otro. No se ha cambiado nada; vuelve a llamar cuando el otro haya respondido. Si no hay ninguno en curso, una petición que terminó antes de tiempo ha dejado el bloqueo; a partir de las %2$s UTC la siguiente llamada lo toma."
-
-#, php-format
 msgid "Not started: an update of %s through AlphaBridge is running on this site. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when that update has answered."
 msgstr "No iniciado: hay en curso en este sitio una actualización de %s a través de AlphaBridge. Los cambios del código que ejecuta el sitio van uno detrás de otro, para que el camino de vuelta de uno no pueda deshacer el otro. No se ha cambiado nada; vuelve a llamar cuando esa actualización haya respondido."
 
@@ -7175,10 +7171,6 @@ msgid "Run %d takes no step."
 msgstr "La ejecución %d no ejecuta ningún paso."
 
 #, php-format
-msgid "Run %1$d is not changed: its record (%2$s) does not read back as it was written (a marker of its bytes that does not hold), so nothing of the run is decided on it. Ask the host to check the table of the runs; the backups of the run in the protected store hold the objects as they were before its steps."
-msgstr "La ejecución %1$d no se ha cambiado: su registro (%2$s) no se vuelve a leer tal como se escribió (una marca de sus bytes que no coincide), así que no se decide nada de la ejecución en base a él. Pide al hosting que compruebe la tabla de las ejecuciones; las copias de seguridad de la ejecución en el almacén protegido contienen los objetos tal como estaban antes de sus pasos."
-
-#, php-format
 msgid "Run %1$d was %2$s when this call read it and is %3$s now (another call moved it in between): nothing was written, its steps stay as they are. Ask for the status of the run (wp_site_push action=status) and go on from there."
 msgstr "La ejecución %1$d tenía el estado %2$s cuando esta llamada la leyó y ahora tiene el estado %3$s (otra llamada la ha movido entretanto): no se ha escrito nada y sus pasos se quedan como están. Pide el estado de la ejecución (wp_site_push action=status) y continúa desde ahí."
 
@@ -9140,12 +9132,6 @@ msgid "(a credential by its name, not shown)"
 msgstr "(una credencial por su nombre, no se muestra)"
 
 #, php-format
-msgid "%d byte (no revision of the post holds it; the backup of the step does)"
-msgid_plural "%d bytes (no revision of the post holds it; the backup of the step does)"
-msgstr[0] "%d byte (no lo contiene ninguna revisión de la entrada; sí la copia de seguridad del paso)"
-msgstr[1] "%d bytes (no los contiene ninguna revisión de la entrada; sí la copia de seguridad del paso)"
-
-#, php-format
 msgid "%1$d byte (revision %2$d of the post holds it, wp-admin → Revisions)"
 msgid_plural "%1$d bytes (revision %2$d of the post holds it, wp-admin → Revisions)"
 msgstr[0] "%1$d byte (lo contiene la revisión %2$d de la entrada, wp-admin → Revisiones)"
@@ -9156,9 +9142,6 @@ msgstr "ninguno (no hay ninguna fila de ese campo meta)"
 
 msgid "none (no term of the taxonomy)"
 msgstr "ninguno (ningún término de la taxonomía)"
-
-msgid "(composed by an earlier build, not shown; the backup of the step in the protected store holds the value)"
-msgstr "(compuesto por una versión anterior, no se muestra; la copia de seguridad del paso en el almacén protegido contiene el valor)"
 
 msgid "(holds a credential, not shown)"
 msgstr "(contiene una credencial, no se muestra)"
@@ -9554,10 +9537,6 @@ msgid "steps is a list of the seqs of the write steps of the run to take back; w
 msgstr "steps es una lista de los seqs de los pasos de escritura de la ejecución que se van a revertir; sin ella, todos los pasos que escribieron. Usa action=status para listarlos."
 
 #, php-format
-msgid "The journal of step %1$d of run %2$d does not read back as it was written (a marker of its bytes that does not hold), so no way back is planned on it and nothing is taken back. Pass steps without %1$d to plan the way back of the other steps that wrote, and check its object by hand in wp-admin; its backup in the protected store holds the object as it was before the step."
-msgstr "El registro del paso %1$d de la ejecución %2$d no se lee tal como se escribió (una marca de sus bytes no coincide), así que no se planifica ninguna vuelta atrás sobre él y no se revierte nada. Indica steps sin %1$d para planificar la vuelta atrás de los demás pasos que escribieron, y comprueba su objeto a mano en wp-admin; su copia de seguridad en el almacén protegido contiene el objeto tal como estaba antes del paso."
-
-#, php-format
 msgid "Step %1$d is %2$s and wrote nothing: there is nothing to take back for it. Choose a step that wrote (action=status lists them)."
 msgstr "El paso %1$d está %2$s y no escribió nada: no hay nada que revertir para él. Elige un paso que escribiera (action=status los lista)."
 
@@ -9591,9 +9570,6 @@ msgstr "La vuelta atrás de la ejecución %1$d no empieza: la ejecución estaba 
 msgid "The way back of run %d does not begin: the run changed while it was planned (a step was written, an object of this site changed, or the run changed its state), so the plan confirmed is not the run as it is. Plan the way back again (wp_site_revert action=plan); the new plan takes every step that wrote back."
 msgstr "La vuelta atrás de la ejecución %d no empieza: la ejecución cambió mientras se planificaba (se escribió un paso, cambió un objeto de este sitio o la ejecución cambió de estado), así que el plan confirmado no es la ejecución tal como está. Vuelve a planificar la vuelta atrás (wp_site_revert action=plan); el plan nuevo revierte todos los pasos que escribieron."
 
-msgid "Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run."
-msgstr "Interrumpido: la petición que restauraba este paso terminó antes de acabar; lo que alcanzó se queda como está y nada de ello se vuelve a restaurar (ninguna restauración se repite). Comprueba el objeto en wp-admin; la copia de seguridad del paso que escribió contiene su estado anterior a la ejecución."
-
 msgid "Interrupted: the request that wrote this step ended before it finished; the way back reads its journal."
 msgstr "Interrumpido: la petición que escribía este paso terminó antes de acabar; la vuelta atrás lee su registro."
 
@@ -9603,9 +9579,6 @@ msgstr "Omitido: la ejecución pasó a su vuelta atrás antes de que se ejecutar
 #, php-format
 msgid "%1$s The run %2$d stays %3$s and nothing of its way back began: its steps are stored all at once or not at all. Plan the way back again (wp_site_revert action=plan with run_id %2$d); if it keeps failing, the database error log names the cause."
 msgstr "%1$s La ejecución %2$d sigue %3$s y no ha empezado nada de su vuelta atrás: sus pasos se guardan todos a la vez o ninguno. Vuelve a planificar la vuelta atrás (wp_site_revert action=plan con run_id %2$d); si sigue fallando, el registro de errores de la base de datos indica la causa."
-
-msgid "(cut: an answer carries at most 16384 bytes of values before; the backup of this step in the protected store holds the object as it was before the step)"
-msgstr "(recortado: una respuesta lleva como mucho 16384 bytes de valores anteriores; la copia de seguridad de este paso en el almacén protegido contiene el objeto tal como estaba antes del paso)"
 
 #, php-format
 msgid "A run needs %s. Pass it."
@@ -10528,9 +10501,6 @@ msgid "%d new object stays as a rest (named in rests)."
 msgid_plural "%d new objects stay as rests (named in rests)."
 msgstr[0] "%d objeto nuevo se queda como resto (indicado en rests)."
 msgstr[1] "%d objetos nuevos se quedan como restos (indicados en rests)."
-
-msgid "Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go."
-msgstr "Comprueba esos objetos en wp-admin (cada parte que se deja indica su valor anterior; sus pares son inciertos hasta que wp_site_pairs confirme una nueva alineación); elimina a mano un resto donde deba desaparecer."
 
 msgid "Attachments in left did not fit this package: export them in another one (wp_site_export with purpose=media and their refs). One in too_large is more than a package carries: upload its file by hand in the media library of the production site. One in unread has a file list that does not read whole on this site (a file missing, a link, a path out of the uploads): check it in the media library here."
 msgstr "Los adjuntos de left no cabían en este paquete: expórtalos en otro (wp_site_export con purpose=media y sus refs). Uno de too_large supera lo que lleva un paquete: sube su archivo a mano a la biblioteca de medios del sitio de producción. Uno de unread tiene una lista de archivos que no se lee completa en este sitio (un archivo que falta, un enlace, una ruta fuera de las subidas): compruébalo aquí en la biblioteca de medios."

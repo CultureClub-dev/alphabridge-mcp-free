@@ -51,6 +51,21 @@
  * wp_set_object_terms(). The three limits of the way back (concept section
  * 5) are in the preview.
  *
+ * THE CODE (Z8b branch 5, part E; plan Z22, Z20b, N12): a step of a run of
+ * the code (a plugin or theme swapped) is planned back, shown, led on and
+ * run back only through the one entrance of the code (code(): the place
+ * AB_MCP_Sync_Code_Ops fills as its file loads, admit()); the core decides
+ * nothing of it by itself and never calls it by a name of its class.
+ * Without the entrance a run of the code is neither planned back, led on
+ * nor run back, and the refusal names the way by hand; nor is a run whose
+ * record does not read back, as whether it is one of the code is not
+ * known (fail closed). accept (the seqs of
+ * swap steps whose plugin the way back activates again, Z25) goes to the
+ * entrance as it is; the entrance takes it into the entry of the step of
+ * the way back, or refuses it, and the token binds it with every other
+ * argument (Z41). A run closed as checked asks the entrance for each step
+ * of the code left begun (way (a), AB_MCP_Sync_Run::close_checked()).
+ *
  * Messages are in gettext, in the language of the site as they arise (a
  * refusal, a note of the journal); each names the way. Codes, states,
  * kinds and the other values the tools name stay as they are, and no
@@ -75,6 +90,16 @@ final class AB_MCP_Sync_Revert {
 	const ACTIONS = array( 'plan', 'next', 'status' );
 
 	/**
+	 * The one entrance of the way back of the code (Z8b branch 5, part E;
+	 * plan Z22, N12): the callable AB_MCP_Sync_Code_Ops puts here as its
+	 * file loads (admit()), in the file of the entrance of the swap. The
+	 * core never calls the code by a name of its class; where nothing is
+	 * here, a run of the code is neither planned back, led on nor run back
+	 * (code()).
+	 */
+	private static $entrance = null;
+
+	/**
 	 * The limits of the way back, named with every preview (concept section
 	 * 5), in the language of the site: the person sees the preview
 	 * (AB_MCP_Confirm_Token, Codex round 2 of branch 13, B1).
@@ -88,6 +113,52 @@ final class AB_MCP_Sync_Revert {
 			__( 'An object that deviated within its step (a hook of this site changed a part, a call was refused, a part read back other than written) is never put back by itself: every part of it is left as it is and named with its value before; check it by hand in wp-admin. The same for a part the step never read back (an interrupted step).', 'alphabridge-mcp' ),
 			__( 'A backed-up scheduled post whose date has passed is not put back (WordPress would publish it); it is named as «not put back, check needed»: set its date anew in wp-admin.', 'alphabridge-mcp' ),
 		);
+	}
+
+	/* ------------------------------------------------ the way back of code */
+
+	/**
+	 * Put the entrance of the way back of the code, or take it away (null):
+	 * AB_MCP_Sync_Code_Ops as its file loads, nothing else.
+	 *
+	 * @param callable|null $entrance The entrance.
+	 */
+	public static function admit( $entrance ) {
+		self::$entrance = is_callable( $entrance ) ? $entrance : null;
+	}
+
+	/**
+	 * Whether a step is one of the code, and what its entrance answers
+	 * (Z22, N12), in one line as AB_MCP_Sync_Code_Ops::item() decides it:
+	 * null where the plan of the run that wrote holds no key code (a run of
+	 * the contents: the core goes on as before); the refusal where it holds
+	 * one and no entrance is here, nothing planned, written or closed
+	 * (closed as checked neither); else the answer of the entrance. The run
+	 * that wrote and its record come from the one reader
+	 * (AB_MCP_Sync_Run::wrote()), never from what a step names (rest of B4):
+	 * a record of the run or of the run that wrote that does not read back,
+	 * a plan that is none or a run of the way back that names none is its
+	 * refusal (not known, fail closed).
+	 *
+	 * @param string $at     plan (a write step, for the preview), continue (a step of the way back still open, for the preview of its continuation), revert (the step of the way back runs) or checked (a step left begun of a run closed as checked, way (a)).
+	 * @param array  $run    The run.
+	 * @param array  $step   The step.
+	 * @param bool   $accept plan: the step is in accept (the entrance decides whether it takes it).
+	 * @return mixed|null|WP_Error
+	 */
+	public static function code( $at, array $run, array $step, $accept = false ) {
+		$took = AB_MCP_Sync_Run::wrote( $run );
+		if ( is_wp_error( $took ) || ! array_key_exists( 'code', $took['record']['plan'] ) ) {
+			return is_wp_error( $took ) ? $took : null;
+		}
+		$id      = $took['run'];
+		$forward = $took['record'];
+		if ( null === self::$entrance ) {
+			$named = AB_MCP_Protected_Store::named_by_swap();
+			/* translators: 1: run number, 2: the folder of the marks of the protected store (absolute path). */
+			return new WP_Error( 'ab_mcp_sync_revert_code', sprintf( __( 'Run %1$d is a run of plugins or themes, and this installation of AlphaBridge has no way back for code (its entrance is not loaded), so none of its steps is planned or put back, and none left begun is closed as checked. Put the old version back by hand: in a shell on the server with the lines the answer of its swap named (wp_site_push action=status shows the result of that step), or in wp-admin with the version of before. Where the mark of a swap of it is still open in %2$s, its instruction there says how to put the old version back in a shell on the server.', 'alphabridge-mcp' ), $id, is_wp_error( $named ) ? 'the protected store' : $named['marks'] ) );
+		}
+		return call_user_func( self::$entrance, $at, $run, $step, $forward, $accept );
 	}
 
 	/* ------------------------------------------------- the confirmation */
@@ -428,7 +499,8 @@ final class AB_MCP_Sync_Revert {
 		// A step goes back at most once: every step of the way back that
 		// names it counts, whatever its state, in this run (the way back of a
 		// run that was not closed, decision 15) and in every run of the type
-		// revert made for this run once it was closed (reverts in their plan).
+		// revert made for this run once it was closed (reverts in their plan),
+		// each read by the one reader: one that does not read back refuses.
 		// A second way back of the same step would undo a later takeover of
 		// the same object (GitHub Codex round 1 of branch 8).
 		$reverted = array();
@@ -436,23 +508,21 @@ final class AB_MCP_Sync_Revert {
 		if ( is_wp_error( $others ) ) {
 			return $others;
 		}
-		$ways = array( $run['run_id'] => $steps );
+		$ways = array( array( $run, $steps ) );
 		foreach ( $others as $other ) {
-			$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );
-			if ( is_wp_error( $ways[ (int) $other['run_id'] ] ) ) {
-				return $ways[ (int) $other['run_id'] ];
+			$ways[] = array( $other, AB_MCP_Sync_Run::steps( (int) $other['run_id'] ) );
+			if ( is_wp_error( end( $ways )[1] ) ) {
+				return end( $ways )[1];
 			}
 		}
-		foreach ( $ways as $way_id => $way_steps ) {
-			foreach ( $way_steps as $step ) {
-				if ( 'revert' !== $step['op'] || ! is_array( $step['parts'] ) || ! isset( $step['parts']['forward_seq'] ) ) {
-					continue;
-				}
-				if ( isset( $step['parts']['forward_run'] ) && (int) $step['parts']['forward_run'] !== (int) $run['run_id'] ) {
-					continue;
+		foreach ( $ways as list( $way, $way_steps ) ) {
+			foreach ( array_filter( $way_steps, static fn( array $s ): bool => 'revert' === $s['op'] ) as $step ) {
+				$took = AB_MCP_Sync_Run::wrote( $way, $step, false );
+				if ( is_wp_error( $took ) ) {
+					return $took;
 				}
 				// The step that took it back, and its run: named in the refusal.
-				$reverted[ (int) $step['parts']['forward_seq'] ] = array( (int) $step['seq'], (int) $way_id );
+				$reverted[ $took['seq'] ] = array( (int) $step['seq'], (int) $way['run_id'] );
 			}
 		}
 		$items   = array();
@@ -466,19 +536,18 @@ final class AB_MCP_Sync_Revert {
 			if ( null !== $wanted && ! in_array( (int) $step['seq'], $wanted, true ) ) {
 				continue;
 			}
-			// A journal that does not read back as it was written
-			// (AB_MCP_Sync_Run::records()): no way back is planned on it, fail
-			// closed and with the way, rather than leaving the step out unsaid.
-			if ( isset( $step['unread'] ) && in_array( 'parts', $step['unread'], true ) ) {
-				/* translators: 1: step, 2: run number. */
-				return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( __( 'The journal of step %1$d of run %2$d does not read back as it was written (a marker of its bytes that does not hold), so no way back is planned on it and nothing is taken back. Pass steps without %1$d to plan the way back of the other steps that wrote, and check its object by hand in wp-admin; its backup in the protected store holds the object as it was before the step.', 'alphabridge-mcp' ), (int) $step['seq'], (int) $run['run_id'] ) );
+			// Its record through the one reader: none that does not read back
+			// is planned, with the way of the other steps (a plan takes steps).
+			$took = AB_MCP_Sync_Run::wrote( $run, $step, false );
+			if ( is_wp_error( $took ) ) {
+				/* translators: %d: step number. */
+				return 'ab_mcp_sync_revert_unread' === $took->get_error_code() ? new WP_Error( 'ab_mcp_sync_revert_unread', $took->get_error_message() . ' ' . sprintf( __( 'To plan the way back of the other steps that wrote, pass steps without %d.', 'alphabridge-mcp' ), (int) $step['seq'] ) ) : $took;
 			}
-			$journal = is_array( $step['parts'] ) && isset( $step['parts']['object'] ) ? $step['parts'] : null;
-			// Only a step with a journal and a backup wrote anything (decision
-			// 17: no mutation without a backup); a step that failed before its
-			// backup, or made no object, has nothing to take back (B9).
-			$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );
-			if ( ! $wrote ) {
+			$one = self::one( $run, $step, $a );
+			if ( is_wp_error( $one ) ) {
+				return $one;
+			}
+			if ( null === $one ) {
 				if ( null !== $wanted ) {
 					/* translators: 1: step, 2: its state, as the tools name it. */
 					return new WP_Error( 'ab_mcp_sync_revert_steps', sprintf( __( 'Step %1$d is %2$s and wrote nothing: there is nothing to take back for it. Choose a step that wrote (action=status lists them).', 'alphabridge-mcp' ), (int) $step['seq'], $step['state'] ) );
@@ -499,39 +568,12 @@ final class AB_MCP_Sync_Revert {
 				}
 				continue;
 			}
-			$object    = $journal['object'];
-			$live_id   = self::live_ref_of( $object );
-			$objects[] = $object;
-			$items[]   = array(
-				'forward_run' => (int) $run['run_id'],
-				'forward_seq' => (int) $step['seq'],
-			);
-			$parts   = array();
-			foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
-				$parts[] = array_intersect_key( $part, array_flip( array( 'part', 'state', 'way' ) ) );
+			if ( null !== $one['object'] ) {
+				$objects[] = $one['object'];
 			}
-			$foreign = false;
-			foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
-				$foreign = $foreign || ( is_array( $part ) && ! empty( $part['foreign'] ) );
-			}
-			// An object that deviated within its step: nothing of it goes back
-			// by itself (the decision of 07.11.2026); the preview says so and
-			// claims nothing of what it holds now: the way back names each part
-			// unchanged (as the backup) or left (Codex rounds 8, 10, 11).
-			$will = 'create' === $object['op'] ? 'rest' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) || $foreign ? 'stays' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) );
-			$shown[] = array(
-				'seq'      => (int) $step['seq'],
-				'state'    => $step['state'],
-				'kind'     => $object['kind'],
-				'op'       => $object['op'],
-				'live_ref' => AB_MCP_Sync_Engine::is_ref( $live_id ) ? (string) $live_id : null,
-				'pair_id'  => isset( $object['pair_id'] ) ? $object['pair_id'] : $step['pair_id'],
-				'parts'    => $parts,
-				'will'     => $will,
-			);
-			if ( AB_MCP_Sync_Engine::is_ref( $live_id ) ) {
-				$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
-			}
+			$items[] = $one['item'];
+			$shown[] = $one['shown'];
+			$live    = $one['live'] + $live;
 		}
 		// The way back goes from the last step to the first (the steps of a
 		// run in the order of the plan, a parent first): a term the run moved
@@ -577,6 +619,72 @@ final class AB_MCP_Sync_Revert {
 			'print'    => $print,
 			'source'   => $source,
 			'state'    => $state,
+		);
+	}
+
+	/**
+	 * What the way back plans for one write step of the run (way_back()):
+	 * null where the step wrote nothing; for a step of a run of the code
+	 * what its entrance answers (code(), plan: the same four, its object
+	 * null; whether the step is in accept, the entrance decides); else the
+	 * object of its journal, the step as the preview shows it, the hash of
+	 * its row now, by its key, for the token, and the entry of its step of
+	 * the way back.
+	 *
+	 * @param array $run  The run.
+	 * @param array $step A write step of it.
+	 * @param array $a    The arguments of the plan (accept).
+	 * @return array{object:array|null,shown:array,live:array,item:array}|null|WP_Error
+	 */
+	private static function one( array $run, array $step, array $a ) {
+		$code = self::code( 'plan', $run, $step, in_array( (int) $step['seq'], array_map( 'intval', (array) ( $a['accept'] ?? array() ) ), true ) );
+		if ( null !== $code ) {
+			return $code;
+		}
+		$journal = is_array( $step['parts'] ) && isset( $step['parts']['object'] ) ? $step['parts'] : null;
+		// Only a step with a journal and a backup wrote anything (decision
+		// 17: no mutation without a backup); a step that failed before its
+		// backup, or made no object, has nothing to take back (B9).
+		$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );
+		if ( ! $wrote ) {
+			return null;
+		}
+		$object  = $journal['object'];
+		$live_id = self::live_ref_of( $object );
+		$parts   = array();
+		foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
+			$parts[] = array_intersect_key( $part, array_flip( array( 'part', 'state', 'way' ) ) );
+		}
+		$foreign = false;
+		foreach ( isset( $journal['parts'] ) && is_array( $journal['parts'] ) ? $journal['parts'] : array() as $part ) {
+			$foreign = $foreign || ( is_array( $part ) && ! empty( $part['foreign'] ) );
+		}
+		// An object that deviated within its step: nothing of it goes back
+		// by itself (the decision of 07.11.2026); the preview says so and
+		// claims nothing of what it holds now: the way back names each part
+		// unchanged (as the backup) or left (Codex rounds 8, 10, 11).
+		$will = 'create' === $object['op'] ? 'rest' : ( ! empty( $object['deviated'] ) || ! array_key_exists( 'deviated', $object ) || $foreign ? 'stays' : ( 'done' === $step['state'] ? 'back' : 'back where own' ) );
+		$live = array();
+		if ( AB_MCP_Sync_Engine::is_ref( $live_id ) ) {
+			$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
+		}
+		return array(
+			'object' => $object,
+			'shown'  => array(
+				'seq'      => (int) $step['seq'],
+				'state'    => $step['state'],
+				'kind'     => $object['kind'],
+				'op'       => $object['op'],
+				'live_ref' => AB_MCP_Sync_Engine::is_ref( $live_id ) ? (string) $live_id : null,
+				'pair_id'  => isset( $object['pair_id'] ) ? $object['pair_id'] : $step['pair_id'],
+				'parts'    => $parts,
+				'will'     => $will,
+			),
+			'live'   => $live,
+			'item'   => array(
+				'forward_run' => (int) $run['run_id'],
+				'forward_seq' => (int) $step['seq'],
+			),
 		);
 	}
 
@@ -655,11 +763,17 @@ final class AB_MCP_Sync_Revert {
 	 * state, the steps by their state, and the objects of the steps still to
 	 * go as they are.
 	 *
+	 * A step of the way back of the code shows and binds what its entrance
+	 * gives (code(), continue); without the entrance nothing is led on. Each
+	 * other step still to go is read through the one reader of the way back
+	 * (AB_MCP_Sync_Run::wrote()): what does not read back is refused, and
+	 * nothing is written (belege/z5r-leser-zettel.md, S5).
+	 *
 	 * @param array   $run    The interrupted run on its way back.
 	 * @param array[] $steps  Its steps.
 	 * @param string  $print  The print of the pair of sites.
 	 * @param string  $source Source id.
-	 * @return array As plan() returns it, with same_run true and no items.
+	 * @return array|WP_Error As plan() returns it, with same_run true and no items.
 	 */
 	private static function continuation( array $run, array $steps, $print, $source ) {
 		$shown   = array();
@@ -670,20 +784,33 @@ final class AB_MCP_Sync_Revert {
 			if ( 'revert' !== $step['op'] || ! in_array( $step['state'], array( 'planned', 'begun' ), true ) ) {
 				continue;
 			}
-			$what    = is_array( $step['parts'] ) ? $step['parts'] : array();
-			$forward = AB_MCP_Sync_Run::step( isset( $what['forward_run'] ) ? (int) $what['forward_run'] : (int) $run['run_id'], isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : 0 );
+			$state[] = array( (int) $step['seq'], (string) $step['state'] );
+			// A step of the way back of the code: as its entrance shows it.
+			$code = self::code( 'continue', $run, $step );
+			if ( null !== $code ) {
+				if ( is_wp_error( $code ) ) {
+					return $code;
+				}
+				$shown[] = $code['shown'];
+				$live    = $code['live'] + $live;
+				continue;
+			}
+			$took = AB_MCP_Sync_Run::wrote( $run, $step );
+			if ( is_wp_error( $took ) ) {
+				return $took;
+			}
+			$forward = $took['record'];
 			$object  = is_array( $forward ) && is_array( $forward['parts'] ) && isset( $forward['parts']['object'] ) ? $forward['parts']['object'] : array();
 			$live_id   = self::live_ref_of( $object );
 			$objects[] = $object;
 			$shown[]   = array(
 				'seq'         => (int) $step['seq'],
 				'state'       => $step['state'],
-				'forward_seq' => isset( $what['forward_seq'] ) ? (int) $what['forward_seq'] : null,
+				'forward_seq' => $took['seq'],
 				'kind'        => isset( $object['kind'] ) ? $object['kind'] : null,
 				'live_ref'    => AB_MCP_Sync_Engine::is_ref( $live_id ) ? (string) $live_id : null,
 				'will'        => 'begun' === $step['state'] ? 'stays' : 'back where own',
 			);
-			$state[] = array( (int) $step['seq'], (string) $step['state'] );
 			if ( 'planned' === $step['state'] && AB_MCP_Sync_Engine::is_ref( $live_id ) ) {
 				$live[ self::live_key( $object, $live_id ) ] = self::row_now( $object, $live_id );
 			}
@@ -860,7 +987,7 @@ final class AB_MCP_Sync_Revert {
 		$run    = $plan['run'];
 		$run_id = (int) $run['run_id'];
 		$began = AB_MCP_Sync_Run::transaction(
-			static function () use ( $run_id, $steps ) {
+			static function () use ( $run, $run_id, $steps ) {
 				$moved = AB_MCP_Sync_Run::set_state( $run_id, array( 'open', 'interrupted' ), 'reverting' );
 				if ( is_wp_error( $moved ) ) {
 					return $moved;
@@ -883,7 +1010,7 @@ final class AB_MCP_Sync_Revert {
 								'state'  => 'unclear',
 								'result' => array(
 									'message' => 'revert' === $step['op']
-										? __( 'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run.', 'alphabridge-mcp' )
+										? __( 'Interrupted: the request that put this step back ended before it finished; whatever it reached stays as it is, nothing of it is put back again (no put back is repeated). Check the object in wp-admin; the backup of the step that wrote holds its state before the run, while the backups of the run are kept.', 'alphabridge-mcp' )
 										: __( 'Interrupted: the request that wrote this step ended before it finished; the way back reads its journal.', 'alphabridge-mcp' ),
 								),
 							),
@@ -891,7 +1018,10 @@ final class AB_MCP_Sync_Revert {
 						);
 						// The pair of a step of the way back left begun: unclear, as
 						// a close as checked makes it (its object may be back in part).
-						$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run_id, $step ) : null;
+						$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run, $step ) : null;
+						if ( is_wp_error( $pair_id ) ) {
+							return $pair_id;
+						}
 						if ( null !== $pair_id ) {
 							$pair = AB_MCP_Sync_Pairs::get( $pair_id );
 							if ( is_array( $pair ) && 'active' === $pair['state'] ) {

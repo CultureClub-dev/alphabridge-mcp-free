@@ -985,7 +985,7 @@ ab_offer( 'plugin', $f37, '1.0.0', '2.0.0', ab_package_plugin( 'good', '2.0.0' )
 $t = time() - 4;
 update_option( AB_MCP_Change_Lock::OPTION, $t );
 $r = AB_Test_Update_Guard::update( ab_plugin_job( $f37 ) );
-ok( 'ab_mcp_change_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for 4 s' ), 'F37 refused while another change runs: ' . ab_msg( $r ) );
+ok( 'ab_mcp_change_busy' === ab_code( $r ) && false !== strpos( ab_msg( $r ), 'AlphaBridge\'s lock for changes of the code this site runs is held, and who holds it cannot be told here.' ) && false !== strpos( ab_msg( $r ), 'Its time was written at ' . gmdate( 'H:i', $t ) . ' UTC.' ) && false === strpos( ab_msg( $r ), 'has been running' ), 'F37 refused while the lock for changes is held, no change claimed: ' . ab_msg( $r ) );
 ok( '1.0.0' === ab_installed_version( 'plugin', $f37 ) && array() === ab_events_like( 'bulk_upgrade' ) && array() === ab_events_like( 'probe:' ), 'F37 nothing updated, no test request' );
 ok( false === get_option( 'auto_updater.lock' ) && null === AB_MCP_Update_Log::running(), 'F37 the update lock and our note are freed again' );
 ok( $t === (int) get_option( AB_MCP_Change_Lock::OPTION ) && ! AB_MCP_Change_Lock::held(), 'F37 the other request\'s lock stays as it was' );

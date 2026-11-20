@@ -419,10 +419,15 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 							'items'       => array( 'type' => 'integer' ),
 							'description' => 'plan: the entries taken over with the status draft (the confirmed choice where a page of the top level would be published or scheduled while a menu adds pages by itself).',
 						),
+						'accept'    => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'plan: of the plugins and themes chosen in select, the numbers of those whose code runs on this site (an active plugin, the theme that runs or its parent) and whose swap the person releases: code of the unit, its new version too, runs in the swap. Without its number here such an entry is not taken over; all=true never takes it.',
+						),
 						'packages'  => array(
 							'type'        => 'array',
 							'items'       => array( 'type' => 'string' ),
-							'description' => 'plan: the package_ids of the objects of the staging site for this report and of the files of its attachments, taken over here completely (wp_site_import_chunk, purpose=objects and purpose=media).',
+							'description' => 'plan: the package_ids of the objects of the staging site for this report and of the files of its attachments, taken over here completely (wp_site_import_chunk, purpose=objects and purpose=media); for plugins and themes the packages of their files (purpose=code), none where they come from wordpress.org.',
 						),
 						'run_id'    => array(
 							'type'        => 'integer',
@@ -450,7 +455,7 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 		$r->register(
 			'wp_site_revert',
 			array(
-				'description' => 'On the production site: take back what a run of wp_site_push wrote, pair by pair, byte for byte conditional. action=plan with run_id (without it, the run of this site that is not closed) and steps (the write steps of the run to take back; without them, every step that wrote): without confirm_token it answers with the preview (each object with the parts the run wrote and what will happen: back, back where still its own, or a rest) and a token; with the token the way back begins: for a run that is open or interrupted, the same run moves to reverting and gets its steps of the way back; for a closed run, a run of the way back is made (at most one run per site is not closed). action=next takes one pair back under the lock of AlphaBridge: a part goes back only where its bytes are still what the run wrote (the row through wp_update_post() with the backed-up dates and edit_date, after the check of the status WordPress would store now; meta rows raw and conditional; terms through wp_set_object_terms(); a field of a shared row, such as a position of a menu, an instance of a widget, the order of an area or a core option, raw and conditional on its bytes); nothing where it is as before the run; a part changed since, a part the step never read back and every part of an object that deviated within its step is left as it is and named with its value before, its pair unclear; a new object the run made is never removed and stays as a rest, its pair residual (the positions a new menu took go back); a backed-up scheduled post whose date has passed is not put back (check needed). The last step closes the run as reverted, or with findings where rests or unclear parts remain. action=status shows the run. A run belongs to the account and connection that made it. Refused on a multisite network and without a confirmed key of a staging site. Needs manage_options and the access level Full.',
+				'description' => 'On the production site: take back what a run of wp_site_push wrote, pair by pair, byte for byte conditional. action=plan with run_id (without it, the run of this site that is not closed) and steps (the write steps of the run to take back; without them, every step that wrote): without confirm_token it answers with the preview (each object with the parts the run wrote and what will happen: back, back where still its own, or a rest) and a token; with the token the way back begins: for a run that is open or interrupted, the same run moves to reverting and gets its steps of the way back; for a closed run, a run of the way back is made (at most one run per site is not closed). action=next takes one pair back under the lock of AlphaBridge: a part goes back only where its bytes are still what the run wrote (the row through wp_update_post() with the backed-up dates and edit_date, after the check of the status WordPress would store now; meta rows raw and conditional; terms through wp_set_object_terms(); a field of a shared row, such as a position of a menu, an instance of a widget, the order of an area or a core option, raw and conditional on its bytes); nothing where it is as before the run; a part changed since, a part the step never read back and every part of an object that deviated within its step is left as it is and named with its value before, its pair unclear; a new object the run made is never removed and stays as a rest, its pair residual (the positions a new menu took go back); a backed-up scheduled post whose date has passed is not put back (check needed). A swap step of plugins or themes goes back as a whole: the old version from the backup to the target, the new one into a backup of the way back, each rename only onto a free place and only where the call proves what it moves (the old version whole in the backup, the new one or nothing at the target), else nothing moves and the step is unclear with the way by hand; a plugin that ran when its swap began and is inactive then is activated again only with its seq in accept, a switch of the theme is not put back. The last step closes the run as reverted, or with findings where rests or unclear parts remain. action=status shows the run. A run belongs to the account and connection that made it. Refused on a multisite network and without a confirmed key of a staging site. Needs manage_options and the access level Full.',
 				'capability'  => 'manage_options',
 				'readonly'    => false,
 				'destructive' => true,
@@ -472,6 +477,11 @@ class AB_MCP_Tools_Staging extends AB_MCP_Tools_Base {
 							'type'        => 'array',
 							'items'       => array( 'type' => 'integer' ),
 							'description' => 'plan: the seqs of the write steps of the run to take back; without them, every step that wrote.',
+						),
+						'accept' => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'integer' ),
+							'description' => 'plan: the seqs of the swap steps of plugins that ran when their swap began, whose plugin the way back activates again, with its activation routine and checked like an update, where it is inactive once the old version is back; without its seq such a plugin stays inactive and the answer names it. A step that is no such swap is refused.',
 						),
 					),
 					'required'   => array( 'action' ),

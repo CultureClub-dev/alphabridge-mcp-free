@@ -582,10 +582,10 @@ return array(
 	),
 	array(
 		'id'      => 'medien/engine-verify-last',
-		'clause'  => 'run_verify(): only the last step that wrote an object holds its target',
+		'clause'  => 'written() of run_verify(): only the last step that wrote an object holds its target',
 		'file'    => $en,
-		'search'  => "\t\t\t\t\$later   = ( \$last[ ( \$one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) \$live_id ] ?? (int) \$one['seq'] ) !== (int) \$one['seq'];",
-		'replace' => "\t\t\t\t\$later   = false;",
+		'search'  => "\t\t\$later   = ( \$last[ ( \$one['parts']['object']['kind'] ?? 'post' ) . ':' . (string) \$live_id ] ?? (int) \$one['seq'] ) !== (int) \$one['seq'];",
+		'replace' => "\t\t\$later   = false;",
 		'run'     => $it( 'SyncMediaTest', 'testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles' ),
 		'expect'  => '/testANewImageWithItsSizesAndANewPdfInANewPageGoOverAndTheWayBackLeavesThemWithTheirFiles/',
 	),

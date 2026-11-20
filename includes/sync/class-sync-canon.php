@@ -710,13 +710,34 @@ final class AB_MCP_Sync_Canon {
 
 	/**
 	 * The JSON of a form: keys sorted, sets sorted, floats and bytes tagged.
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5) each
+	 * element is prepared only while it is not over; once it is, the text is
+	 * '' and the caller passes the stop on (AB_MCP_Sync_Deadline::stop()).
+	 * json_encode() is one call (a named limit of the deadline).
 	 *
-	 * @param mixed $form Form.
+	 * @param mixed      $form     Form.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return string
 	 */
-	public static function encode( $form ) {
-		$json = json_encode( self::prepared( $form ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION, 4096 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- the same bytes on every site, without WordPress' re-encoding.
+	public static function encode( $form, $deadline = null ) {
+		$prepared = self::prepared( $form, $deadline );
+		if ( self::stopped( $deadline ) ) {
+			return '';
+		}
+		$json = json_encode( $prepared, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION, 4096 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- the same bytes on every site, without WordPress' re-encoding.
 		return is_string( $json ) ? $json : '';
+	}
+
+	/**
+	 * Whether work under a deadline is to stop before its next element: it
+	 * stopped before (its stop kept, the clock not asked again), or the
+	 * deadline is over or its clock unknown now.
+	 *
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @return bool
+	 */
+	private static function stopped( $deadline ) {
+		return null !== $deadline && ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || true !== AB_MCP_Sync_Deadline::left( $deadline ) );
 	}
 
 	/**
@@ -742,26 +763,28 @@ final class AB_MCP_Sync_Canon {
 	 * markers (~set, ~php, ~s, ~ref) carry meaning and whose stored keys may
 	 * begin with "~": that form is compared by its hash, never read back.
 	 *
-	 * @param string $json  JSON of encode().
-	 * @param int    $depth How deep json_decode() reads.
+	 * @param string     $json     JSON of encode().
+	 * @param int        $depth    How deep json_decode() reads.
+	 * @param mixed|null $deadline Null, or a deadline: each element revived only while it is not over (else null, see encode()).
 	 * @return mixed|null The form; null where the text is not one of encode().
 	 */
-	public static function decode( $json, $depth = 512 ) {
+	public static function decode( $json, $depth = 512, $deadline = null ) {
 		$value = json_decode( (string) $json, true, (int) $depth );
 		if ( JSON_ERROR_NONE !== json_last_error() ) {
 			return null;
 		}
 		$ok   = true;
-		$form = self::revived( $value, $ok );
+		$form = self::revived( $value, $ok, $deadline );
 		return $ok ? $form : null;
 	}
 
 	/**
-	 * @param mixed $value Decoded JSON.
-	 * @param bool  $ok    Cleared where a marker does not read back.
+	 * @param mixed      $value    Decoded JSON.
+	 * @param bool       $ok       Cleared where a marker does not read back, or the deadline is over.
+	 * @param mixed|null $deadline Null, or a deadline.
 	 * @return mixed
 	 */
-	private static function revived( $value, &$ok ) {
+	private static function revived( $value, &$ok, $deadline = null ) {
 		if ( ! is_array( $value ) ) {
 			if ( is_float( $value ) ) {
 				// encode() writes a float as {"~f"}; a bare float is not its text.
@@ -785,11 +808,11 @@ final class AB_MCP_Sync_Canon {
 		}
 		$out = array();
 		foreach ( $value as $key => $item ) {
-			if ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) {
+			if ( ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) || self::stopped( $deadline ) ) {
 				$ok = false;
 				return null;
 			}
-			$out[ $key ] = self::revived( $item, $ok );
+			$out[ $key ] = self::revived( $item, $ok, $deadline );
 		}
 		return $out;
 	}
@@ -898,10 +921,11 @@ final class AB_MCP_Sync_Canon {
 	}
 
 	/**
-	 * @param mixed $value Form.
+	 * @param mixed      $value    Form.
+	 * @param mixed|null $deadline Null, or a deadline (encode()): each element only while it is not over.
 	 * @return mixed What json_encode() writes alike on every site.
 	 */
-	private static function prepared( $value ) {
+	private static function prepared( $value, $deadline = null ) {
 		if ( is_string( $value ) ) {
 			return 1 === preg_match( '//u', $value ) ? $value : array( '~b' => base64_encode( $value ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- bytes JSON cannot carry.
 		}
@@ -920,7 +944,10 @@ final class AB_MCP_Sync_Canon {
 		if ( array( '~set' ) === array_keys( $value ) && is_array( $value['~set'] ) ) {
 			$items = array();
 			foreach ( $value['~set'] as $item ) {
-				$prepared = self::prepared( $item );
+				if ( self::stopped( $deadline ) ) {
+					return null;
+				}
+				$prepared = self::prepared( $item, $deadline );
 				$items[]  = array( (string) json_encode( $prepared, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION, 4096 ), $prepared ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- see encode().
 			}
 			usort(
@@ -933,7 +960,10 @@ final class AB_MCP_Sync_Canon {
 		}
 		if ( array_is_list( $value ) ) {
 			foreach ( $value as $key => $item ) {
-				$value[ $key ] = self::prepared( $item );
+				if ( self::stopped( $deadline ) ) {
+					return null;
+				}
+				$value[ $key ] = self::prepared( $item, $deadline );
 			}
 			return $value;
 		}
@@ -942,8 +972,11 @@ final class AB_MCP_Sync_Canon {
 		// with "~" have one "~" more, walk()).
 		$out = array();
 		foreach ( $value as $key => $item ) {
+			if ( self::stopped( $deadline ) ) {
+				return null;
+			}
 			$name         = is_string( $key ) && 1 !== preg_match( '//u', $key ) ? '~k:' . bin2hex( $key ) : $key;
-			$out[ $name ] = self::prepared( $item );
+			$out[ $name ] = self::prepared( $item, $deadline );
 		}
 		ksort( $out, SORT_STRING );
 		return $out;

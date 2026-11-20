@@ -67,6 +67,7 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-sync-decision.php';
 require_once __DIR__ . '/class-sync-env.php';
 require_once __DIR__ . '/class-sync-said.php';
+require_once __DIR__ . '/class-sync-deadline.php';
 
 /**
  * Class AB_MCP_Sync_Report
@@ -306,15 +307,30 @@ final class AB_MCP_Sync_Report {
 	 * line whose name the import held by the rules of this site is shown by
 	 * the SHA-256 of its name (AB_MCP_Sync_Env::held_here()).
 	 *
-	 * @param string[] $ids Package ids, in the order of their series; none: no environment.
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5; the signed
+	 * manifest of a swap, AB_MCP_Sync_Code_Stage::signed()) each package is
+	 * taken (AB_MCP_Sync_Import::taken()) and its lines held here
+	 * (held_here()) only while it is not over, and the series is given only
+	 * then; its stop is the answer as it is, never a refusal of the series.
+	 *
+	 * @param string[]   $ids      Package ids, in the order of their series; none: no environment.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{lines:array[],expires:int,packages:int}|WP_Error
 	 */
-	public static function environment( array $ids ) {
+	public static function environment( array $ids, $deadline = null ) {
 		$lines   = array();
 		$expires = PHP_INT_MAX;
 		$walk    = null;
 		foreach ( array_values( $ids ) as $i => $id ) {
-			$part = AB_MCP_Sync_Import::taken( $id, 'env' );
+			$left = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $left ) {
+				return $left;
+			}
+			$part = AB_MCP_Sync_Import::taken( $id, 'env', $deadline );
+			$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+			if ( null !== $stop ) {
+				return $stop;
+			}
 			if ( is_wp_error( $part ) ) {
 				return self::refusal( $part->get_error_code(), $part->get_error_message(), '', self::ANCHOR_TRUST );
 			}
@@ -331,9 +347,15 @@ final class AB_MCP_Sync_Report {
 			$expires = min( $expires, (int) $part['manifest']['expires'] );
 			// A name a credential holds by the rules of this site (the list of
 			// the import): by its SHA-256 only (Codex, round 1 of branch 7, A1).
-			foreach ( AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'] ) as $line ) {
-				$lines[] = $line;
+			$held = AB_MCP_Sync_Env::held_here( array_slice( $part['lines'], 1 ), $part['held'], null, $deadline );
+			if ( is_wp_error( $held ) ) {
+				return $held;
 			}
+			array_push( $lines, ...$held );
+		}
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
 		}
 		return array(
 			'lines'    => $lines,

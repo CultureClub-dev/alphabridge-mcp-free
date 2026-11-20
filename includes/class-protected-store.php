@@ -149,6 +149,8 @@ require_once __DIR__ . '/class-store-budget.php';
 require_once __DIR__ . '/class-store-inputs.php';
 require_once __DIR__ . '/sync/class-sync-schema.php';
 require_once __DIR__ . '/sync/class-sync-file-manifest.php';
+require_once __DIR__ . '/sync/class-sync-deadline.php';
+require_once __DIR__ . '/sync/class-sync-step.php';
 
 /**
  * The calls of the protected store to the outside (Z8b branch 3, plan 8.3):
@@ -306,18 +308,28 @@ final class AB_MCP_Protected_Store_Calls {
 	}
 
 	/**
-	 * Read a small file whole (a mark, an instruction).
+	 * Read a small file whole (a mark, an instruction, a sidecar). Composed
+	 * of two steps of the disk (R12b of Z8b branch 5, section 3.1 of the
+	 * order): with a deadline it is asked before lstat() and the bytes are
+	 * read through the helper of the steps, which asks it again; once it is
+	 * over, its stop is the answer at once, and nothing more is read.
+	 * Without a deadline (null) as before, without a reading of the clock.
 	 *
-	 * @param string $path File.
-	 * @param int    $max  Bytes at most.
-	 * @return string|false
+	 * @param string     $path     File.
+	 * @param int        $max      Bytes at most.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return string|false|WP_Error The stop of the deadline as a WP_Error.
 	 */
-	public function read( $path, $max ) {
+	public function read( $path, $max, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		$stat = $this->lstat( $path );
 		if ( false === $stat || 0100000 !== ( $stat['mode'] & 0170000 ) || $stat['size'] > (int) $max ) {
 			return false;
 		}
-		return @file_get_contents( (string) $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		return @AB_MCP_Sync_Step::file_get_contents( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 	}
 
 	/**
@@ -745,20 +757,43 @@ final class AB_MCP_Protected_Store {
 	 * Whether a folder holds a path: the path is the folder or lies below it,
 	 * by device and inode along the resolved chain of the path's parents (so
 	 * a link or another spelling of a path is seen through). False when
-	 * either cannot be read.
+	 * either cannot be read, and under a deadline that is over (R12 of Z8b
+	 * branch 5: each stat() only while it is not; the caller passes the
+	 * stop on, AB_MCP_Sync_Deadline::stop()). Each stat() and the realpath()
+	 * through the helper of the steps (R12b), which asks the deadline first:
+	 * where it is over there, false as well.
 	 *
-	 * @param string $dir  Folder.
-	 * @param string $path Path.
+	 * @param string     $dir      Folder.
+	 * @param string     $path     Path.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return bool
 	 */
-	public static function holds( $dir, $path ) {
-		$target = @stat( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		$at     = @realpath( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	public static function holds( $dir, $path, $deadline = null ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return false;
+		}
+		$target = @AB_MCP_Sync_Step::stat( $deadline, $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $target ) ) {
+			return false;
+		}
+		$at = false;
+		if ( true === AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			$at = @AB_MCP_Sync_Step::realpath( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		if ( is_wp_error( $at ) ) {
+			return false;
+		}
 		if ( false === $target || false === $at ) {
 			return false;
 		}
 		while ( true ) {
-			$here = @stat( $at ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return false;
+			}
+			$here = @AB_MCP_Sync_Step::stat( $deadline, $at ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( is_wp_error( $here ) ) {
+				return false;
+			}
 			if ( false !== $here && $here['dev'] === $target['dev'] && $here['ino'] === $target['ino'] ) {
 				return true;
 			}
@@ -1050,17 +1085,25 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Read one file of a group, verified against the SHA-256 put() returned.
+	 * With a deadline (R12 of Z8b branch 5; read_gate()) each step of the
+	 * way and of the file begins only while it is not over, and its stop is
+	 * the answer, never a file missing, unread or damaged.
 	 *
-	 * @param string $area   Area.
-	 * @param string $gid    Group.
-	 * @param string $name   File name.
-	 * @param string $sha256 SHA-256 of the raw bytes.
+	 * @param string     $area     Area.
+	 * @param string     $gid      Group.
+	 * @param string     $name     File name.
+	 * @param string     $sha256   SHA-256 of the raw bytes.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return string|WP_Error
 	 */
-	public static function get( $area, $gid, $name, $sha256 ) {
+	public static function get( $area, $gid, $name, $sha256, $deadline = null ) {
 		$bad = self::bad_ref( $area, $gid, $name );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1070,21 +1113,41 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid, $deadline );
 		if ( ! is_array( $found ) ) {
 			return $found;
 		}
 		$path = $found[1] . '/' . $name;
-		if ( false !== @lstat( $path ) && ! self::plain( $path, 'file' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-			return self::unsafe();
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
-		$raw = AB_MCP_Payload_File::read( $path, $sha256, self::FILE_MAX + 65536, self::FILE_MAX );
+		// Each step through the helper of the steps (R12b): lstat() of the
+		// path, then plain() with its own lstat(), each after its check.
+		$there = @AB_MCP_Sync_Step::lstat( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $there ) ) {
+			return $there;
+		}
+		if ( false !== $there ) {
+			$plain = self::plain( $path, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				return $plain;
+			}
+			if ( ! $plain ) {
+				return self::unsafe();
+			}
+		}
+		$raw = AB_MCP_Payload_File::read( $path, $sha256, self::FILE_MAX + 65536, self::FILE_MAX, $deadline );
 		if ( ! is_wp_error( $raw ) ) {
 			return $raw;
 		}
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		switch ( $raw->get_error_code() ) {
 			case 'missing':
-				return new WP_Error( 'ab_mcp_store_missing', 'The file is not in the protected store: it was never written, or its group was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Make it again.' );
+				return new WP_Error( 'ab_mcp_store_missing', __( 'The file was not found in its group of the protected store, or it could not be inspected there; the store does not tell which. Where it belongs to a package or a report whose source is still there, make that anew. A backup of what a run already replaced cannot be made anew: check the object in wp-admin, or ask the host whether a backup of the site holds it. Where the file should still be there, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 			case 'read':
 				return new WP_Error( 'ab_mcp_store_read', 'The file of the protected store could not be read. Try again; if it keeps failing, ask the host to check the rights of the folder.' );
 			default:
@@ -1093,15 +1156,23 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The groups of an area, oldest first.
+	 * The groups of an area, oldest first. With a deadline (R12 of Z8b
+	 * branch 5; read_gate()) the way, the listing, each sidecar and each
+	 * entry only while it is not over, and its stop is the answer, never an
+	 * area not listed or a group left out.
 	 *
-	 * @param string $area Area.
+	 * @param string     $area     Area.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array[]|WP_Error Entries: gid, area, created, user_id, run_id, declared, used, label, closed, expires.
 	 */
-	public static function groups( $area ) {
+	public static function groups( $area, $deadline = null ) {
 		$bad = self::bad_area( $area );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1111,21 +1182,111 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		if ( null === self::way( $root, array( $area ) ) ) {
-			return self::unsafe();
+		if ( null === self::way( $root, array( $area ), $deadline ) ) {
+			return self::stopped_or( $deadline, self::unsafe() );
 		}
 		$out     = array();
-		$entries = self::entries( $root, self::install_id(), $area, $whole );
-		if ( null === $whole ) {
-			return self::unlisted( $area );
+		$entries = self::entries( $root, self::install_id(), $area, $whole, $deadline );
+		if ( null === $whole || null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return self::stopped_or( $deadline, self::unlisted( $area ) );
 		}
 		foreach ( $entries as $entry ) {
+			$gate = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $gate ) {
+				return $gate;
+			}
 			unset( $entry['format'] );
 			$keep             = self::keep( $area );
 			$entry['expires'] = null === $keep ? null : $entry['created'] + $keep;
 			$out[]            = $entry;
 		}
-		return $out;
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		return true === $gate ? $out : $gate;
+	}
+
+	/**
+	 * The gate of a reader under a deadline (R12 of Z8b branch 5), before
+	 * the store is asked where it is: true without a deadline; the stop
+	 * where the deadline is over or is no deadline; and, where this request
+	 * has not decided the store yet ($proof null), a refusal of its own,
+	 * kept as the stop of the deadline (halt()): a reader under a deadline
+	 * never starts the decision and its self-check (proof()), which no
+	 * deadline interrupts. The caller decides it before its deadline
+	 * (AB_MCP_Sync_Code_Swap::checked()); the fresh admission (admitted())
+	 * stays.
+	 *
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @return true|WP_Error
+	 */
+	private static function read_gate( $deadline ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left || null === $deadline || null !== self::$proof ) {
+			return $left;
+		}
+		return AB_MCP_Sync_Deadline::halt( $deadline, new WP_Error( 'ab_mcp_store_undecided', __( 'Where the protected store is was not decided yet in this request, and this reading has a time limit, so it does not decide it now (its check can take longer than the time left) and reads nothing of the store. Call again; where it keeps failing, report it to the makers of AlphaBridge MCP: the caller decides the store before such a reading.', 'alphabridge-mcp' ) ) );
+	}
+
+	/**
+	 * The stop of a reading under a deadline where a helper answered «not
+	 * read», else the refusal of the reader.
+	 *
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @param WP_Error   $refusal  The refusal of the reader.
+	 * @return WP_Error
+	 */
+	private static function stopped_or( $deadline, WP_Error $refusal ) {
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		return null === $stop ? $refusal : $stop;
+	}
+
+	/**
+	 * The entry of one group of an area, as its sidecar holds it (gid, area,
+	 * created, user_id, run_id, declared, used, label, closed), read whole,
+	 * or the refusal: a sidecar that cannot be read, is not there or is not
+	 * an entry of its area whole (sidecar()) is an error of its own, never
+	 * left out as a group not listed (Z8b branch 5, K2: the stage reads the
+	 * run its group is bound to, AB_MCP_Sync_Code_Stage::complete()).
+	 *
+	 * With a deadline (R12 of Z8b branch 5; read_gate()) the way and the
+	 * sidecar only while it is not over, and its stop is the answer.
+	 *
+	 * @param string     $area     Area.
+	 * @param string     $gid      Group.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return array|WP_Error
+	 */
+	public static function entry( $area, $gid, $deadline = null ) {
+		$bad = self::bad_ref( $area, $gid, 'x' );
+		if ( null !== $bad ) {
+			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
+		}
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$admitted = self::admitted( $root );
+		if ( true !== $admitted ) {
+			return $admitted;
+		}
+		$area_dir = self::way( $root, array( $area ), $deadline );
+		if ( null === $area_dir ) {
+			return self::stopped_or( $deadline, self::unsafe() );
+		}
+		$read = self::sidecar( $area_dir . '/' . self::group_name( $area, $gid, self::install_id() ) . '.json', $area, $deadline );
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
+		if ( 'own' !== $read[0] || $gid !== $read[1]['gid'] ) {
+			return new WP_Error( 'ab_mcp_store_entry', __( 'The entry of the group could not be read whole in the protected store (its sidecar cannot be read, is not there, or is not of its form), so what the group is bound to is not known. Try again; if it keeps failing, ask the host to check the rights of the folder.', 'alphabridge-mcp' ) );
+		}
+		$entry = $read[1];
+		unset( $entry['format'] );
+		return $entry;
 	}
 
 	/**
@@ -1181,16 +1342,23 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * The files of a group, by name, with their size on disk.
+	 * The files of a group, by name, with their size on disk. With a
+	 * deadline (R12 of Z8b branch 5; read_gate()) the way, the listing and
+	 * each file only while it is not over, and its stop is the answer.
 	 *
-	 * @param string $area Area.
-	 * @param string $gid  Group.
+	 * @param string     $area     Area.
+	 * @param string     $gid      Group.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array<string,int>|WP_Error
 	 */
-	public static function files( $area, $gid ) {
+	public static function files( $area, $gid, $deadline = null ) {
 		$bad = self::bad_ref( $area, $gid, 'x' );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -1200,20 +1368,53 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid, $deadline );
 		if ( ! is_array( $found ) ) {
 			return $found;
 		}
-		$dir = $found[1];
-		$out = array();
-		foreach ( (array) scandir( $dir ) as $file ) {
-			$file = (string) $file;
-			if ( self::valid_name( $file ) && self::plain( $dir . '/' . $file, 'file' ) ) {
-				$out[ $file ] = (int) filesize( $dir . '/' . $file );
+		$dir   = $found[1];
+		$out   = array();
+		$names = array();
+		$gate  = AB_MCP_Sync_Deadline::left( $deadline );
+		// The listing, plain() and each size through the helper of the steps
+		// (R12b); a listing that fails lists no file, as before (no cast: C1).
+		if ( true === $gate ) {
+			$names = AB_MCP_Sync_Step::scandir( $deadline, $dir );
+		}
+		if ( is_wp_error( $names ) ) {
+			return $names;
+		}
+		if ( ! is_array( $names ) ) {
+			$names = array();
+		}
+		foreach ( $names as $file ) {
+			$gate = AB_MCP_Sync_Deadline::left( $deadline );
+			if ( true !== $gate ) {
+				break;
 			}
+			$file = (string) $file;
+			if ( ! self::valid_name( $file ) ) {
+				continue;
+			}
+			$plain = self::plain( $dir . '/' . $file, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				return $plain;
+			}
+			if ( ! $plain ) {
+				continue;
+			}
+			$size = AB_MCP_Sync_Step::filesize( $deadline, $dir . '/' . $file );
+			if ( is_wp_error( $size ) ) {
+				return $size;
+			}
+			$out[ $file ] = false === $size ? 0 : $size;
+		}
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		ksort( $out );
-		return $out;
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		return true === $gate ? $out : $gate;
 	}
 
 	/**
@@ -1839,7 +2040,10 @@ final class AB_MCP_Protected_Store {
 	 *   running it, else code:store_web;
 	 * - what goes in comes back byte for byte: the manifest of the copy
 	 *   (AB_MCP_Sync_File_Manifest::unit()) is the one of the source, read
-	 *   whole before, else nothing of it stays.
+	 *   whole before, else the call does not take it (ab_mcp_store_tree_changed:
+	 *   it differs, or it was not read back whole, as when the time of the
+	 *   reading runs out) and tries to remove it (delete_path(), whose result
+	 *   is not asked: the message claims no more).
 	 *
 	 * With a source the tree is a copy of it, file by file through
 	 * write_file(), with the modes of the source. Without one only the place
@@ -1979,7 +2183,7 @@ final class AB_MCP_Protected_Store {
 						$out['copied'] = true;
 						return $out;
 					}
-					$made = new WP_Error( 'ab_mcp_store_tree_changed', __( 'The copy in the protected store is not what was read before it (the source changed while it was copied, or a file was not written whole), so nothing of it stays. Check that nothing writes into the source right now, then try again.', 'alphabridge-mcp' ) );
+					$made = new WP_Error( 'ab_mcp_store_tree_changed', __( 'The copy in the protected store could not be confirmed as what was read from the source before it: it differs, or it could not be read back whole. So the call does not take it and tried to remove it; whether all of it is gone was not checked. Check that nothing writes into the source right now; if it keeps happening, ask the host whether the disk of the store is slow or something else writes into its folder. Then put the tree anew. If part of the copy remains, use a new group (for a unit of wp_site_push, start a new run).', 'alphabridge-mcp' ) );
 				}
 				// What this request made of it goes again (delete_path()).
 				self::delete_path( $root, $place );
@@ -2165,16 +2369,28 @@ final class AB_MCP_Protected_Store {
 	 * A tree read back: its place where its manifest is the one put_tree()
 	 * gave (what went in comes back byte for byte, Z7).
 	 *
-	 * @param string $area Area ('stage' or 'backups').
-	 * @param string $gid  Group.
-	 * @param string $name Name of the tree (is_tree_name(): up to 255 bytes).
-	 * @param string $hash The hash put_tree() gave.
+	 * With a deadline (R12 of Z8b branch 5; read_gate()) the way to its
+	 * group, the sidecar of the group, the tree asked at its place and its
+	 * reading (read_tree(): until the earlier of the deadline and
+	 * TREE_BUDGET) each begin only while it is not over, and so does the
+	 * answer; its stop is the answer, never a tree missing, changed or not
+	 * read whole (the end of TREE_BUDGET stays tree_changed).
+	 *
+	 * @param string     $area     Area ('stage' or 'backups').
+	 * @param string     $gid      Group.
+	 * @param string     $name     Name of the tree (is_tree_name(): up to 255 bytes).
+	 * @param string     $hash     The hash put_tree() gave.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{path:string,hash:string,form:string,files:int,bytes:int}|WP_Error
 	 */
-	public static function tree( $area, $gid, $name, $hash ) {
+	public static function tree( $area, $gid, $name, $hash, $deadline = null ) {
 		$bad = self::bad_tree_ref( $area, $gid, $name );
 		if ( null !== $bad ) {
 			return $bad;
+		}
+		$gate = self::read_gate( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		$root = self::root();
 		if ( is_wp_error( $root ) ) {
@@ -2184,21 +2400,33 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $admitted ) {
 			return $admitted;
 		}
-		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid );
+		$found = self::group( $root, $area, self::group_name( $area, $gid, self::install_id() ), $gid, $deadline );
 		if ( ! is_array( $found ) ) {
 			return $found;
 		}
 		$place = $found[1] . '/' . $name;
-		$stat  = self::calls()->lstat( $place );
+		$gate  = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
+		}
+		$stat = self::calls()->lstat( $place );
 		if ( false === $stat ) {
 			return new WP_Error( 'ab_mcp_store_tree_missing', __( 'The tree is not in its group of the protected store: it was never put there, or its group was removed after its time. Use put_tree() to put it there again.', 'alphabridge-mcp' ) );
 		}
 		if ( ! in_array( $stat['mode'] & 0170000, array( 0040000, 0100000 ), true ) ) {
 			return self::unsafe();
 		}
-		$read = self::read_tree( $place );
+		$read = self::read_tree( $place, $deadline );
+		$stop = AB_MCP_Sync_Deadline::stop( $deadline );
+		if ( null !== $stop ) {
+			return $stop;
+		}
 		if ( ! $read['complete'] || null === $read['hash'] || ! hash_equals( (string) $hash, (string) $read['hash'] ) ) {
-			return new WP_Error( 'ab_mcp_store_tree_changed', __( 'The tree in the protected store is not what was put there (its manifest differs, or it could not be read whole), so it is not used. Make it again; if it keeps happening, ask the host whether something else writes into the folder of the store.', 'alphabridge-mcp' ) );
+			return new WP_Error( 'ab_mcp_store_tree_changed', __( 'The tree in the protected store could not be confirmed against the hash it was asked with: its manifest differs, or it could not be read whole (as when the time of the call runs out). So it is not given out. Try again; if it keeps failing, ask the host whether something else writes into the folder of the store or whether its disk is slow.', 'alphabridge-mcp' ) );
+		}
+		$gate = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $gate ) {
+			return $gate;
 		}
 		return array(
 			'path'  => $place,
@@ -2345,14 +2573,20 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Read a tree whole, as a unit (AB_MCP_Sync_File_Manifest::unit(), Z1):
-	 * its manifest, or why not.
+	 * its manifest, or why not. Within TREE_BUDGET from now and, with the
+	 * deadline of a reading (R12 of Z8b branch 5), within it too: read
+	 * until the earlier of the two, the deadline asked before each step
+	 * (unit()); where it is over first, the reading is stopped and the
+	 * caller passes its stop on (AB_MCP_Sync_Deadline::stop()), where
+	 * TREE_BUDGET is, the tree is too large as without a deadline.
 	 *
-	 * @param string $path Folder or file.
+	 * @param string     $path     Folder or file.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array As AB_MCP_Sync_File_Manifest::unit().
 	 */
-	private static function read_tree( $path ) {
+	private static function read_tree( $path, $deadline = null ) {
 		$now = class_exists( 'AB_MCP_Sync_Env', false ) && null !== AB_MCP_Sync_Env::$clock ? (float) call_user_func( AB_MCP_Sync_Env::$clock ) : microtime( true );
-		return AB_MCP_Sync_File_Manifest::unit( dirname( (string) $path ), basename( (string) $path ), 'live', $now + self::TREE_BUDGET, true, 'tree' );
+		return AB_MCP_Sync_File_Manifest::unit( dirname( (string) $path ), basename( (string) $path ), 'live', $now + self::TREE_BUDGET, true, 'tree', $deadline );
 	}
 
 	/**
@@ -2566,11 +2800,30 @@ final class AB_MCP_Protected_Store {
 	 * The instruction of a mark (WIEDERHERSTELLEN.txt; plan E6, and the rule
 	 * of the shell run of a way back by hand that branch 1 laid down): what
 	 * the swap moved, with
-	 * device, inode and hash of each tree, and for each point of an abort a
-	 * section [point] whose lines "$ …" are the commands, in a shell, that put
-	 * the old state back by hand and check that it is the right folder (its
-	 * inode, ls -di). For a plugin active at the beginning: what to do where
-	 * it is inactive afterwards, and the sentence of the race (limit A5).
+	 * device, inode and hash of each tree; at its beginning a command that
+	 * only reads (ls -di of the target and of each tree named) and, after
+	 * it, the cases of what it can show that are surely the state of one
+	 * section, each with that section, so that a reader need not know where
+	 * the swap stopped (option B, Thomas 16.11.2026: the answer of an
+	 * unclear swap names this file, not its commands); where no case is
+	 * true (another inode or none where one is named), the lines say to run
+	 * nothing, to stop and to take the way back of the run (guide_head());
+	 * and for
+	 * each point of an abort a
+	 * section [point] whose one line "$ …" is the command, in a shell, that
+	 * puts the old state back by hand and checks that it is the right folder
+	 * (its inode, ls -di): its parts in one line joined with &&, beginning
+	 * with a check, so that a part runs only where the ones before it held,
+	 * also where a person would type the lines one by one (Codex D1,
+	 * finding 6), and OK at its end only where all of it held; a check
+	 * after a move can fail after the move, so the file says of a command
+	 * only that it contains checks and to stop where it prints no OK
+	 * (Codex on 5199de3, finding 1), and to run only the command of the
+	 * section the head names (finding 2);
+	 * after each command that moves something, the line to clear OPcache or
+	 * restart PHP (finding 7). For a plugin active at the beginning: what to
+	 * do where it is inactive afterwards, and the sentence of the race (limit
+	 * A5).
 	 *
 	 * @param array $mark A mark as put_mark() stores it.
 	 * @return string
@@ -2593,8 +2846,20 @@ final class AB_MCP_Protected_Store {
 		$inode = static function ( $path, $tree ) use ( $q ) {
 			return '$ test "$(ls -di ' . $q( $path ) . ' | awk \'{print $1}\')" = "' . (int) $tree['ino'] . '"';
 		};
+		// The one command line of a section: its parts joined with &&, then OK.
+		$chain   = static function ( array $parts ) {
+			$out = array();
+			foreach ( $parts as $part ) {
+				$out[] = substr( $part, 2 );
+			}
+			$out[] = 'echo OK';
+			return '$ ' . implode( ' && ', $out );
+		};
+		$opcache = __( 'Then clear OPcache of this site, or have PHP restarted (at the host: PHP-FPM or the web server): where PHP does not check its files for changes (opcache.validate_timestamps=0), it can still run the code it read before.', 'alphabridge-mcp' );
 		$lines   = array();
 		$lines[] = __( 'AlphaBridge MCP: how to put the old state back by hand, without WordPress', 'alphabridge-mcp' );
+		$lines[] = '';
+		$lines   = array_merge( $lines, self::guide_head( $target, $root, $old, $new, (int) $mark['run_id'], $q ) );
 		$lines[] = '';
 		/* translators: 1: kind of the unit (plugin, theme …), 2: its name. */
 		$lines[] = sprintf( __( 'Unit: %1$s %2$s', 'alphabridge-mcp' ), (string) $mark['unit']['kind'], (string) $mark['unit']['ref'] );
@@ -2619,7 +2884,10 @@ final class AB_MCP_Protected_Store {
 		/* translators: 1: run, 2: step, 3: the time it began (UTC). */
 		$lines[] = sprintf( __( 'Run %1$d, step %2$d, begun %3$s UTC.', 'alphabridge-mcp' ), (int) $mark['run_id'], (int) $mark['seq'], gmdate( 'Y-m-d H:i:s', (int) $mark['begun'] ) );
 		$lines[] = __( 'The hash is the one of the manifest of the unit as AlphaBridge reads it; in a shell the inode tells the right folder from another of the same name (ls -di shows it).', 'alphabridge-mcp' );
-		$lines[] = __( 'Run the commands of the point where the swap stopped, one after the other; where a check (test …) fails, stop and ask before anything else is moved.', 'alphabridge-mcp' );
+		// Only the section the head names (Codex on 5199de3, finding 2), and
+		// of its command only what holds for each: a check after a move can
+		// fail after the move (finding 1).
+		$lines[] = __( 'In a shell, run only the command of the section that the true case above names. The command contains checks; where it does not print OK, stop and ask before anything else is moved.', 'alphabridge-mcp' );
 		$lines[] = '';
 
 		$lines[] = '[vor-den-umbenennungen]';
@@ -2627,11 +2895,10 @@ final class AB_MCP_Protected_Store {
 			// A unit the site did not have (Behebung 1, A3): the old state is
 			// «the target is missing».
 			$lines[] = __( 'The unit was not in the site before; nothing was moved yet. Check that the target is missing and the new version lies in the store:', 'alphabridge-mcp' );
-			$lines[] = '$ test ! -e ' . $q( $target );
-			$lines[] = $inode( $root . '/' . $new['path'], $new );
+			$lines[] = $chain( array( '$ test ! -e ' . $q( $target ), $inode( $root . '/' . $new['path'], $new ) ) );
 		} else {
 			$lines[] = __( 'Before the first rename nothing was moved. Check that the target is the old version:', 'alphabridge-mcp' );
-			$lines[] = null === $old ? '$ test -e ' . $q( $target ) : $inode( $target, $old );
+			$lines[] = $chain( array( null === $old ? '$ test -e ' . $q( $target ) : $inode( $target, $old ) ) );
 		}
 		$lines[] = '';
 
@@ -2640,7 +2907,16 @@ final class AB_MCP_Protected_Store {
 			$put     = array( '$ test ! -e ' . $q( $target ), $inode( $back, $old ), '$ mv ' . $q( $back ) . ' ' . $q( $target ), $inode( $target, $old ) );
 			$lines[] = '[zwischen-den-umbenennungen]';
 			$lines[] = __( 'The target is missing; the old version lies whole in the backup. Put it back and check it:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $put );
+			$lines[] = $chain( $put );
+			$lines[] = $opcache;
+			$lines[] = '';
+			// The same point with another entry at the target (Codex D3,
+			// finding 1): the command only for after it is moved away, its
+			// check test ! -e first as above.
+			$lines[] = '[zwischen-den-umbenennungen-ziel-belegt]';
+			$lines[] = __( 'The target is taken by another entry; the old version lies whole in the backup. Only after that entry is moved away, put the old version back and check it:', 'alphabridge-mcp' );
+			$lines[] = $chain( $put );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$swap    = $put;
 			if ( null !== $new ) {
@@ -2651,20 +2927,28 @@ final class AB_MCP_Protected_Store {
 			$lines[] = null !== $new
 				? __( 'The new version is at the target, the old one in the backup. Swap back and check it:', 'alphabridge-mcp' )
 				: __( 'The target is missing; the old version lies whole in the backup. Put it back and check it:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $swap );
+			$lines[] = $chain( $swap );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[waehrend-des-ruecktauschs]';
 			$lines[] = __( 'The swap back stopped: the target holds the new version or is missing. Finish it and check it:', 'alphabridge-mcp' );
+			// The backup first, before anything moves (Codex on 3014d8b,
+			// finding 2): with another entry at its place this command moved
+			// that entry to the target and checked it only then.
+			$finish = array( $inode( $back, $old ) );
 			if ( null !== $new ) {
-				$lines[] = '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then test ! -e ' . $q( $root . '/' . $new['path'] ) . ' && mv ' . $q( $target ) . ' ' . $q( $root . '/' . $new['path'] ) . '; fi';
+				$finish[] = '$ if [ -e ' . $q( $target ) . ' ] && [ "$(ls -di ' . $q( $target ) . ' | awk \'{print $1}\')" = "' . (int) $new['ino'] . '" ]; then test ! -e ' . $q( $root . '/' . $new['path'] ) . ' && mv ' . $q( $target ) . ' ' . $q( $root . '/' . $new['path'] ) . '; fi';
 			}
-			$lines[] = '$ if [ ! -e ' . $q( $target ) . ' ]; then mv ' . $q( $back ) . ' ' . $q( $target ) . '; fi';
-			$lines[] = $inode( $target, $old );
-			$lines[] = '';
-			$lines[] = '[nach-der-aktivierung]';
-			$lines[] = __( 'After the activation: as after the renames. Swap back and check it:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $swap );
-			$lines[] = '';
+			$finish[] = '$ if [ ! -e ' . $q( $target ) . ' ]; then mv ' . $q( $back ) . ' ' . $q( $target ) . '; fi';
+			$finish[] = $inode( $target, $old );
+			$lines[]  = $chain( $finish );
+			$lines[]  = $opcache;
+			$lines[]  = '';
+			$lines[]  = '[nach-der-aktivierung]';
+			$lines[]  = __( 'After the activation: as after the renames. Swap back and check it:', 'alphabridge-mcp' );
+			$lines[]  = $chain( $swap );
+			$lines[]  = $opcache;
+			$lines[]  = '';
 		} elseif ( null !== $new ) {
 			// The new unit goes back into its place in the store: the site is
 			// then as before, without the unit.
@@ -2673,27 +2957,133 @@ final class AB_MCP_Protected_Store {
 			$out     = array( $inode( $target, $new ), '$ test ! -e ' . $q( $stage ), '$ mv ' . $q( $target ) . ' ' . $q( $stage ), '$ test ! -e ' . $q( $target ), $inode( $stage, $new ) );
 			$lines[] = '[zwischen-den-umbenennungen]';
 			$lines[] = __( 'The unit was not in the site before. Where the new version is at the target, it goes back into the store; check that the target is missing then:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $back );
+			$lines[] = $chain( $back );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[nach-den-umbenennungen]';
 			$lines[] = __( 'The new unit is in the site. Take it out again into its place in the store and check that the target is missing:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $out );
+			$lines[] = $chain( $out );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[waehrend-des-ruecktauschs]';
 			$lines[] = __( 'The way back stopped. Where the new version is still at the target, it goes back into the store; check that the target is missing then:', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $back );
+			$lines[] = $chain( $back );
+			$lines[] = $opcache;
 			$lines[] = '';
 			$lines[] = '[nach-der-aktivierung]';
 			$lines[] = __( 'After the activation: as after the renames. What the activation routine wrote stays; moving the files back does not take it back.', 'alphabridge-mcp' );
-			$lines   = array_merge( $lines, $out );
+			$lines[] = $chain( $out );
+			$lines[] = $opcache;
 			$lines[] = '';
 		}
 		foreach ( (array) $mark['active'] as $file ) {
 			/* translators: %s: the main file of a plugin (folder/file.php). */
-			$lines[] = sprintf( __( 'The plugin %s was active when the swap began. Where it is inactive afterwards: way (a) with its approval in accept (it is switched on as by hand, its activation routine runs), or Plugins → Activate in wp-admin by hand.', 'alphabridge-mcp' ), (string) $file );
+			$lines[] = sprintf( __( 'The plugin %s was active when the swap began. Where it is inactive afterwards: Plugins → Activate in wp-admin by hand.', 'alphabridge-mcp' ), (string) $file );
 			$lines[] = __( 'A request to the page Plugins at the same time can still deactivate the plugin after the swap; the next report shows it then.', 'alphabridge-mcp' );
 		}
 		return implode( "\n", $lines ) . "\n";
+	}
+
+	/**
+	 * What the answer of a swap names of the store, given at this one place
+	 * (Teil D3b-1, point 4): the folder of the marks, and with the trees of
+	 * a mark as put_mark() takes it (absolute paths in the store) its
+	 * instruction as guide() writes it. The swap gets no folder of the
+	 * store itself (root()): only the budget and the measurement do, each
+	 * removing through delete_path() (Z37, StoreRemoverGuardTest).
+	 *
+	 * @param array $mark A mark as put_mark() takes it, with begun and
+	 *                    active as the instruction is to say them; or none.
+	 * @return array{marks:string,guide?:string}|WP_Error The folder of the
+	 *         marks (absolute) and, for a mark with trees, its instruction;
+	 *         the refusal of root() where the store is not decided.
+	 */
+	public static function named_by_swap( array $mark = array() ) {
+		$root = self::root();
+		if ( is_wp_error( $root ) ) {
+			return $root;
+		}
+		$named = array( 'marks' => $root . '/' . self::MARKS );
+		if ( isset( $mark['trees'] ) ) {
+			$trees = array();
+			foreach ( $mark['trees'] as $tree ) {
+				$tree['path'] = 0 === strpos( $tree['path'], $root . '/' ) ? substr( $tree['path'], strlen( $root ) + 1 ) : $tree['path'];
+				$trees[]      = $tree;
+			}
+			$named['guide'] = self::guide(
+				array(
+					'store' => $root,
+					'trees' => $trees,
+				) + $mark
+			);
+		}
+		return $named;
+	}
+
+	/**
+	 * The head of the instruction of a mark (option B, Thomas 16.11.2026;
+	 * Codex on 3014d8b, finding 2), as guide() puts it after the title: a
+	 * command that only reads (ls -di of the target and of each tree the
+	 * mark names), then the cases of what it can show that are surely the
+	 * state of one section, each with that section, as the checks of that
+	 * command ask it (with a backup: the old version at the target, nothing
+	 * or another entry at the target with the old version in the backup,
+	 * and with a stage as well the new version at the target; a new unit:
+	 * nothing at the target with the new version in the stage, the new
+	 * version at the target), and for every other state the line to run no
+	 * command, to stop and to take the way back of the run.
+	 *
+	 * @param string     $target The target (absolute path).
+	 * @param string     $root   Folder of the store, without a slash at its end.
+	 * @param array|null $old    The tree of the backup in the mark, null where it has none.
+	 * @param array|null $new    The tree of the stage in the mark, null where it has none.
+	 * @param int        $run    The run of the mark.
+	 * @param callable   $q      Quotes a path for the shell, as guide() does it.
+	 * @return string[] Its lines, without line ends.
+	 */
+	private static function guide_head( $target, $root, $old, $new, $run, callable $q ) {
+		$lines = array();
+		// First what is there, only reading (option B, Thomas 16.11.2026): a
+		// reader need not know where the swap stopped, as after a hard abort;
+		// the inodes tell which section fits.
+		$places = array( $q( $target ) );
+		foreach ( array( $old, $new ) as $tree ) {
+			if ( null !== $tree ) {
+				$places[] = $q( $root . '/' . $tree['path'] );
+			}
+		}
+		$lines[] = __( 'First see which command fits. The next line only reads: for the target and for each place of the store named below it shows the inode of what is there (the first number of its line), or says that nothing is there:', 'alphabridge-mcp' );
+		$lines[] = '$ ls -di ' . implode( ' ', $places );
+		// Only a state that is surely the one of a section is sent to it, each
+		// case as the checks of that command ask it; anything else is told to
+		// run nothing and to take the way back of the run (Codex on 3014d8b,
+		// finding 2: «the first section that fits» led a reader with another
+		// entry at the place of the backup to a command that moved it).
+		$lines[] = __( 'Then take the case below that is true of what it showed, and run the command of the section it names. An entry is the old version where it has the inode named below for the backup, the new version where it has the inode named below for the stage, and another entry where it has neither.', 'alphabridge-mcp' );
+		$cases   = array();
+		if ( null !== $old ) {
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'The old version is at the target: section [%s]. Its command only checks.', 'alphabridge-mcp' ), 'vor-den-umbenennungen' );
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'Nothing is at the target, and the old version is at the place of the backup: section [%s].', 'alphabridge-mcp' ), 'zwischen-den-umbenennungen' );
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'Another entry is at the target, and the old version is at the place of the backup: section [%s].', 'alphabridge-mcp' ), 'zwischen-den-umbenennungen-ziel-belegt' );
+			if ( null !== $new ) {
+				/* translators: %s: the name of a section of this file (not translated). */
+				$cases[] = sprintf( __( 'The new version is at the target, the old version is at the place of the backup, and nothing is at the place of the stage: section [%s].', 'alphabridge-mcp' ), 'nach-den-umbenennungen' );
+			}
+		} elseif ( null !== $new ) {
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'Nothing is at the target, and the new version is at the place of the stage: section [%s]. Its command only checks.', 'alphabridge-mcp' ), 'vor-den-umbenennungen' );
+			/* translators: %s: the name of a section of this file (not translated). */
+			$cases[] = sprintf( __( 'The new version is at the target, and nothing is at the place of the stage: section [%s].', 'alphabridge-mcp' ), 'nach-den-umbenennungen' );
+		}
+		foreach ( $cases as $case ) {
+			$lines[] = '- ' . $case;
+		}
+		/* translators: %d: run number. */
+		$lines[] = sprintf( __( 'Where none of them is true (another inode, or none, where a case names a version; or an entry where a case says that nothing is there), run no command of this file. Stop, and take the way back of the run as soon as the site answers again: wp_site_revert action=plan with run_id %d; where it refuses it (it says why), put the version of before back in wp-admin by hand.', 'alphabridge-mcp' ), (int) $run );
+		return $lines;
 	}
 
 	/**
@@ -2831,7 +3221,8 @@ final class AB_MCP_Protected_Store {
 
 	/**
 	 * Close a mark that was read (close_mark(), put_back()): its state closed,
-	 * the time, written through write_file() and read back.
+	 * the time, written through write_file() and read back; written but not
+	 * read back as written, ab_mcp_store_mark_unconfirmed.
 	 *
 	 * @param string $root Folder of the store.
 	 * @param string $mid  Mark.
@@ -2856,7 +3247,9 @@ final class AB_MCP_Protected_Store {
 		if ( true !== $written ) {
 			return $written;
 		}
-		return self::calls()->read( $path, self::MARK_MAX ) === $text ? true : new WP_Error( 'ab_mcp_store_mark_read', __( 'The closed mark did not read back as written. Ask the host whether something else writes into the folder of the protected store, then try again.', 'alphabridge-mcp' ) );
+		// Written, not read back: a code of its own (Codex D3, finding 2), as
+		// the mark may be closed all the same.
+		return self::calls()->read( $path, self::MARK_MAX ) === $text ? true : new WP_Error( 'ab_mcp_store_mark_unconfirmed', __( 'The closed mark did not read back as written. Ask the host whether something else writes into the folder of the protected store, then try again.', 'alphabridge-mcp' ) );
 	}
 
 	/* ------------------------------------------------- the writer, the remover */
@@ -3985,35 +4378,58 @@ final class AB_MCP_Protected_Store {
 	 * the form of its row), false where a sidecar of it cannot be read, true
 	 * where it was read whole.
 	 *
-	 * @param string    $root  Folder.
-	 * @param string    $id    Id.
-	 * @param string    $area  Area.
-	 * @param bool|null $whole Set: how the area was read.
+	 * Under a deadline (R12 of Z8b branch 5) the way, the listing, its form
+	 * and each sidecar only while it is not over; once it is, whole is null
+	 * and the caller passes the stop on (AB_MCP_Sync_Deadline::stop()). The
+	 * sort of what was read is one call (a named limit of the deadline).
+	 *
+	 * @param string     $root     Folder.
+	 * @param string     $id       Id.
+	 * @param string     $area     Area.
+	 * @param bool|null  $whole    Set: how the area was read.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array[]
 	 */
-	private static function entries( $root, $id, $area, &$whole = null ) {
+	private static function entries( $root, $id, $area, &$whole = null, $deadline = null ) {
 		// Read whole: a plain folder, its listing in the form of its row of
 		// AB_MCP_Store_Inputs::TABLE, and no sidecar of it that cannot be
 		// read; a budget counts only an area read whole (stock(), open();
 		// Behebung 4: a listing that failed was an empty one).
 		$out   = array();
 		$whole = null;
-		$dir   = self::way( $root, array( $area ) );
-		$names = null === $dir ? null : AB_MCP_Store_Inputs::read( 'budget.listing', self::calls()->scandir( $dir ) );
+		$dir   = self::way( $root, array( $area ), $deadline );
+		$names = null === $dir || true !== AB_MCP_Sync_Deadline::left( $deadline ) ? null : AB_MCP_Store_Inputs::read( 'budget.listing', self::calls()->scandir( $dir ), $deadline );
 		if ( null === $names ) {
-			return $out;
+			return array();
 		}
 		$whole = true;
 		foreach ( $names as $file ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				$whole = null;
+				return array();
+			}
 			if ( ! preg_match( '/^([0-9a-f]{40})\.json\z/', $file, $m ) ) {
 				continue;
 			}
-			$state = self::plain( $dir . '/' . $file, 'file' ) ? self::sidecar( $dir . '/' . $file, $area ) : array( 'unknown', null );
+			$plain = self::plain( $dir . '/' . $file, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				$whole = null;
+				return array();
+			}
+			$state = $plain ? self::sidecar( $dir . '/' . $file, $area, $deadline ) : array( 'unknown', null );
+			if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+				$whole = null;
+				return array();
+			}
 			if ( 'unknown' === $state[0] ) {
 				$whole = false;
 			} elseif ( 'own' === $state[0] && self::group_name( $area, $state[1]['gid'], $id ) === $m[1] ) {
 				$out[] = $state[1];
 			}
+		}
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			$whole = null;
+			return array();
 		}
 		usort(
 			$out,
@@ -4219,33 +4635,54 @@ final class AB_MCP_Protected_Store {
 	 * the store by device and inode (holds()). Every read, write and removal
 	 * goes through it.
 	 *
-	 * @param string   $root  Folder of the store.
-	 * @param string[] $parts Steps below it.
+	 * Under a deadline (R12 of Z8b branch 5) each step only while it is not
+	 * over; once it is, null, and the caller passes the stop on
+	 * (AB_MCP_Sync_Deadline::stop()).
+	 *
+	 * @param string     $root     Folder of the store.
+	 * @param string[]   $parts    Steps below it.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return string|null
 	 */
-	private static function way( $root, array $parts ) {
+	private static function way( $root, array $parts, $deadline = null ) {
 		$path = $root;
-		if ( ! self::plain( $path, 'dir' ) ) {
+		if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			return null;
+		}
+		$plain = self::plain( $path, 'dir', $deadline );
+		if ( true !== $plain ) {
 			return null;
 		}
 		foreach ( $parts as $part ) {
 			$path .= '/' . $part;
-			if ( ! self::plain( $path, 'dir' ) ) {
+			if ( true !== AB_MCP_Sync_Deadline::left( $deadline ) ) {
+				return null;
+			}
+			$plain = self::plain( $path, 'dir', $deadline );
+			if ( true !== $plain ) {
 				return null;
 			}
 		}
-		return self::holds( $root, $path ) ? $path : null;
+		return self::holds( $root, $path, $deadline ) ? $path : null;
 	}
 
 	/**
 	 * Whether a path is a real folder or file (lstat(): a link is neither).
+	 * Its lstat() through the helper of the steps (R12b of Z8b branch 5):
+	 * under a deadline that is over its stop is the answer (a WP_Error),
+	 * never «not plain»; the caller passes it on. Without a deadline (null)
+	 * as before.
 	 *
-	 * @param string $path Path.
-	 * @param string $type 'dir' or 'file'.
-	 * @return bool
+	 * @param string     $path     Path.
+	 * @param string     $type     'dir' or 'file'.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
+	 * @return bool|WP_Error
 	 */
-	private static function plain( $path, $type ) {
-		$stat = @lstat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	private static function plain( $path, $type, $deadline = null ) {
+		$stat = @AB_MCP_Sync_Step::lstat( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $stat ) ) {
+			return $stat;
+		}
 		if ( false === $stat ) {
 			return false;
 		}
@@ -4256,25 +4693,46 @@ final class AB_MCP_Protected_Store {
 	 * A group of an area with every step of the way to it plain: its sidecar,
 	 * its folder and its entry, or the refusal.
 	 *
-	 * @param string $root Folder of the store.
-	 * @param string $area Area.
-	 * @param string $name Name of the group on disk.
-	 * @param string $gid  Group.
+	 * Under a deadline (R12 of Z8b branch 5) each step only while it is not
+	 * over, and its stop is the answer, never a link or a group not there.
+	 *
+	 * @param string     $root     Folder of the store.
+	 * @param string     $area     Area.
+	 * @param string     $name     Name of the group on disk.
+	 * @param string     $gid      Group.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{0:string,1:string,2:array}|WP_Error
 	 */
-	private static function group( $root, $area, $name, $gid ) {
-		$area_dir = self::way( $root, array( $area ) );
+	private static function group( $root, $area, $name, $gid, $deadline = null ) {
+		$area_dir = self::way( $root, array( $area ), $deadline );
 		if ( null === $area_dir ) {
-			return self::unsafe();
+			return self::stopped_or( $deadline, self::unsafe() );
 		}
 		$side  = $area_dir . '/' . $name . '.json';
-		$entry = self::plain( $side, 'file' ) ? self::read_entry( $side, $area ) : null;
-		if ( null === $entry || $gid !== $entry['gid'] ) {
-			return self::no_group();
+		$entry = null;
+		if ( true === AB_MCP_Sync_Deadline::left( $deadline ) ) {
+			$plain = self::plain( $side, 'file', $deadline );
+			if ( is_wp_error( $plain ) ) {
+				return $plain;
+			}
+			if ( $plain ) {
+				$entry = self::read_entry( $side, $area, $deadline );
+			}
 		}
-		$dir = self::way( $root, array( $area, $name ) );
+		if ( null === $entry || $gid !== $entry['gid'] ) {
+			return self::stopped_or( $deadline, self::no_group() );
+		}
+		$dir = self::way( $root, array( $area, $name ), $deadline );
+		if ( null === $dir && null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+			return AB_MCP_Sync_Deadline::stop( $deadline );
+		}
 		if ( null === $dir ) {
-			return false !== @lstat( $area_dir . '/' . $name ) ? self::unsafe() : self::no_group(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			// The step after the way through the helper of the steps (R12b, A3).
+			$there = @AB_MCP_Sync_Step::lstat( $deadline, $area_dir . '/' . $name ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( is_wp_error( $there ) ) {
+				return $there;
+			}
+			return false !== $there ? self::unsafe() : self::no_group();
 		}
 		return array( $side, $dir, $entry );
 	}
@@ -4360,14 +4818,16 @@ final class AB_MCP_Protected_Store {
 	}
 
 	/**
-	 * Read a sidecar: the entry of a group, or null.
+	 * Read a sidecar: the entry of a group, or null (also under a deadline
+	 * that is over, sidecar()).
 	 *
-	 * @param string $side File.
-	 * @param string $area Area it must belong to.
+	 * @param string     $side     File.
+	 * @param string     $area     Area it must belong to.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array|null
 	 */
-	private static function read_entry( $side, $area ) {
-		$state = self::sidecar( $side, $area );
+	private static function read_entry( $side, $area, $deadline = null ) {
+		$state = self::sidecar( $side, $area, $deadline );
 		return 'own' === $state[0] ? $state[1] : null;
 	}
 
@@ -4383,13 +4843,29 @@ final class AB_MCP_Protected_Store {
 	 * installation's is sweep()'s question (group_name()). A sidecar that is
 	 * not there is not read here: sweep() reads only what its area lists.
 	 *
-	 * @param string $side File.
-	 * @param string $area Area it lies in.
+	 * Under a deadline (R12 of Z8b branch 5) the file is read, and its JSON
+	 * read in its form and checked field by field, only while the deadline
+	 * is not over; once it is, the sidecar is 'unknown' and the caller
+	 * passes the stop on (AB_MCP_Sync_Deadline::stop()). The file is read
+	 * with the same deadline (the composed seam, R12b): where its stop comes
+	 * back, 'unknown' at once, before its form is read.
+	 *
+	 * @param string     $side     File.
+	 * @param string     $area     Area it lies in.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return array{0:string,1:array|null}
 	 */
-	private static function sidecar( $side, $area ) {
-		$e = AB_MCP_Store_Inputs::read( 'sidecar.json', self::calls()->read( $side, 4096 ) );
-		if ( ! self::whole( $e ) ) {
+	private static function sidecar( $side, $area, $deadline = null ) {
+		$left = AB_MCP_Sync_Deadline::left( $deadline );
+		if ( true !== $left ) {
+			return array( 'unknown', null );
+		}
+		$raw = self::calls()->read( $side, 4096, $deadline );
+		if ( is_wp_error( $raw ) ) {
+			return array( 'unknown', null );
+		}
+		$e = AB_MCP_Store_Inputs::read( 'sidecar.json', $raw, $deadline );
+		if ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || ! self::whole( $e ) ) {
 			return array( 'unknown', null );
 		}
 		return array( $area === $e['area'] ? 'own' : 'other', array_intersect_key( $e, self::SIDECAR[ $e['area'] ] ) );
@@ -4521,9 +4997,18 @@ final class AB_MCP_Protected_Store {
 		return is_string( $name ) && preg_match( '/^[a-z0-9][a-z0-9._-]{0,63}\z/', $name ) && false === strpos( $name, '..' ) && '.tmp' !== substr( $name, -4 );
 	}
 
-	/** @return WP_Error */
+	/**
+	 * The refusal of a group that group() does not give (Z8b branch 5, K4d):
+	 * one reason for all of it, because the store does not tell them apart
+	 * here. The group was never opened here, it was removed, or it is still
+	 * there and its sidecar or its folder is missing or does not read. The
+	 * text claims none of them and names the way for each. It may pass: a
+	 * later call may read the group.
+	 *
+	 * @return WP_Error
+	 */
 	private static function no_group() {
-		return new WP_Error( 'ab_mcp_store_no_group', 'The group is not in the protected store: it was never opened here, or it was removed (packages and reports are kept a day, backups as many days as the filter ab_mcp_staging_backup_days says). Open a new one with open().' );
+		return new WP_Error( 'ab_mcp_store_no_group', __( 'The group could not be read in the protected store, and the store does not tell which of these is why. It is not there: it was never opened here (a group belongs to the area it was opened in), or it was removed. Or it is still there, but its entry (its sidecar) is missing, is no plain file, cannot be read, is not of its form or names another group, or its folder is missing or cannot be reached. Where it is gone, open a new one with open(). Where it should still be there, try again; if it keeps failing, ask the host to check the folder of the protected store and the rights on it.', 'alphabridge-mcp' ) );
 	}
 
 	/**

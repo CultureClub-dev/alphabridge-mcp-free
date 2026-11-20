@@ -67,6 +67,13 @@ final class SyncSaidScanTest extends TestCase {
 			'unclear_after' => null,
 		),
 		'class-sync-option-schema.php' => array( 'reason_text' => null ),
+		// The journal and the note of a swap, written and read back: true, or
+		// a refusal whose message is a gettext text, under why of
+		// rename_marked() (Teil D3b-1, point 4).
+		'class-sync-code-swap.php'     => array(
+			'begun' => null,
+			'noted' => null,
+		),
 	);
 
 	/**
@@ -96,7 +103,15 @@ final class SyncSaidScanTest extends TestCase {
 		'class-sync-pairs-tool.php: $now'                                   => 'now(): a gettext text, or a WP_Error that call() returns before.',
 		'class-sync-proposal.php: null !== $doubt ? $doubt : \'The same slug on another path of parents (another parent, or a parent of another type, theme or language): another object, or one that moved. It is paired only by the choice of a person.\'' => 'The why of doubt() (RETURNS), through $item[\'doubt\']; the literal beside it is found and known.',
 		'class-sync-push.php: (string) $reason'                             => 'verdict(): the closure $lock is given AB_MCP_Sync_Said::text() or gettext texts.',
+		'class-sync-code-plan.php: (string) $reason'                         => 'unit(): the closure $lock is given gettext texts, the message of a refusal of the stage (gettext) or a reason of a lock through AB_MCP_Sync_Said::text().',
 		'class-sync-write.php: $note'                                       => 'From the arguments $changed and $whole, which the writers give as gettext texts, or a gettext text.',
+		// rename_marked() of the swap (Teil D3b-1, point 4): its key why holds a
+		// WP_Error, never a text, and only the message of it goes on, into the
+		// message of the step or as the refusal itself (not_swapped(); its key
+		// note there is internal too). The scan reads a call it cannot follow
+		// as unseen: these two give no English text of their own.
+		'class-sync-code-swap.php: AB_MCP_Sync_Run :: clock_unknown ( )'   => 'The refusal of AB_MCP_Sync_Run::clock_unknown(): new WP_Error with a gettext text, which the scan reads as a call it does not follow.',
+		'class-sync-code-swap.php: is_wp_error ( $mark ) ? $mark : self :: refusal ( \'code:mark\' , __ ( \'The mark of the swap gave no answer of its form.\' , \'alphabridge-mcp\' ) )' => 'The refusal of AB_MCP_Protected_Store::put_mark(), reached through the calls of the swap (an object the scan does not follow): the messages of the store, which StoreTextsTest holds to gettext or to its texts from before branch 3; else the gettext refusal code:mark.',
 	);
 
 	/**
@@ -155,6 +170,31 @@ final class SyncSaidScanTest extends TestCase {
 				}
 			}
 			self::assertContains( $text, $found, $file );
+		}
+	}
+
+	/**
+	 * Prüft: the scan follows the returns of begun() and noted() of the swap
+	 * under why of rename_marked() (RETURNS; Teil D3b-1, point 4): a refusal
+	 * of either without gettext, made in memory, is a new place the scan
+	 * names as one it cannot follow, beside the list UNSEEN.
+	 * Sonst: an English text in the answer of a swap whose journal or note
+	 * failed would pass the scan, as the two variables were only listed.
+	 */
+	public function testTheScanReadsTheReturnsOfTheJournalAndTheNoteOfASwap(): void {
+		foreach ( array(
+			'code:journal' => array( "sprintf( __( 'The journal of the swap of the", "sprintf( ( 'The journal of the swap of the" ),
+			'code:note'    => array( "sprintf( __( 'The note that the files", "sprintf( ( 'The note that the files" ),
+		) as $code => $case ) {
+			$new = array();
+			foreach ( self::scan( array( 'class-sync-code-swap.php' => array( $case[0] => $case[1] ) ) )->unseen as $one ) {
+				$key = $one[0] . ': ' . $one[2];
+				if ( ! array_key_exists( $key, self::UNSEEN ) ) {
+					$new[] = $key;
+				}
+			}
+			self::assertCount( 1, $new, $code . ': ' . implode( ' | ', $new ) );
+			self::assertStringStartsWith( "class-sync-code-swap.php: self :: refusal ( '" . $code . "' , sprintf ( ( '", $new[0] );
 		}
 	}
 

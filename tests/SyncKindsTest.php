@@ -120,6 +120,9 @@ final class SyncKindsTest extends TestCase {
 		'widget_area' => array( 'option:sidebars_widgets', 'option:widget_*' ),
 		'custom_css'  => array( 'post_type:custom_css', 'theme_mod:custom_css_post_id' ),
 		'option'      => array( 'option:*' ),
+		// Z8b branch 5: the engine of the files of a plugin and of a theme
+		// (AB_MCP_Sync_Code_Kind, SyncCodeKindTest).
+		'code'        => array( 'part:plugin:files', 'part:theme:files' ),
 	);
 
 	protected function setUp(): void {
@@ -211,10 +214,11 @@ final class SyncKindsTest extends TestCase {
 
 	/**
 	 * The kinds the table gives the parts of the pairs of units (Z8b, E2,
-	 * Z38), whose engines come with the code of the site (branches 5 and 6):
-	 * not registered in this version.
+	 * Z38), whose engines come with the activation of the code of the site
+	 * (branch 6): not registered in this version. The kind code came with
+	 * branch 5 (OWNS).
 	 */
-	private const LATER = array( 'code', 'activation', 'theme_choice' );
+	private const LATER = array( 'activation', 'theme_choice' );
 
 	#[DataProvider( 'ownership' )]
 	public function testEachObjectTypeHasTheOwnerTheTableGivesIt( string $resolver, string $asked, string $status, ?string $kind, ?string $stage ): void {

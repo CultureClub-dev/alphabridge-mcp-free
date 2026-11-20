@@ -353,7 +353,7 @@ final class SyncEnvTest extends TestCase {
 		// lock where nothing differs.
 		self::assertSame( array( 'equal', 'none', null ), self::said( $env['plugin:ab-it-env-same'] ), 'The same files: equal, not locked.' );
 		self::assertArrayNotHasKey( 'locks', $env['plugin:ab-it-env-same'] );
-		self::assertSame( array( 'differs', 'locked', 'Z8b' ), self::said( $env['plugin:ab-it-env-version'] ) );
+		self::assertSame( array( 'differs', 'none', null ), self::said( $env['plugin:ab-it-env-version'] ), 'Z8b branch 5: a plugin that differs without a pair is locked by no stage; the way is its pair.' );
 		self::assertSame( array( 'files' ), $env['plugin:ab-it-env-version']['differs'] );
 		self::assertSame( array( 'ab-it-env-version.php' ), $env['plugin:ab-it-env-version']['paths']['differs'], 'The path that differs.' );
 		self::assertSame( array( '2.0', '1.0' ), array( $env['plugin:ab-it-env-version']['staging']['version'], $env['plugin:ab-it-env-version']['live']['version'] ) );
@@ -418,7 +418,29 @@ final class SyncEnvTest extends TestCase {
 			self::assertArrayNotHasKey( 'held', $entry, $key . ': an ordinary name, shown as it is.' );
 		}
 		self::assertSame( count( $env ), $answer['environment']['counts']['entries'] );
-		self::assertSame( 2, count( array_filter( $answer['blocked'], static fn( $b ) => in_array( $b['key'], array( 'env:plugin', 'env:table' ), true ) ) ), 'The locks of the environment with the others.' );
+		// The locks of the environment with the others: each lock an entry of
+		// the environment carries is in the answer once, with the count of its
+		// entries. Z8b branch 5 (1a-4c): a plugin that differs without a pair
+		// is locked by no stage (above), so env:plugin is no lock of this
+		// case any more, where it was one of the two counted here before;
+		// env:table still is.
+		$carried = array();
+		foreach ( $env as $key => $entry ) {
+			if ( ! isset( $entry['locks'] ) ) {
+				continue;
+			}
+			foreach ( $entry['locks'] as $lock ) {
+				$carried[ $lock['key'] ][] = $key;
+			}
+		}
+		self::assertArrayHasKey( 'env:table', $carried, 'The tables of this case are locked.' );
+		self::assertArrayNotHasKey( 'env:plugin', $carried, 'Z8b branch 5: no plugin of this case is locked.' );
+		foreach ( $carried as $lock => $keys ) {
+			$in = array_values( array_filter( $answer['blocked'], static fn( $b ) => $lock === $b['key'] ) );
+			self::assertCount( 1, $in, "$lock: with the locks of the objects, once." );
+			self::assertSame( count( $keys ), $in[0]['entries'], "$lock: with the count of its entries." );
+		}
+		self::assertSame( array(), array_values( array_filter( $answer['blocked'], static fn( $b ) => 'env:plugin' === $b['key'] ) ), 'Z8b branch 5: no lock env:plugin in the answer.' );
 		self::assertSame( range( 1, $answer['total'] ), array_column( $answer['all'], 'n' ), 'The environment numbered on after the objects.' );
 		self::assertStringNotContainsString( '"sha256"', (string) json_encode( $answer ), 'No hash in an answer.' );
 		self::assertStringNotContainsString( '"schema"', (string) json_encode( $answer ) );
@@ -775,6 +797,59 @@ final class SyncEnvTest extends TestCase {
 			self::assertSame( 'credential_field', AB_MCP_Sync_Env::held( $name, array() ), $name );
 		}
 		self::assertNull( AB_MCP_Sync_Env::held( '<b>notes</b>', array() ), 'A tag without a field: an ordinary name.' );
+	}
+
+	/**
+	 * keyed() rebuilt for speed (Z8b branch 5, R12b part 1a): the 36 cases
+	 * of the measurement of part 1 (tests/fixtures/keyed-same.json) answer
+	 * in held() and over_name() as part 1 measured them on these sites, with
+	 * K = 0, 10, 100 and 1000 extra keys, and keyed() answers as at 8daf33f
+	 * (tests/support/keyed-8daf33f.php) over every layer WordPress gives,
+	 * the layer html of the core among them. Here because nine of them need
+	 * the core (the HTML decoder, the HTML API of the content check); the
+	 * rest of the comparison is the unit suite's (SyncNetKeyedSameTest).
+	 */
+	public function testTheCasesOfTheMeasurementOfTheNamesAnswerAsMeasuredAndKeyedAsAt8daf33f(): void {
+		require_once AB_MCP_DIR . 'tests/support/keyed-8daf33f.php';
+		$data = json_decode( (string) file_get_contents( AB_MCP_DIR . 'tests/fixtures/keyed-same.json' ), true );
+		self::assertIsArray( $data );
+		self::assertCount( 36, $data['faelle'] );
+		// The PDFs of M3 are under the uploads of site A of part 1 (port
+		// 8881); here under those of this site A, an address of the same
+		// length, so that the lengths of the serialized texts of M3c hold.
+		$then = 'http://127.0.0.1:8881/wp-content/uploads';
+		$now  = \AB_MCP_Sync_Rows::uploads_url();
+		self::assertIsString( $now );
+		self::assertSame( strlen( $then ), strlen( $now ) );
+		$held   = 0;
+		$over   = 0;
+		$layers = 0;
+		$differ = array();
+		foreach ( array( 0, 10, 100, 1000 ) as $k ) {
+			$extra = array();
+			for ( $i = 1; $i <= $k; $i++ ) {
+				$extra[] = sprintf( 'qxk%04d', $i );
+			}
+			foreach ( $data['faelle'] as $case ) {
+				$name = str_replace( $then, $now, $case['namen'][ (string) $k ] );
+				self::assertSame( $case['held'][ (string) $k ], AB_MCP_Sync_Env::held( $name, $extra ), $case['id'] . ', K = ' . $k . ': held() as in part 1.' );
+				++$held;
+				if ( array_key_exists( (string) $k, $case['over_name'] ) ) {
+					self::assertSame( $case['over_name'][ (string) $k ], \AB_MCP_Sync_Net::over_name( $name, $extra, true ), $case['id'] . ', K = ' . $k . ': over_name() as in part 1.' );
+					++$over;
+				}
+				foreach ( \AB_MCP_Sync_Net::layers( $name ) as $layer ) {
+					$old = \AB_Test_Keyed_8daf33f::keyed( $layer[1], $extra );
+					if ( $old !== \AB_MCP_Sync_Net::keyed( $layer[1], $extra ) && count( $differ ) < 20 ) {
+						$differ[] = array( $case['id'], $k, $layer[0], $old );
+					}
+					++$layers;
+				}
+			}
+		}
+		self::assertSame( array(), $differ, 'keyed() answers otherwise than at 8daf33f: ' . (string) json_encode( $differ ) );
+		self::assertSame( array( 144, 124 ), array( $held, $over ) );
+		self::assertGreaterThan( 4 * 36, $layers );
 	}
 
 	public function testANameOnlyTheRulesOfTheStagingSiteHoldIsHeldInThePartsOfThisSiteAsWell(): void {

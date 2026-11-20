@@ -157,6 +157,13 @@ final class AB_MCP_Sync_Decision {
 	/** The kinds of units and of the theme that runs (Z8b, E1, E2): lines of the environment with pairs. */
 	const UNIT_KINDS = array( 'plugin', 'theme', 'mu_plugin', 'language', 'font', 'upload', 'theme_choice' );
 
+	/**
+	 * The kinds of unit whose files the swap of the code takes over (Z8b
+	 * branch 5, AB_MCP_Sync_Code_Swap): of the others nothing is taken over
+	 * in this version.
+	 */
+	const SWAPPED = array( 'plugin', 'theme' );
+
 	/** The results of a unit, by its parts and its pair (Z8b, E1, E2), and what each says. */
 	const UNIT_WORDS = array(
 		'equal'              => 'Equal on both sides: the same files by their contents, and for a plugin the same main files running.',
@@ -1249,8 +1256,9 @@ final class AB_MCP_Sync_Decision {
 	 * side only is only there (or removed, with an active pair) only where
 	 * that side read it whole and holds no lock, and where the other side
 	 * listed the folder it would lie in whole ($unread); else it is not
-	 * compared, or locked by its lock. Nothing is taken over in this version:
-	 * the rest is locked with the lock of its kind (AB_MCP_Sync_Env::LOCKS).
+	 * compared, or locked by its lock. The files of a plugin or theme are
+	 * taken over (unit_way(), unit_new()); the rest is locked with the lock
+	 * of its kind (AB_MCP_Sync_Env::LOCKS).
 	 * Where the files differ and both sides read them whole, the paths: only
 	 * on staging, only here, other contents (never by mtime), every one of
 	 * them with their counts (paged() shows MAX_PATHS a list in the entry and
@@ -1346,7 +1354,7 @@ final class AB_MCP_Sync_Decision {
 				$entry['action'] = null === $s ? ( $changed ? 'keep' : 'locked' ) : ( $changed ? 'keep' : 'none' );
 			} else {
 				$entry['result'] = null === $s ? 'only_live' : 'only_staging';
-				$entry['action'] = null === $s ? 'keep' : 'locked';
+				$entry['action'] = null === $s ? 'keep' : self::unit_new( $kind );
 			}
 			if ( 'locked' === $entry['action'] && null !== $lock ) {
 				$locks[] = $lock;
@@ -1425,18 +1433,63 @@ final class AB_MCP_Sync_Decision {
 				$entry['paths'] = $paths;
 			}
 		}
-		if ( isset( $states['files'] ) && 'conflict' === $states['files'] ) {
+		list( $entry, $locks ) = self::unit_way( $entry, $kind, $states, $lock );
+		return self::unit_entry( $entry, $locks, null, $held );
+	}
+
+	/**
+	 * What a takeover does with a unit both sides have (unit_item(), its
+	 * last part): locked where its files changed on both sides
+	 * (code:live_changed, no choice «staging wins»; E1); taken over where the
+	 * files of a plugin or theme (SWAPPED) changed on staging and are
+	 * unchanged here, and no part of it is in conflict (Z8b branch 5: the swap
+	 * of the code, AB_MCP_Sync_Code_Swap, takes the files; which main files
+	 * run stays with its own part and its own step); kept where only this
+	 * site changed; else locked with the lock of its kind where the sides
+	 * differ in what this version does not take over (a unit of another
+	 * kind; of a plugin, which of its main files run).
+	 *
+	 * @param array       $entry  The entry so far (result, parts).
+	 * @param string      $kind   A kind of UNIT_KINDS.
+	 * @param array|null  $states The state of each part against its base; null without an active pair.
+	 * @param array|null  $lock   The lock of the kind (AB_MCP_Sync_Env::LOCKS), or null.
+	 * @return array The entry with its action, and its locks.
+	 */
+	private static function unit_way( array $entry, $kind, $states, $lock ) {
+		$locks = array();
+		$files = is_array( $states ) && isset( $states['files'] ) ? $states['files'] : null;
+		if ( 'conflict' === $files ) {
 			$locks[] = self::code_lock( 'code:live_changed' );
 		}
-		if ( in_array( $entry['result'], array( 'differs', 'changed_on_staging', 'conflict' ), true ) && null !== $lock ) {
+		$swapped = in_array( $kind, self::SWAPPED, true );
+		$takes   = $swapped && 'changed_on_staging' === $files && 'changed_on_staging' === $entry['result'];
+		// Without a pair nothing says which side changed: no lock of a
+		// stage for a kind the swap takes, the way is the pair (its words).
+		$waits = $swapped ? ( ! $takes && in_array( $entry['result'], array( 'changed_on_staging', 'conflict' ), true ) ) : in_array( $entry['result'], array( 'differs', 'changed_on_staging', 'conflict' ), true );
+		if ( $waits && null !== $lock ) {
 			$locks[] = $lock;
 		}
 		if ( array() !== $locks ) {
 			$entry['action'] = 'locked';
+		} elseif ( $takes ) {
+			$entry['action'] = 'take_over';
 		} elseif ( 'changed_live' === $entry['result'] ) {
 			$entry['action'] = 'keep';
 		}
-		return self::unit_entry( $entry, $locks, null, $held );
+		return array( $entry, $locks );
+	}
+
+	/**
+	 * What a takeover does with a unit only the staging site has, read whole
+	 * there and without a pair: made here where the swap of the code makes
+	 * such a unit (SWAPPED; Z8b branch 5, F5), else locked with the lock of
+	 * its kind.
+	 *
+	 * @param string $kind A kind of UNIT_KINDS.
+	 * @return string create or locked.
+	 */
+	private static function unit_new( $kind ) {
+		return in_array( $kind, self::SWAPPED, true ) ? 'create' : 'locked';
 	}
 
 	/**

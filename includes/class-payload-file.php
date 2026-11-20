@@ -24,6 +24,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/sync/class-sync-step.php';
+
 /**
  * Class AB_MCP_Payload_File
  */
@@ -92,27 +94,64 @@ final class AB_MCP_Payload_File {
 	/**
 	 * Read a payload file back and verify it against its SHA-256.
 	 *
-	 * @param string    $path       File.
-	 * @param string    $sha        Expected SHA-256 of the raw payload.
-	 * @param int|float $stored_max Largest size on disk that is plausible.
-	 * @param int       $raw_max    Largest raw payload; a compressed file is
-	 *                              inflated against it.
+	 * With a deadline (AB_MCP_Sync_Deadline, R12 of Z8b branch 5) each step
+	 * (the file asked, its size, its bytes read, inflated, hashed) begins
+	 * only while it is not over, and the answer is given only then; a
+	 * deadline over is answered with its stop (ab_mcp_read_late, or the
+	 * clock unknown), never as a file missing or damaged. Reading the file
+	 * and inflating it are one call each (named limits of the deadline).
+	 *
+	 * @param string     $path       File.
+	 * @param string     $sha        Expected SHA-256 of the raw payload.
+	 * @param int|float  $stored_max Largest size on disk that is plausible.
+	 * @param int        $raw_max    Largest raw payload; a compressed file is
+	 *                               inflated against it.
+	 * @param mixed|null $deadline   Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return string|WP_Error The raw payload, or a WP_Error whose code is
-	 *                         one of REFUSALS (no message: the caller words it).
+	 *                         one of REFUSALS (no message: the caller words it),
+	 *                         or the stop of the deadline.
 	 */
-	public static function read( $path, $sha, $stored_max, $raw_max ) {
-		if ( ! is_file( $path ) ) {
+	public static function read( $path, $sha, $stored_max, $raw_max, $deadline = null ) {
+		$left = self::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		// Each step of the disk through the helper of the steps (R12b of Z8b
+		// branch 5), which asks the deadline again: its stop is the answer.
+		$is = AB_MCP_Sync_Step::is_file( $deadline, $path );
+		if ( is_wp_error( $is ) ) {
+			return $is;
+		}
+		if ( ! $is ) {
 			return self::refused( 'missing' );
+		}
+		$left = self::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
 		}
 		// Check the size on disk BEFORE reading: a tampered file must not be
 		// pulled into memory first and rejected afterwards.
-		$on_disk = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$on_disk = @AB_MCP_Sync_Step::filesize( $deadline, $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $on_disk ) ) {
+			return $on_disk;
+		}
 		if ( false === $on_disk || $on_disk > $stored_max ) {
 			return self::refused( 'size' );
 		}
-		$blob = file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$left = self::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
+		$blob = AB_MCP_Sync_Step::file_get_contents( $deadline, $path );
+		if ( is_wp_error( $blob ) ) {
+			return $blob;
+		}
 		if ( false === $blob ) {
 			return self::refused( 'read' );
+		}
+		$left = self::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
 		}
 		$raw = $blob;
 		if ( function_exists( 'gzdecode' ) && "\x1f\x8b" === substr( $blob, 0, 2 ) ) {
@@ -132,11 +171,27 @@ final class AB_MCP_Payload_File {
 		if ( strlen( $raw ) > $raw_max ) {
 			return self::refused( 'large' );
 		}
+		$left = self::left( $deadline );
+		if ( true !== $left ) {
+			return $left;
+		}
 		// The hash is not optional: without one the bytes are not trusted.
 		if ( ! preg_match( '/^[0-9a-f]{64}\z/', (string) $sha ) || ! hash_equals( (string) $sha, hash( 'sha256', $raw ) ) ) {
 			return self::refused( 'hash' );
 		}
-		return $raw;
+		$left = self::left( $deadline );
+		return true === $left ? $raw : $left;
+	}
+
+	/**
+	 * Whether a reading may take its next step (AB_MCP_Sync_Deadline::left());
+	 * true without a deadline.
+	 *
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @return true|WP_Error
+	 */
+	private static function left( $deadline ) {
+		return null === $deadline ? true : AB_MCP_Sync_Deadline::left( $deadline );
 	}
 
 	/**

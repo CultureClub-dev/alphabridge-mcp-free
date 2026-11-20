@@ -69,13 +69,18 @@ final class AB_MCP_Shape {
 	);
 
 	/**
-	 * The value in the form, or null where it is not of it.
+	 * The value in the form, or null where it is not of it. With a deadline
+	 * (AB_MCP_Sync_Deadline, R12 of Z8b branch 5) each element of a list, a
+	 * map or a record is read only while it is not over; once it is, the
+	 * reading ends as null and its caller passes the stop on
+	 * (AB_MCP_Sync_Deadline::stop()).
 	 *
-	 * @param mixed $value Value as read.
-	 * @param array $form  Form.
+	 * @param mixed      $value    Value as read.
+	 * @param array      $form     Form.
+	 * @param mixed|null $deadline Null, or a deadline of AB_MCP_Sync_Deadline::at().
 	 * @return mixed|null
 	 */
-	public static function read( $value, array $form ) {
+	public static function read( $value, array $form, $deadline = null ) {
 		$type = array_key_exists( 'type', $form ) ? $form['type'] : null;
 		if ( ! is_string( $type ) || ! isset( self::PROPERTIES[ $type ] ) ) {
 			return null;
@@ -95,13 +100,25 @@ final class AB_MCP_Shape {
 			case 'bool':
 				return is_bool( $value ) ? $value : null;
 			case 'list':
-				return self::items( $value, $form );
+				return self::items( $value, $form, $deadline );
 			case 'map':
-				return self::pairs( $value, $form );
+				return self::pairs( $value, $form, $deadline );
 			case 'record':
-				return self::fields( $value, $form );
+				return self::fields( $value, $form, $deadline );
 		}
-		return self::decoded( $value, $form );
+		return self::decoded( $value, $form, $deadline );
+	}
+
+	/**
+	 * Whether a reading under a deadline is to stop before its next element:
+	 * it stopped before (its stop kept, the clock not asked again), or the
+	 * deadline is over or its clock unknown now.
+	 *
+	 * @param mixed|null $deadline Null, or a deadline.
+	 * @return bool
+	 */
+	private static function stopped( $deadline ) {
+		return null !== $deadline && ( null !== AB_MCP_Sync_Deadline::stop( $deadline ) || true !== AB_MCP_Sync_Deadline::left( $deadline ) );
 	}
 
 	/**
@@ -259,17 +276,18 @@ final class AB_MCP_Shape {
 	/**
 	 * A list of its form, each element read in the form of its items.
 	 *
-	 * @param mixed $value Value.
-	 * @param array $form  Form.
+	 * @param mixed      $value    Value.
+	 * @param array      $form     Form.
+	 * @param mixed|null $deadline See read().
 	 * @return array|null
 	 */
-	private static function items( $value, array $form ) {
+	private static function items( $value, array $form, $deadline ) {
 		if ( ! self::is_list( $value ) || ( array() === $value && true !== $form['empty'] ) || ( null !== $form['max_items'] && count( $value ) > $form['max_items'] ) || ! is_array( $form['item'] ) ) {
 			return null;
 		}
 		$out = array();
 		foreach ( $value as $item ) {
-			$read = self::read( $item, $form['item'] );
+			$read = self::stopped( $deadline ) ? null : self::read( $item, $form['item'], $deadline );
 			if ( null === $read || ( true === $form['unique'] && in_array( $read, $out, true ) ) ) {
 				return null;
 			}
@@ -282,18 +300,19 @@ final class AB_MCP_Shape {
 	 * A map of its form, each key and value read in their forms; a key read
 	 * otherwise than it is (a lossless change) is not of the form.
 	 *
-	 * @param mixed $value Value.
-	 * @param array $form  Form.
+	 * @param mixed      $value    Value.
+	 * @param array      $form     Form.
+	 * @param mixed|null $deadline See read().
 	 * @return array|null
 	 */
-	private static function pairs( $value, array $form ) {
+	private static function pairs( $value, array $form, $deadline ) {
 		if ( ! is_array( $value ) || ( array() === $value && true !== $form['empty'] ) || ! is_array( $form['key'] ) || ! is_array( $form['value'] ) ) {
 			return null;
 		}
 		$out = array();
 		foreach ( $value as $key => $item ) {
-			$read = self::read( $item, $form['value'] );
-			if ( self::read( $key, $form['key'] ) !== $key || null === $read ) {
+			$read = self::stopped( $deadline ) ? null : self::read( $item, $form['value'], $deadline );
+			if ( null === $read || self::read( $key, $form['key'] ) !== $key ) {
 				return null;
 			}
 			$out[ $key ] = $read;
@@ -305,24 +324,25 @@ final class AB_MCP_Shape {
 	 * A record of its form: every field there and of its form (null where
 	 * the field's form is nullable), other keys only where extra is true.
 	 *
-	 * @param mixed $value Value.
-	 * @param array $form  Form.
+	 * @param mixed      $value    Value.
+	 * @param array      $form     Form.
+	 * @param mixed|null $deadline See read().
 	 * @return array|null
 	 */
-	private static function fields( $value, array $form ) {
+	private static function fields( $value, array $form, $deadline ) {
 		if ( ! is_array( $value ) || ( array() !== $value && self::is_list( $value ) ) || ! is_array( $form['fields'] ) ) {
 			return null;
 		}
 		$out = array();
 		foreach ( $form['fields'] as $name => $field ) {
-			if ( ! array_key_exists( $name, $value ) || ! is_array( $field ) ) {
+			if ( ! array_key_exists( $name, $value ) || ! is_array( $field ) || self::stopped( $deadline ) ) {
 				return null;
 			}
 			if ( null === $value[ $name ] && array_key_exists( 'nullable', $field ) && true === $field['nullable'] ) {
 				$out[ $name ] = null;
 				continue;
 			}
-			$read = self::read( $value[ $name ], $field );
+			$read = self::read( $value[ $name ], $field, $deadline );
 			if ( null === $read ) {
 				return null;
 			}
@@ -336,14 +356,19 @@ final class AB_MCP_Shape {
 
 	/**
 	 * What a JSON text decodes to, in the form of its value, where the text
-	 * is the one its writer wrote of it (the round trip).
+	 * is the one its writer wrote of it (the round trip). A codec of its own
+	 * (AB_MCP_Sync_Canon) decodes and encodes under the deadline as well, and
+	 * a decoding that stopped is not encoded again (no step of the codec
+	 * after the stop); json_decode() and json_encode() are one call each (a
+	 * named limit of AB_MCP_Sync_Deadline).
 	 *
-	 * @param mixed $value Text.
-	 * @param array $form  Form.
+	 * @param mixed      $value    Text.
+	 * @param array      $form     Form.
+	 * @param mixed|null $deadline See read().
 	 * @return mixed|null
 	 */
-	private static function decoded( $value, array $form ) {
-		if ( ! is_string( $value ) || ! is_int( $form['depth'] ) || $form['depth'] < 1 || ! is_array( $form['value'] ) ) {
+	private static function decoded( $value, array $form, $deadline ) {
+		if ( ! is_string( $value ) || ! is_int( $form['depth'] ) || $form['depth'] < 1 || ! is_array( $form['value'] ) || self::stopped( $deadline ) ) {
 			return null;
 		}
 		if ( 'json' === $form['codec'] ) {
@@ -360,12 +385,15 @@ final class AB_MCP_Shape {
 			if ( ! is_string( $codec ) || ! method_exists( $codec, 'decode' ) || ! method_exists( $codec, 'encode' ) ) {
 				return null;
 			}
-			$decoded = $codec::decode( $value, $form['depth'] );
-			$again   = $codec::encode( $decoded );
+			$decoded = $codec::decode( $value, $form['depth'], $deadline );
+			if ( null !== $deadline && null !== AB_MCP_Sync_Deadline::stop( $deadline ) ) {
+				return null;
+			}
+			$again = $codec::encode( $decoded, $deadline );
 		}
-		if ( ! is_string( $again ) || $again !== $value ) {
+		if ( ! is_string( $again ) || $again !== $value || self::stopped( $deadline ) ) {
 			return null;
 		}
-		return self::read( $decoded, $form['value'] );
+		return self::read( $decoded, $form['value'], $deadline );
 	}
 }

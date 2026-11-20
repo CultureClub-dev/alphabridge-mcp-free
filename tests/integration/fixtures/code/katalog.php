@@ -22,10 +22,11 @@ return array(
 		'ab-it-aktiv'       => array(
 			'main'      => array( 'ab-it-aktiv/ab-it-aktiv.php' ),
 			'fassungen' => array(
-				'1.0.0' => 'Ausgangsstand, aktiv, Zähler (F2, F27–F29, F32)',
-				'2.0.0' => 'neue Fassung, besteht die Probe (F2)',
-				'fatal' => 'neue Fassung 2.0.1, Syntax richtig, Fatal beim Laden (Rücktausch)',
-				'php'   => 'neue Fassung 2.0.2 mit Requires PHP: 99.0 (F20)',
+				'1.0.0'      => 'Ausgangsstand, aktiv, Zähler (F2, F27–F29, F32)',
+				'2.0.0'      => 'neue Fassung, besteht die Probe (F2), mit einem eingebundenen Teil includes/teil.inc (F56)',
+				'fatal'      => 'neue Fassung 2.0.1, Syntax richtig, Fatal beim Laden (Rücktausch)',
+				'php'        => 'neue Fassung 2.0.2 mit Requires PHP: 99.0 (F20)',
+				'startseite' => 'neue Fassung 2.0.3, Fatal nur auf der Startseite, MCP und wp-admin antworten (F59 Fall 1)',
 			),
 			'start'     => array(
 				'fassung' => '1.0.0',
@@ -211,6 +212,13 @@ return array(
 		'ab-it-anderes-kind'   => array(
 			'fassungen' => array(
 				'1.0.0' => 'anderes Kind-Theme, auf Staging zu wählen (F10)',
+			),
+			'start'     => '1.0.0',
+		),
+		'ab-it-inaktiv'        => array(
+			'fassungen' => array(
+				'1.0.0' => 'Ausgangsstand, inaktiv, Name wie das Plugin ab-it-inaktiv (Teil H, G2)',
+				'1.1.0' => 'neue Fassung, mit dem Plugin gleichen Namens in einem Lauf (G2)',
 			),
 			'start'     => '1.0.0',
 		),

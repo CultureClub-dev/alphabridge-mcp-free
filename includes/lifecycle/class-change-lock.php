@@ -32,6 +32,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+require_once dirname( __DIR__ ) . '/class-store-inputs.php';
+
 /**
  * Class AB_MCP_Change_Lock
  */
@@ -106,19 +108,25 @@ class AB_MCP_Change_Lock {
 
 	/**
 	 * Give the lock back (the outermost holder of this request frees it).
+	 *
+	 * @return bool Whether this holder gave it back: true for a holder within
+	 *              another of this request, and for the outermost where its
+	 *              row was deleted (or there is no upgrader, so no row); false
+	 *              where this request held none, or the deletion failed.
 	 */
 	public static function release() {
 		if ( self::$depth > 1 ) {
 			--self::$depth;
-			return;
+			return true;
 		}
 		if ( 1 !== self::$depth ) {
-			return;
+			return false;
 		}
 		self::$depth = 0;
-		if ( self::upgrader() ) {
-			self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::name() );
+		if ( ! self::upgrader() ) {
+			return true;
 		}
+		return true === self::on_main_site( array( 'WP_Upgrader', 'release_lock' ), self::name() );
 	}
 
 	/**
@@ -162,19 +170,7 @@ class AB_MCP_Change_Lock {
 	 */
 	private static function create() {
 		if ( self::upgrader() && ! self::on_main_site( array( 'WP_Upgrader', 'create_lock' ), self::name(), self::TIMEOUT ) ) {
-			$since = (int) self::on_main_site( 'get_option', self::OPTION, 0 );
-			// A request that ended inside its own way back (an exit there ends
-			// every shutdown function after it) leaves the lock until TIMEOUT:
-			// the answer says when it is taken over.
-			return new WP_Error(
-				'ab_mcp_change_busy',
-				sprintf(
-					/* translators: 1: seconds, 2: time in UTC */
-					__( 'Not started: another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for %1$d s. Changes to the code the site runs go one after the other, so that the way back of one cannot undo the other. Nothing was changed; call again when the other one has answered. If none is running, a request that ended early left the lock behind; from %2$s UTC the next call takes it over.', 'alphabridge-mcp' ),
-					$since > 0 ? max( 0, time() - $since ) : 0,
-					gmdate( 'H:i', ( $since > 0 ? $since : time() ) + self::TIMEOUT )
-				)
-			);
+			return self::held_elsewhere();
 		}
 		// Without core's upgrader there is no lock to take; counted all the
 		// same, so that release() pairs with this.
@@ -190,6 +186,33 @@ class AB_MCP_Change_Lock {
 			self::$shutdown_registered = true;
 		}
 		return true;
+	}
+
+	/**
+	 * The answer where another request holds the lock (Leitsatz D; the lead
+	 * after the Codex rounds on part 2a of Z8b branch 5): that the lock is
+	 * held and who holds it cannot be told, its holders as examples (each a
+	 * taker of this lock in the code: AB_MCP_Activation_Guard, the update
+	 * guard, AB_MCP_Sync_Run, AB_MCP_Sync_Code_Swap, the journal of the site
+	 * address), that a request that ended early can have left it, the way and
+	 * the rule of TIMEOUT; its time only where its row reads as one (the row
+	 * swap.lock of AB_MCP_Store_Inputs::TABLE). Never which change holds it,
+	 * nor that a change of the code or anything else still runs.
+	 *
+	 * @return WP_Error
+	 */
+	private static function held_elsewhere() {
+		$since   = AB_MCP_Store_Inputs::read( 'swap.lock', self::on_main_site( 'get_option', self::OPTION ) );
+		$message = sprintf(
+			/* translators: %d: minutes */
+			__( 'Not started: AlphaBridge\'s lock for changes of the code this site runs is held, and who holds it cannot be told here. Every change through AlphaBridge that takes this lock waits for it, so that the way back of one cannot undo the other. It is taken, for example, by an activation, an update, a deploy, a swap of a plugin or theme from the staging site, a PHP file or snippet written or undone, a call of wp_site_push on its run (a step, an abort, a reading of its state) and the closing of a journal of the site address; a request that ended early can have left it behind. Nothing was changed; call again in a few minutes. Once its time is %d minutes old, the next call takes it over.', 'alphabridge-mcp' ),
+			intdiv( self::TIMEOUT, 60 )
+		);
+		if ( null !== $since ) {
+			/* translators: %s: time in UTC */
+			$message .= ' ' . sprintf( __( 'Its time was written at %s UTC.', 'alphabridge-mcp' ), gmdate( 'H:i', $since ) );
+		}
+		return new WP_Error( 'ab_mcp_change_busy', $message );
 	}
 
 	/**

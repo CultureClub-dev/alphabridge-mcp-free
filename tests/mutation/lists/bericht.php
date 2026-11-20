@@ -3043,7 +3043,7 @@ return array(
 		'id'      => 'bericht/taken-verify',
 		'clause'  => 'taken(): its manifest checked again',
 		'file'    => $im,
-		'search'  => "\t\t\$checked = AB_MCP_Sync_Manifest::verify( \$found['signed'], \$expect );\n\t\tif ( is_wp_error( \$checked ) ) {\n\t\t\treturn \$checked;\n\t\t}\n\t\t\$manifest = \$checked['manifest'];",
+		'search'  => "\t\t\$checked = AB_MCP_Sync_Manifest::verify( \$found['signed'], \$expect, null, \$deadline );\n\t\tif ( is_wp_error( \$checked ) ) {\n\t\t\treturn \$checked;\n\t\t}\n\t\t\$manifest = \$checked['manifest'];",
 		'replace' => "\t\t\$checked = array( 'manifest' => \$found['manifest'] );\n\t\t\$manifest = \$checked['manifest'];",
 		'run'     => $it( 'SyncProposalTest', 'testAPackageWhoseManifestExpiredIsNotRead' ),
 		'expect'  => '/testAPackageWhoseManifestExpiredIsNotRead/',

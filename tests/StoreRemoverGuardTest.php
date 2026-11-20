@@ -22,9 +22,38 @@
  *   by put_tree() only; the store renames only in write_file() (a temp file
  *   into place), ensure() (the building folder into place) and put_back()
  *   (an original back on uninstall, Z9);
+ * - Z15, Z16 (Z8b branch 5), the swap: in class-sync-code-swap.php PHP's
+ *   rename() only in AB_MCP_Sync_Code_Swap_Calls::rename(), called only in
+ *   AB_MCP_Sync_Code_Swap::move() (onto a place lstat() reads as free);
  * - Z9: uninstall.php reaches the store only through
  *   AB_MCP_Protected_Store::uninstall(), which no shipped code calls
  *   otherwise, and names no folder of the store.
+ *
+ * The walk of the calls (walk(), nikic/php-parser, each file once per
+ * process) sees every call whose name is written as a name in the code: a
+ * function, a name after ->, ?->, :: or new (new also without
+ * parentheses), resolved as PHP resolves it. A name in any spelling or
+ * case is the name itself (rename(), \rename(), namespace\rename(),
+ * RENAME()), a qualified one (Ns\rename()) another; it follows an import
+ * (use function … as, use Class as …) and a namespace (an unqualified
+ * function there counts as the global one PHP falls back to); self and
+ * static are the class they stand in, parent its extends (in a trait the
+ * three stay as written: the class that takes the trait decides); a
+ * function that returns by reference (function &name) is that function,
+ * and a closure counts as the function it is written in. Its bound is
+ * the name as a value at run time, which it does not see: a variable
+ * ($f( … ), $obj->$m( … )), a string ('rename'( … )), a callback handed
+ * on (call_user_func( 'rename', … ), array_map( 'unlink', … )). For
+ * unlink, rmdir, rename, mkdir and wp_delete_file no shipped file holds
+ * the name as a string (testNoShippedFileNamesARemoverAsAValue); a name put
+ * together ('un' . 'link') stays unseen. Its own test reads the spellings
+ * in tests/fixtures/t7-walker/. A class as a value ($c::m( … ); new $c and X::$m( … ) are not walked at all) stays unseen too.
+ * Every guard here reads the walk and searches no text of a file (the skeptic over F2 and G, B1; the skeptic over the reader,
+ * B1: a text missed ::delete_path ( with a space): besides the calls, the names a file writes (a class named anywhere in its
+ * code), its strings (with the parts of a string that holds variables, and HTML outside PHP) and the writes of a static property
+ * (the mark of a tree being built). Four fields hold the source of one node as written (text()): args, the first argument, and
+ * key and value of a write of a static property are compared as written with fixed lists (another spelling of the same fails,
+ * none passes); of, the class where it is a value, is read as a filter only, so such a call is unseen. GRENZEN-CODE.md, G-5-22.
  *
  * What the code does at run time is tests/integration/StoreRemoverTest.php
  * and StoreTreesTest.php.
@@ -37,6 +66,13 @@ declare( strict_types = 1 );
 namespace AlphaBridge\Tests;
 
 use AB_MCP_Protected_Store;
+use PhpParser\Error;
+use PhpParser\Node;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\NameResolver;
+use PhpParser\NodeVisitorAbstract;
+use PhpParser\ParserFactory;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\TestCase;
 
 // The class whose table the cases read, loaded here: never from an earlier
@@ -53,103 +89,165 @@ final class StoreRemoverGuardTest extends TestCase {
 		'includes/sync/class-sync-resources.php',
 	);
 
-	/**
-	 * Every call in a file: function, method (->), static (Class::) and new,
-	 * with the class and the named function it stands in (a closure counts
-	 * as the function it is written in).
-	 *
-	 * @return array<int,array{kind:string,name:string,of:string,class:string|null,function:string|null,args:string,line:int}>
-	 */
+	/** The calls of a file (walk()). */
 	private static function calls( string $file ): array {
-		$tokens = array_values(
-			array_filter(
-				token_get_all( (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) ),
-				static fn( $t ): bool => ! ( is_array( $t ) && in_array( $t[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) )
-			)
-		);
-		$out     = array();
-		$stack   = array();
-		$pending = null;
-		$n       = count( $tokens );
-		for ( $i = 0; $i < $n; $i++ ) {
-			$t = $tokens[ $i ];
-			if ( is_array( $t ) && T_CLASS === $t[0] && isset( $tokens[ $i + 1 ] ) && is_array( $tokens[ $i + 1 ] ) && T_STRING === $tokens[ $i + 1 ][0] ) {
-				$pending = array( 'class', $tokens[ $i + 1 ][1] );
-				continue;
-			}
-			if ( is_array( $t ) && T_FUNCTION === $t[0] ) {
-				$next    = $tokens[ $i + 1 ] ?? null;
-				$pending = is_array( $next ) && T_STRING === $next[0] ? array( 'function', $next[1] ) : array( 'closure', null );
-				continue;
-			}
-			if ( '{' === $t || ( is_array( $t ) && in_array( $t[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
-				$stack[] = '{' === $t && null !== $pending ? $pending : array( 'block', null );
-				$pending = null;
-				continue;
-			}
-			if ( ';' === $t && null !== $pending && 'class' !== $pending[0] ) {
-				$pending = null; // An abstract or interface function: no body.
-			}
-			if ( '}' === $t ) {
-				array_pop( $stack );
-				continue;
-			}
-			if ( ! is_array( $t ) || T_STRING !== $t[0] || '(' !== ( $tokens[ $i + 1 ] ?? null ) ) {
-				continue;
-			}
-			$before = $tokens[ $i - 1 ] ?? null;
-			if ( is_array( $before ) && T_FUNCTION === $before[0] ) {
-				continue;
-			}
-			$kind = 'function';
-			$of   = '';
-			if ( is_array( $before ) && in_array( $before[0], array( T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR ), true ) ) {
-				$kind = 'method';
-			} elseif ( is_array( $before ) && T_DOUBLE_COLON === $before[0] ) {
-				$kind = 'static';
-				$of   = is_array( $tokens[ $i - 2 ] ?? null ) ? $tokens[ $i - 2 ][1] : '';
-			} elseif ( is_array( $before ) && T_NEW === $before[0] ) {
-				$kind = 'new';
-			}
-			// The first argument, as written.
-			$args  = '';
-			$depth = 0;
-			for ( $j = $i + 1; $j < $n; $j++ ) {
-				$tok = $tokens[ $j ];
-				if ( '(' === $tok ) {
-					++$depth;
-					if ( 1 === $depth ) {
-						continue;
-					}
-				} elseif ( ')' === $tok ) {
-					--$depth;
-					if ( 0 === $depth ) {
-						break;
-					}
-				} elseif ( ',' === $tok && 1 === $depth ) {
-					break;
-				}
-				$args .= is_array( $tok ) ? $tok[1] : $tok;
-			}
-			$class    = null;
-			$function = null;
-			foreach ( $stack as $scope ) {
-				if ( 'class' === $scope[0] ) {
-					$class = $scope[1];
-				} elseif ( 'function' === $scope[0] ) {
-					$function = $scope[1];
-				}
-			}
-			$out[] = array(
-				'kind'     => $kind,
-				'name'     => strtolower( $t[1] ),
-				'of'       => $of,
-				'class'    => $class,
-				'function' => $function,
-				'args'     => $args,
-				'line'     => (int) $t[2],
-			);
+		return self::walk( $file )['calls'];
+	}
+
+	/**
+	 * Every call of a file whose name is written as a name (the head of this
+	 * file): kind (function, method, static, new), name in lower case, of
+	 * (the class of a static call; as written where it is a value), the class
+	 * and the named function it stands in, its first argument as written, the
+	 * string keys of the top level of its second where that is an array literal (keys; none otherwise) and its line, in the order of the file; the lines of every
+	 * string of the file (a part of one with variables, HTML outside PHP) by
+	 * its text in lower case without a leading \ (V1); every name the file
+	 * writes, in lower case, as PHP resolves it; and every write of a static
+	 * property (Class::$name, or an element of it: its first key) with the
+	 * value as written. Each file is parsed once per process.
+	 *
+	 * @return array{calls:list<array{kind:string,name:string,of:string,class:?string,function:?string,args:string,keys:list<string>,line:int}>,strings:array<string,list<int>>,names:array<string,true>,sets:list<array{of:string,name:string,key:string,value:string,class:?string,function:?string}>}
+	 */
+	private static function walk( string $file ): array {
+		static $walked = array();
+		if ( isset( $walked[ $file ] ) ) {
+			return unserialize( $walked[ $file ], array( 'allowed_classes' => false ) );
 		}
+		$code = file_get_contents( dirname( __DIR__ ) . '/' . $file );
+		if ( ! is_string( $code ) || '' === $code ) {
+			self::fail( $file . ': not read, so the walk would see nothing of it.' );
+		}
+		try {
+			$ast = ( new ParserFactory() )->createForNewestSupportedVersion()->parse( $code );
+		} catch ( Error $e ) {
+			self::fail( $file . ':' . $e->getStartLine() . ': ' . $e->getRawMessage() );
+		}
+		$walker = new class( $code, $file ) extends NodeVisitorAbstract {
+			/** @var array<int,array<string,mixed>> By the place of the name in the file. */
+			public array $calls = array();
+			/** @var array<string,list<int>> */
+			public array $strings = array();
+			/** @var array<string,true> */
+			public array $names = array();
+			/** @var list<array<string,mixed>> */
+			public array $sets = array();
+			/** @var list<array{0:Node,1:string}> The classes, traits and named functions the walk is in, with their names. */
+			private array $in = array();
+
+			public function __construct( private string $code, private string $file ) {}
+
+			public function enterNode( Node $node ) {
+				if ( $node instanceof Node\Stmt\ClassLike ) {
+					$this->in[] = array( $node, $node->namespacedName?->toString() ?? 'class@anonymous' );
+				} elseif ( $node instanceof Node\Stmt\Function_ || $node instanceof Node\Stmt\ClassMethod ) {
+					$this->in[] = array( $node, $node->name->toString() );
+				} elseif ( $node instanceof Node\Scalar\String_ || $node instanceof Node\InterpolatedStringPart || $node instanceof Node\Stmt\InlineHTML ) {
+					$this->strings[ strtolower( ltrim( $node->value, '\\' ) ) ][] = $node->getStartLine();
+				} elseif ( $node instanceof Node\Name ) {
+					$this->names[ strtolower( $node->toString() ) ] = true;
+				} elseif ( $node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef || $node instanceof Node\Expr\AssignOp ) {
+					$this->set( $node->var, $node->expr );
+				} elseif ( $node instanceof Node\Expr\FuncCall || $node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall ) {
+					$this->add( $node instanceof Node\Expr\FuncCall ? 'function' : 'method', $node->name, '', $node->args );
+				} elseif ( $node instanceof Node\Expr\StaticCall ) {
+					$this->add( 'static', $node->name, $this->class_of( $node->class ), $node->args );
+				} elseif ( $node instanceof Node\Expr\New_ && $node->class instanceof Node\Name ) {
+					$this->add( 'new', $node->class, '', $node->args );
+				}
+				return null;
+			}
+
+			public function leaveNode( Node $node ) {
+				if ( array() !== $this->in && end( $this->in )[0] === $node ) {
+					array_pop( $this->in );
+				}
+				return null;
+			}
+
+			/** A call whose name is a name; a name that is a value at run time ($f(), $obj->$m(), Foo::$m()) is none. */
+			private function add( string $kind, Node $name, string $of, array $args ): void {
+				if ( $name instanceof Node\Expr ) {
+					return;
+				}
+				[ $class, $function ] = $this->place();
+				$this->calls[ $name->getStartFilePos() ] = array(
+					'kind'     => $kind,
+					'name'     => strtolower( 'new' === $kind ? $this->class_of( $name ) : $name->toString() ),
+					'of'       => $of,
+					'class'    => $class,
+					'function' => $function,
+					'args'     => isset( $args[0] ) ? $this->text( $args[0] ) : '',
+					'keys'     => isset( $args[1] ) && $args[1] instanceof Node\Arg && $args[1]->value instanceof Node\Expr\Array_ ? array_values( array_filter( array_map( static fn( $item ): ?string => null !== $item && $item->key instanceof Node\Scalar\String_ ? $item->key->value : null, $args[1]->value->items ), 'is_string' ) ) : array(),
+					'line'     => $name->getStartLine(),
+				);
+			}
+
+			/** A write of a static property, or of an element of it; any other target is none. */
+			private function set( Node\Expr $var, Node\Expr $value ): void {
+				$key = '';
+				while ( $var instanceof Node\Expr\ArrayDimFetch ) {
+					$key = null === $var->dim ? '' : $this->text( $var->dim );
+					$var = $var->var;
+				}
+				if ( $var instanceof Node\Expr\StaticPropertyFetch && $var->name instanceof Node\VarLikeIdentifier ) {
+					[ $class, $function ] = $this->place();
+					$this->sets[]         = array(
+						'of'       => $this->class_of( $var->class ),
+						'name'     => strtolower( $var->name->toString() ),
+						'key'      => $key,
+						'value'    => $this->text( $value ),
+						'class'    => $class,
+						'function' => $function,
+					);
+				}
+			}
+
+			/** The class and the named function the walk is in. */
+			private function place(): array {
+				$out = array( null, null );
+				foreach ( $this->in as [ $in, $named ] ) {
+					$out[ $in instanceof Node\Stmt\ClassLike ? 0 : 1 ] = $named;
+				}
+				return $out;
+			}
+
+			/** The class of a static call or of new: self and static the class they stand in, parent its extends. */
+			private function class_of( Node $class ): string {
+				if ( ! $class instanceof Node\Name ) {
+					return $this->text( $class );
+				}
+				if ( ! $class->isSpecialClassName() ) {
+					return $class->toString();
+				}
+				$own = null;
+				foreach ( $this->in as $in ) {
+					$own = $in[0] instanceof Node\Stmt\ClassLike ? $in : $own;
+				}
+				if ( null !== $own && $own[0] instanceof Node\Stmt\Trait_ ) {
+					return strtolower( $class->toString() ); // The class that takes the trait decides.
+				}
+				$parent = 'parent' === strtolower( $class->toString() );
+				if ( null === $own || ( $parent && ! ( $own[0] instanceof Node\Stmt\Class_ && null !== $own[0]->extends ) ) ) {
+					Assert::fail( $this->file . ':' . $class->getStartLine() . ': ' . $class->toString() . ' without a class' . ( $parent ? ' that extends one' : '' ) . ': the walk would not know the class.' );
+				}
+				return $parent ? $own[0]->extends->toString() : $own[1];
+			}
+
+			private function text( Node $node ): string {
+				return substr( $this->code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1 );
+			}
+		};
+		( new NodeTraverser( new NameResolver(), $walker ) )->traverse( (array) $ast );
+		ksort( $walker->calls );
+		// Kept as one string a file: the arrays of all shipped files would
+		// not fit beside PHPUnit under a memory_limit of 128 MB.
+		$out             = array(
+			'calls'   => array_values( $walker->calls ),
+			'strings' => $walker->strings,
+			'names'   => $walker->names,
+			'sets'    => $walker->sets,
+		);
+		$walked[ $file ] = serialize( $out );
 		return $out;
 	}
 
@@ -157,12 +255,17 @@ final class StoreRemoverGuardTest extends TestCase {
 	private static function places( string $file, string $kind, string $name, string $of = '' ): array {
 		$out = array();
 		foreach ( self::calls( $file ) as $call ) {
-			if ( $kind === $call['kind'] && strtolower( $name ) === $call['name'] && ( '' === $of || $of === $call['of'] ) ) {
+			if ( $kind === $call['kind'] && strtolower( $name ) === $call['name'] && ( '' === $of || 0 === strcasecmp( $of, $call['of'] ) ) ) {
 				$out[] = ( $call['class'] ?? $file ) . '::' . ( $call['function'] ?? '' );
 			}
 		}
 		sort( $out );
 		return $out;
+	}
+
+	/** The shipped files that call a name (places() on every file of shipped()). */
+	private static function callers( string $kind, string $name, string $of ): array {
+		return array_values( array_filter( self::shipped(), static fn( string $file ): bool => array() !== self::places( $file, $kind, $name, $of ) ) );
 	}
 
 	/** The shipped PHP files (includes/, the main file, uninstall.php). */
@@ -179,21 +282,18 @@ final class StoreRemoverGuardTest extends TestCase {
 		return $files;
 	}
 
-	/** The files whose code (comments left out) holds a text. */
-	private static function holding( string $text ): array {
-		$found = array();
-		foreach ( self::shipped() as $file ) {
-			$code = '';
-			foreach ( token_get_all( (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) ) as $t ) {
-				if ( ! ( is_array( $t ) && in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) ) {
-					$code .= is_array( $t ) ? $t[1] : $t;
+	/** The shipped files (or those given) whose walk names a name, or holds a string with it, in any case. */
+	private static function naming( string $text, ?array $files = null ): array {
+		$text = strtolower( $text );
+		return array_values(
+			array_filter(
+				$files ?? self::shipped(),
+				static function ( string $file ) use ( $text ): bool {
+					$walk = self::walk( $file );
+					return isset( $walk['names'][ $text ] ) || array() !== array_filter( array_keys( $walk['strings'] ), static fn( $s ): bool => str_contains( (string) $s, $text ) );
 				}
-			}
-			if ( false !== stripos( $code, $text ) ) {
-				$found[] = $file;
-			}
-		}
-		return $found;
+			)
+		);
 	}
 
 	public function testTheWalkSeesTheCallsOfTheStore(): void {
@@ -201,6 +301,67 @@ final class StoreRemoverGuardTest extends TestCase {
 		self::assertGreaterThan( 300, count( $calls ) );
 		self::assertContains( 'AB_MCP_Protected_Store::delete_path', self::places( self::FILES[0], 'method', 'unlink' ) );
 		self::assertContains( 'AB_MCP_Protected_Store::self_check', self::places( self::FILES[0], 'static', 'write', 'AB_MCP_Payload_File' ) );
+	}
+
+	/**
+	 * Prüft: the walk reads a name in every spelling as PHP resolves it:
+	 * rename(), \rename(), namespace\rename(), \Class:: and namespace\Class::
+	 * (also in a closure with its use ( … ), in a class or outside one) as
+	 * the name itself, a qualified one (Ns\rename(), Ns\Class::) as another;
+	 * it follows an import of a function or a class under a name of the
+	 * file's own, reads a class in any case and self, static and parent as
+	 * the class they stand for, and a function that returns by reference
+	 * (also a closure that does) as that function (Codex D9; the skeptic
+	 * over D3b-2b, B2 and C1; part G, V2 and V3).
+	 * Sonst: a walk that read an alias, another case or self as no call of
+	 * the class, or a function &name as a closure, would leave a guard of
+	 * the one places green while PHP's rename(), unlink() or rmdir() is
+	 * called past them.
+	 */
+	public function testTheWalkReadsEverySpellingOfANameAsPhpResolvesIt(): void {
+		$dir  = 'tests/fixtures/t7-walker/';
+		$seen = array();
+		foreach ( self::calls( $dir . 'spellings.php' ) as $call ) {
+			$seen[] = $call['kind'] . ' ' . ( '' === $call['of'] ? '' : $call['of'] . '::' ) . $call['name'] . ' in ' . $call['class'] . '::' . $call['function'];
+		}
+		$in = ' in AB_MCP_Walker_Spellings::all';
+		self::assertSame(
+			array( 'function rename' . $in, 'function rename' . $in, 'function rename' . $in, 'function ns\\rename' . $in, 'static AB_MCP_Payload_File::write' . $in, 'static AB_MCP_Payload_File::write' . $in, 'static Ns\\AB_MCP_Payload_File::write' . $in, 'method rename' . $in, 'function rename' . $in, 'function rename in ::' ),
+			$seen
+		);
+		self::assertSame( array( $dir . 'import-function.php::' ), self::places( $dir . 'import-function.php', 'function', 'rename' ), 'The walk follows the import of a function.' );
+		self::assertSame( array( $dir . 'import-class.php::' ), self::places( $dir . 'import-class.php', 'static', 'write', 'AB_MCP_Payload_File' ), 'And of a class.' );
+		$classes = $dir . 'class-spellings.php';
+		$all     = array( 'AB_MCP_Walker_Classes::all', 'AB_MCP_Walker_Classes::all' );
+		self::assertSame( $all, self::places( $classes, 'static', 'write', 'AB_MCP_PAYLOAD_FILE' ), 'ab_mcp_payload_file:: and Parent:: (its extends).' );
+		self::assertSame( $all, self::places( $classes, 'static', 'write', 'ab_mcp_walker_classes' ), 'SELF:: and static::.' );
+		self::assertSame( $all, self::places( $classes, 'function', 'unlink' ), 'In function &all() and in its closure function &().' );
+	}
+
+	/**
+	 * Prüft: no shipped file holds the name of PHP's unlink(), rmdir(),
+	 * rename(), mkdir() or of wp_delete_file() as a string, in any case,
+	 * with or without a leading \ (V1): so none of them is called with its
+	 * name as a value (call_user_func( 'unlink', … ), 'rename'( … ),
+	 * array_map( 'rmdir', … )), which the walk does not see.
+	 * Sonst: such a call would remove, move or make a folder in the store
+	 * or of a swap past every guard of the one places, and they would stay
+	 * green.
+	 */
+	public function testNoShippedFileNamesARemoverAsAValue(): void {
+		$found = array();
+		$read  = 0;
+		foreach ( self::shipped() as $file ) {
+			$strings = self::walk( $file )['strings'];
+			$read   += count( $strings, COUNT_RECURSIVE ) - count( $strings );
+			foreach ( array( 'unlink', 'rmdir', 'rename', 'mkdir', 'wp_delete_file' ) as $name ) {
+				foreach ( $strings[ $name ] ?? array() as $line ) {
+					$found[] = $file . ':' . $line . ' ' . $name;
+				}
+			}
+		}
+		self::assertGreaterThan( 50000, $read, 'The strings of the shipped files are read.' );
+		self::assertSame( array(), $found );
 	}
 
 	public function testNothingRemovesInTheStoreButDeletePath(): void {
@@ -222,17 +383,17 @@ final class StoreRemoverGuardTest extends TestCase {
 				}
 			}
 		}
-		self::assertSame( array( 'includes/class-protected-store.php' ), self::holding( 'AB_MCP_Protected_Store_Calls' ), 'No other shipped file names the calls of the store.' );
-		self::assertSame( array( 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( 'AB_MCP_Protected_Store::root(' ), 'Only the budget and the measurement get the folder of the store.' );
-		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( '::delete_path(' ), 'delete_path() where a file of the store goes.' );
-		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::holding( '::temp_file(' ) );
+		self::assertSame( array( 'includes/class-protected-store.php' ), self::naming( 'AB_MCP_Protected_Store_Calls' ), 'No other shipped file names the calls of the store.' );
+		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::callers( 'static', 'root', 'AB_MCP_Protected_Store' ), 'Only the budget and the measurement get the folder of the store (and the store itself).' );
+		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::callers( 'static', 'delete_path', 'AB_MCP_Protected_Store' ), 'delete_path() where a file of the store goes.' );
+		self::assertSame( array( 'includes/class-protected-store.php', 'includes/class-store-budget.php', 'includes/sync/class-sync-resources.php' ), self::callers( 'static', 'temp_file', 'AB_MCP_Protected_Store' ) );
 	}
 
 	public function testNothingOfTheStoreIsWrittenThroughThePayloadFileButTheControlFileBesideIt(): void {
 		$all = array();
 		foreach ( self::FILES as $file ) {
 			foreach ( self::calls( $file ) as $call ) {
-				if ( 'static' === $call['kind'] && 'write' === $call['name'] && 'AB_MCP_Payload_File' === $call['of'] ) {
+				if ( 'static' === $call['kind'] && 'write' === $call['name'] && 0 === strcasecmp( 'AB_MCP_Payload_File', $call['of'] ) ) {
 					$all[] = $file . ' ' . $call['class'] . '::' . $call['function'] . '(' . trim( $call['args'] ) . ')';
 				}
 			}
@@ -247,9 +408,14 @@ final class StoreRemoverGuardTest extends TestCase {
 
 	public function testATreeIsCopiedOnlyByPutTreeAndTheStoreRenamesOnlyWhereItMay(): void {
 		$store = self::FILES[0];
-		$code  = (string) file_get_contents( dirname( __DIR__ ) . '/' . $store );
-		self::assertSame( 1, preg_match_all( '/self::\$building\[\s*\$place\s*\]\s*=\s*true;/', $code ), 'A tree is marked as built in one place.' );
-		self::assertSame( array( 'AB_MCP_Protected_Store::put_tree' ), self::places( $store, 'static', 'copy_tree', 'self' ), 'A tree is copied by put_tree() only.' );
+		$marks = array();
+		foreach ( self::walk( $store )['sets'] as $set ) {
+			if ( 'building' === $set['name'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $set['of'] ) ) {
+				$marks[] = $set['class'] . '::' . $set['function'] . ' [' . $set['key'] . '] = ' . $set['value'];
+			}
+		}
+		self::assertSame( array( 'AB_MCP_Protected_Store::put_tree [$place] = true' ), $marks, 'A tree is marked as built in one place.' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::put_tree' ), self::places( $store, 'static', 'copy_tree', 'AB_MCP_Protected_Store' ), 'A tree is copied by put_tree() only.' );
 		self::assertSame(
 			array( 'AB_MCP_Protected_Store::ensure', 'AB_MCP_Protected_Store::put_back', 'AB_MCP_Protected_Store::put_back', 'AB_MCP_Protected_Store::put_back', 'AB_MCP_Protected_Store::write_file' ),
 			self::places( $store, 'method', 'rename' ),
@@ -259,78 +425,78 @@ final class StoreRemoverGuardTest extends TestCase {
 		self::assertSame( array( 'AB_MCP_Protected_Store::build_dir', 'AB_MCP_Protected_Store::complete', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::copy_tree', 'AB_MCP_Protected_Store::ensure', 'AB_MCP_Protected_Store::open', 'AB_MCP_Protected_Store::put_mark', 'AB_MCP_Protected_Store::self_check' ), self::places( $store, 'method', 'mkdir' ), 'The folders of a tree in copy_tree() only; a building folder in build_dir() only (Z8b branch 4, D4).' );
 	}
 
+	/**
+	 * Prüft: the swap renames only through its calls, and those only from
+	 * move(), which renames onto a place it read as free (Z15, Z16; part
+	 * D3b-2 of the rest).
+	 * Sonst: a rename of the swap past move() could put a version over a
+	 * folder another process put there, or move the old one out of its
+	 * place without its backup, journal and mark, so that the way back and
+	 * the instruction by hand no longer find it.
+	 */
+	public function testTheSwapRenamesOnlyThroughItsCallsAndThoseOnlyFromMove(): void {
+		$swap = 'includes/sync/class-sync-code-swap.php';
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap_Calls::rename' ), self::places( $swap, 'function', 'rename' ), 'PHP\'s rename() in the one call of the swap only.' );
+		self::assertSame( array( 'AB_MCP_Sync_Code_Swap::move' ), self::places( $swap, 'method', 'rename' ), 'That call only from move().' );
+	}
+
 	public function testTheRetentionOfABackupIsDecidedByKeptOnly(): void {
 		$store = self::FILES[0];
-		self::assertSame( array( 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'kept', 'self' ), 'The clean-up asks kept() before it lets a group of this store go by its time (Z8), and for a sidecar read whole but not this area\'s or installation\'s, with the area it names and the one it lies in (Behebung 1, A1).' );
-		self::assertSame( array( 'AB_MCP_Protected_Store::remove', 'AB_MCP_Protected_Store::unswept' ), self::places( $store, 'static', 'delete_group', 'self' ), 'A group goes in remove() and the clean-up only.' );
-		self::assertSame( array( 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'unswept', 'self' ), 'unswept() is the clean-up\'s one way to remove a group (Behebung 4, B1: it says what a mark that cannot be read kept).' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'kept', 'AB_MCP_Protected_Store' ), 'The clean-up asks kept() before it lets a group of this store go by its time (Z8), and for a sidecar read whole but not this area\'s or installation\'s, with the area it names and the one it lies in (Behebung 1, A1).' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::remove', 'AB_MCP_Protected_Store::unswept' ), self::places( $store, 'static', 'delete_group', 'AB_MCP_Protected_Store' ), 'A group goes in remove() and the clean-up only.' );
+		self::assertSame( array( 'AB_MCP_Protected_Store::sweep', 'AB_MCP_Protected_Store::sweep' ), self::places( $store, 'static', 'unswept', 'AB_MCP_Protected_Store' ), 'unswept() is the clean-up\'s one way to remove a group (Behebung 4, B1: it says what a mark that cannot be read kept).' );
 		// remove() is the way of the owner of a package or a report: no
 		// shipped code removes a group of backups or stage by it (a backup
 		// goes by its retention only, Z8).
 		$areas = array();
+		$seam  = array();
 		foreach ( self::shipped() as $file ) {
 			foreach ( self::calls( $file ) as $call ) {
-				if ( 'remove' === $call['name'] && ( ( 'static' === $call['kind'] && 'AB_MCP_Protected_Store' === $call['of'] ) || ( 'method' === $call['kind'] && 'includes/sync/class-sync-proposal.php' === $file ) ) ) {
-					$areas[ trim( $call['args'] ) ] = true;
+				if ( 'remove' === $call['name'] && 'static' === $call['kind'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $call['of'] ) ) {
+					$areas[ trim( $call['args'] ) ][] = $call['class'] . '::' . $call['function'];
+				} elseif ( 'remove' === $call['name'] && 'method' === $call['kind'] && 'includes/sync/class-sync-proposal.php' === $file ) {
+					$seam[ trim( $call['args'] ) ] = true;
 				}
 			}
 		}
 		ksort( $areas );
 		self::assertSame( array( '$area', "'in'", "'out'", "'reports'" ), array_keys( $areas ), 'The areas remove() is called with.' );
-		$proposal = (string) file_get_contents( dirname( __DIR__ ) . '/includes/sync/class-sync-proposal.php' );
-		self::assertSame( 1, substr_count( $proposal, 'return AB_MCP_Protected_Store::remove( $area, $gid );' ), 'The one call with an area named by a variable: the calls of the proposal, which pass reports.' );
-		self::assertSame( 0, preg_match( "/->remove\\(\\s*'(?!reports')/", $proposal ) );
+		self::assertSame( array( 'AB_MCP_Sync_Proposal_Calls::remove' ), $areas['$area'], 'The one call with an area named by a variable: the calls of the proposal,' );
+		self::assertSame( array( "'reports'" ), array_keys( $seam ), 'which pass reports.' );
 	}
 
 	public function testTheUninstallReachesTheStoreOnlyThroughItsOneFunction(): void {
 		self::assertSame( array( 'uninstall.php::' ), self::places( 'uninstall.php', 'static', 'uninstall', 'AB_MCP_Protected_Store' ), 'uninstall.php calls it.' );
 		$others = array();
 		foreach ( self::calls( 'uninstall.php' ) as $call ) {
-			if ( 'static' === $call['kind'] && 'AB_MCP_Protected_Store' === $call['of'] && 'uninstall' !== $call['name'] ) {
+			if ( 'static' === $call['kind'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $call['of'] ) && 'uninstall' !== $call['name'] ) {
 				$others[] = $call['name'];
 			}
 		}
 		self::assertSame( array(), $others, 'And nothing else of the store.' );
-		self::assertSame( array( 'uninstall.php' ), self::holding( 'AB_MCP_Protected_Store::uninstall(' ), 'No shipped code but uninstall.php calls it (Pro calls it from its own uninstall).' );
-		self::assertNotContains( 'uninstall.php', self::holding( 'ab-mcp-store' ), 'uninstall.php names no folder of the store.' );
+		self::assertSame( array( 'uninstall.php' ), self::callers( 'static', 'uninstall', 'AB_MCP_Protected_Store' ), 'No shipped code but uninstall.php calls it (Pro calls it from its own uninstall).' );
+		self::assertSame( array(), self::naming( 'ab-mcp-store', array( 'uninstall.php' ) ), 'uninstall.php names no folder of the store.' );
 	}
 
 	/**
-	 * Every call of AB_MCP_Protected_Store::open() in shipped code, comments
-	 * left out (and the calls of the proposal through its seam, ->open()):
-	 * file, area and the meta as written.
+	 * Every call of AB_MCP_Protected_Store::open() in shipped code as the walk
+	 * reads it (walk()), and the calls of the proposal through its seam
+	 * (->open() in its file, as the retention reads ->remove()): file, area
+	 * and the string keys of the top level of the meta (none where it is no array literal).
 	 *
-	 * @return array<int,array{file:string,area:string,meta:string}>
+	 * @return array<int,array{file:string,area:string,keys:list<string>}>
 	 */
 	private static function opens(): array {
 		$out = array();
 		foreach ( self::shipped() as $file ) {
-			$code = '';
-			foreach ( token_get_all( (string) file_get_contents( dirname( __DIR__ ) . '/' . $file ) ) as $t ) {
-				if ( ! ( is_array( $t ) && in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) ) {
-					$code .= is_array( $t ) ? $t[1] : $t;
+			foreach ( self::calls( $file ) as $call ) {
+				if ( 'open' === $call['name'] && ( ( 'static' === $call['kind'] && 0 === strcasecmp( 'AB_MCP_Protected_Store', $call['of'] ) ) || ( 'method' === $call['kind'] && 'includes/sync/class-sync-proposal.php' === $file ) ) ) {
+					$out[] = array(
+						'file' => $file,
+						'area' => trim( $call['args'] ),
+						'keys' => $call['keys'],
+					);
 				}
-			}
-			if ( ! preg_match_all( '/(?:AB_MCP_Protected_Store::|calls\(\)->)open\(/', $code, $m, PREG_OFFSET_CAPTURE ) ) {
-				continue;
-			}
-			foreach ( $m[0] as $hit ) {
-				$at    = $hit[1] + strlen( $hit[0] );
-				$depth = 1;
-				$args  = '';
-				for ( $i = $at; $i < strlen( $code ) && $depth > 0; $i++ ) {
-					$c = $code[ $i ];
-					$depth += '(' === $c ? 1 : ( ')' === $c ? -1 : 0 );
-					if ( $depth > 0 ) {
-						$args .= $c;
-					}
-				}
-				$first = trim( (string) strtok( $args, ',' ) );
-				$out[] = array(
-					'file' => $file,
-					'area' => $first,
-					'meta' => trim( substr( $args, strlen( (string) strtok( $args, ',' ) ) + 1 ) ),
-				);
 			}
 		}
 		return $out;
@@ -352,10 +518,10 @@ final class StoreRemoverGuardTest extends TestCase {
 			if ( 'includes/class-protected-store.php' === $call['file'] ) {
 				continue;
 			}
-			$area = trim( $call['area'], "'" );
+			$area = trim( $call['area'], '\'"' );
 			$seen[ $call['file'] . ' ' . $call['area'] ] = true;
 			if ( in_array( $area, $runs_only, true ) ) {
-				self::assertStringContainsString( "'run_id'", $call['meta'], $call['file'] . ': a writer of ' . $area . ' gives the run.' );
+				self::assertContains( 'run_id', $call['keys'], $call['file'] . ': a writer of ' . $area . ' gives the run, as a key of the array literal it passes.' );
 			}
 		}
 		ksort( $seen );
@@ -363,6 +529,7 @@ final class StoreRemoverGuardTest extends TestCase {
 			array(
 				"includes/sync/class-sync-backup.php 'backups'",
 				"includes/sync/class-sync-code-stage.php 'stage'",
+				"includes/sync/class-sync-code-swap.php 'backups'",
 				"includes/sync/class-sync-export.php 'out'",
 				"includes/sync/class-sync-import.php 'in'",
 				'includes/sync/class-sync-proposal.php $area',
@@ -370,7 +537,7 @@ final class StoreRemoverGuardTest extends TestCase {
 				"includes/sync/class-sync-report.php 'reports'",
 			),
 			array_keys( $seen ),
-			'The writers of sidecars: one area each, the proposal through its seam (reports); stage by the stage of a unit of code with its run (Z8b branch 4, D4).'
+			'The writers of sidecars: one area each, the proposal through its seam (reports); stage by the stage of a unit of code with its run (Z8b branch 4, D4); backups by the way back of a swap for the place of the new version, a group of its own with the run of the way back (Z8b branch 5, part E, question 1 B).'
 		);
 	}
 }

@@ -1692,10 +1692,31 @@ $c1 = ab_new_plugin( 'broken', 'AB_FATAL_LOAD' );
 $t  = time() - 5;
 update_option( $lock, $t );
 $r = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => $c1 ) );
-ok( 'ab_mcp_change_busy' === ab_code( $r ) && ab_has( ab_msg( $r ), 'another change of the code this site runs through AlphaBridge (an activation, a deploy, or a PHP file or snippet written or undone) has been running for 5 s', 'Nothing was changed' ), 'C1 another request holds the lock: refused, with how long it has run: ' . ab_msg( $r ) );
+// The lead after the Codex rounds on part 2a of Z8b branch 5 (Leitsatz D):
+// the answer names the lock that is held and its holders as examples, never
+// which change holds it, nor that a change of the code or anything else
+// still runs; a time only as the time of the lock.
+$ab_held = 'Not started: AlphaBridge\'s lock for changes of the code this site runs is held, and who holds it cannot be told here.';
+$ab_ex   = 'It is taken, for example, by an activation, an update, a deploy, a swap of a plugin or theme from the staging site, a PHP file or snippet written or undone, a call of wp_site_push on its run (a step, an abort, a reading of its state) and the closing of a journal of the site address; a request that ended early can have left it behind.';
+$ab_no   = static function ( $msg ) {
+	return false === strpos( $msg, 'has been running' ) && false === strpos( $msg, 'another change of the code' ) && false === strpos( $msg, 'is running' );
+};
+ok( 'ab_mcp_change_busy' === ab_code( $r ) && ab_has( ab_msg( $r ), $ab_held, $ab_ex, 'Nothing was changed; call again in a few minutes.', 'Its time was written at ' . gmdate( 'H:i', $t ) . ' UTC.' ) && $ab_no( ab_msg( $r ) ), 'C1 another request holds the lock: refused, the lock and its time named, no holder and no change claimed: ' . ab_msg( $r ) );
 ok( ! is_plugin_active( $c1 ) && array() === $GLOBALS['ab_requests'] && array() === ab_events_like( 'activate_plugin:' ), 'C1 nothing switched on, no test request sent' );
 ok( $t === (int) get_option( $lock ) && ! AB_MCP_Change_Lock::held(), 'C1 the other request\'s lock stays as it was' );
-ok( ab_has( ab_msg( $r ), 'If none is running, a request that ended early left the lock behind; from ' . gmdate( 'H:i', $t + AB_MCP_Change_Lock::TIMEOUT ) . ' UTC the next call takes it over' ), 'C1 the answer says from when a lock left behind is taken over' );
+ok( ab_has( ab_msg( $r ), 'Once its time is ' . intdiv( AB_MCP_Change_Lock::TIMEOUT, 60 ) . ' minutes old, the next call takes it over.' ), 'C1 the answer says when a lock left behind is taken over, from the time of the lock' );
+// A lock left behind (nine minutes old) and one whose time does not read as
+// a time: the same answer, the time only where it is read.
+$t9 = time() - 540;
+update_option( $lock, $t9 );
+$r = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => $c1 ) );
+ok( 'ab_mcp_change_busy' === ab_code( $r ) && ab_has( ab_msg( $r ), $ab_held, $ab_ex, 'Its time was written at ' . gmdate( 'H:i', $t9 ) . ' UTC.' ) && $ab_no( ab_msg( $r ) ), 'C1 a lock left behind: the same answer, nothing claimed running: ' . ab_msg( $r ) );
+// A blank before its digits: WordPress counts the lock as held (a numeric
+// text), the row swap.lock does not read it as a time.
+update_option( $lock, ' ' . $t );
+$r = AB_MCP_Tools_Plugins_Themes_Manage::activate_plugin( array( 'plugin' => $c1 ) );
+ok( 'ab_mcp_change_busy' === ab_code( $r ) && ab_has( ab_msg( $r ), $ab_held, $ab_ex ) && false === strpos( ab_msg( $r ), 'Its time was written' ) && $ab_no( ab_msg( $r ) ), 'C1 a time of the lock not read: no time named: ' . ab_msg( $r ) );
+update_option( $lock, $t );
 // Counter-check: a lock left behind longer than its timeout is taken over.
 update_option( $lock, time() - AB_MCP_Change_Lock::TIMEOUT - 1 );
 $c1b = ab_new_plugin( 'fine' );

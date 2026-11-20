@@ -393,10 +393,10 @@ e('engine-sample-expected', 'sample_finding(): the title of the written object h
 e('engine-sample-200', 'sample_finding(): 200 (decision 33)', EN,
   "\t\tif ( 200 !== (int) $status ) {", "\t\tif ( false ) {", 'unit', 'testTheSampleOfAPublishedObjectNeedsTheTitleBesides200')
 e('engine-verify-budget', 'run_verify(): the hashes over calls where the budget runs out (B4)', EN,
-  "\t\t\t\tif ( $worked && $left() <= 0 ) {\n\t\t\t\t\t$result['cursor'] = $i;", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$result['cursor'] = $i;", 'it', 'testTheCheckOfTheRunNeedsTheTitleBesides200AndGoesOnOverCalls')
+  "\t\t\t\t$seen = $worked && $left() <= 0 ? null : self::written(", "\t\t\t\t$seen = self::written(", 'it', 'testTheCheckOfTheRunNeedsTheTitleBesides200AndGoesOnOverCalls')
 e('revert-wrote', 'plan(): only a step with a journal and a backup wrote anything (B9)', RV,
-  "\t\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );",
-  "\t\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true );", 'it', 'testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack')
+  "\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );",
+  "\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true );", 'it', 'testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack')
 e('revert-under-lock', 'begin(): a way back for a closed run is made under the lock of the store (decision 20, rule 4; A6)', RV,
   "\t\t\t$now    = AB_MCP_Protected_Store::under_lock(", "\t\t\t$now    = call_user_func(", 'it', 'testAWayBackForAClosedRunIsMadeUnderTheLockOfTheStore')
 e('export-one-reading', 'export(): form and content from the one reading of the rows (A4)', DK,
@@ -406,8 +406,27 @@ e('export-term-credentials', 'export(): the names and slugs of the terms through
 e('engine-rest-residual', 'revert_boundary(): a new object stays as a rest, its pair residual (rule 0)', EN,
   "\t\t\t\t$kept = is_array( $pair ) && 'residual' !== $pair['state'] ? AB_MCP_Sync_Pairs::set_state(",
   "\t\t\t\t$kept = false ? AB_MCP_Sync_Pairs::set_state(", 'it', E2E)
-e('engine-pair-restore', 'revert_boundary(): the pair goes back to its snapshot before the step (decision 10)', EN,
-  "\t\t\t\t$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );", "\t\t\t\t$restored = true;", 'it', E2E)
+e('engine-pair-restore', 'pair_back(): the pair goes back to its snapshot before the step (decision 10)', EN,
+  "\t\t$restored = AB_MCP_Sync_Pairs::restore( $pair_id, (string) $forward['pair_before'], $now_hash );", "\t\t$restored = true;", 'it', E2E)
+# The pre-check of Z8b branch 5, V12 (it meets the ordinary case: a takeover,
+# its pair discarded, the way back): the pair is read and its snapshot checked
+# before it is hashed; a pair that is gone is a state, one that cannot be read
+# is not known.
+GONE = 'testTheWayBackOfAStepWhosePairWasDiscardedSincePutsTheObjectBackAndSaysThatNoBasesWentBack'
+GONE_PART = 'testTheWayBackOfAStepWhosePairWasDiscardedSinceLeavesAChangedPartAndNamesNoPairAsUnclear'
+UNREAD = 'testTheWayBackOfAStepWhosePairCannotBeReadPutsThePartsBackWritesNothingOfThePairAndIsNotDone'
+e('v12-pair-gone', 'pair_back(): a pair discarded since the run is a state, no error: the parts decide the step (V12)', EN,
+  "\t\tif ( null === $pair ) {\n\t\t\treturn array(\n\t\t\t\t$all_back,", "\t\tif ( false ) {\n\t\t\treturn array(\n\t\t\t\t$all_back,", 'it', GONE)
+e('v12-pair-gone-said', 'revert_boundary(): the answer of a pair that is gone says that no bases went back, never that the pair has them (V12)', EN,
+  "\t\t\t'message'  => ( $said ?? ( $all_back", "\t\t\t'message'  => ( null ?? ( $all_back", 'it', GONE)
+e('v12-pair-gone-part', 'pair_back(): where a part is left, the answer of a pair that is gone says so and names no pair as unclear (V12)', EN,
+  "\t\t\t\t$all_back\n\t\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */\n\t\t\t\t\t? sprintf( __( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that. Its pair was discarded",
+  "\t\t\t\ttrue\n\t\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site. */\n\t\t\t\t\t? sprintf( __( 'The %1$s %2$s went back to its state before the run: every part the run wrote was still its own and was put back, and every part reads as the backup after that. Its pair was discarded", 'it', GONE_PART)
+e('v12-pair-read-before-hash', 'pair_back(): the snapshot of the pair is checked before it is hashed: an error is never hashed (V12)', EN,
+  "\t\tif ( ! is_string( $snapshot ) ) {", "\t\tif ( false ) {", 'it', UNREAD)
+e('v12-pair-unread-not-done', 'pair_back(): a pair that cannot be read leaves the step not done, whatever went back (V12)', EN,
+  "\t\t\treturn array(\n\t\t\t\tfalse,\n\t\t\t\t'',\n\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3:",
+  "\t\t\treturn array(\n\t\t\t\t$all_back,\n\t\t\t\t'',\n\t\t\t\t/* translators: 1: kind of the object, as the tools name it (post, term, …), 2: its reference on this site, 3:", 'it', UNREAD)
 e('engine-reverting-only', 'pick(): a run on its way back runs its steps of the way back only', EN,
   "\t\t$reverting = 'reverting' === $run['state'] || 'revert' === $run['type'];", "\t\t$reverting = false;", 'it', 'testARequestThatExitsInABoundaryLeavesTheRunInterruptedAndTheWayBackLeadsTheSameRun')
 e('revert-same-run', 'plan(): the way back of a run that is not closed leads the same run (decision 15)', RV,
@@ -438,8 +457,8 @@ e('plan-report-live', 'plan(): a target that changed since the report is not wri
 e('writer-delete-right', 'meta_ops(): a key only this site has, which the step removes, needs the right to remove it (delete_post_meta; decision 28; P2)', PW,
   "\t\tif ( array() !== $from ) {\n\t\t\t$ops[] = 'delete';", "\t\tif ( false ) {\n\t\t\t$ops[] = 'delete';", 'unit', 'testRemovingAMetaKeyOnlyThisSiteHasNeedsTheRightToDeleteIt')
 e('revert-once-across-runs', 'plan(): a step goes back at most once, also across the runs of the way back made for the closed run (P2)', RV,
-  "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );",
-  "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[ (int) $other['run_id'] ] = AB_MCP_Sync_Run::steps( (int) $other['run_id'] );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
+  "\t\tforeach ( $others as $other ) {\n\t\t\t$ways[] = array( $other, AB_MCP_Sync_Run::steps( (int) $other['run_id'] ) );",
+  "\t\tforeach ( array() as $other ) {\n\t\t\t$ways[] = array( $other, AB_MCP_Sync_Run::steps( (int) $other['run_id'] ) );", 'it', 'testAStepGoesBackOnceAlsoAcrossRunsOfTheWayBack')
 SLASH = 'testAMetaKeyWithABackslashIsStoredAndRemovedUnderItsOwnName'
 e('writer-slash-key-update', 'write_meta(): the key slashed for update_metadata(), which unslashes it (P2)', PW,
   "\t\t\t$done = update_metadata( $type, $id, wp_slash( (string) $key ), wp_slash( $values[0] ) );", "\t\t\t$done = update_metadata( $type, $id, $key, wp_slash( $values[0] ) );", 'unit', SLASH)
@@ -506,7 +525,7 @@ e('canon-decode-roundtrip', 'decode(): a byte marker that does not read back (no
 e('canon-decode-float-set', 'decode(): a float or set marker, which no such form carries, is refused', CN,
   "\t\tif ( array( '~f' ) === $keys || array( '~set' ) === $keys ) {", "\t\tif ( false ) {", 'canon', BYTES_UNIT)
 e('canon-decode-key', 'decode(): a key marker, which no such form carries, is refused', CN,
-  "\t\t\tif ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) {", "\t\t\tif ( false ) {", 'canon', BYTES_UNIT)
+  "\t\t\tif ( ( is_string( $key ) && 0 === strpos( $key, '~k:' ) ) || self::stopped( $deadline ) ) {", "\t\t\tif ( self::stopped( $deadline ) ) {", 'canon', BYTES_UNIT)
 e('canon-decode-bare-float', 'decode(): a bare float is not the text of encode()', CN,
   "\t\t\tif ( is_float( $value ) ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", "\t\t\tif ( false ) {\n\t\t\t\t// encode() writes a float as {\"~f\"}; a bare float is not its text.", 'canon', BYTES_UNIT)
 
@@ -568,9 +587,9 @@ e('engine-abort-fresh', 'abort(): the run read again under the lock; moved since
 e('revert-continue-planned-stay', 'begin_same_run(): a step of the way back still planned stays and goes back in its turn; a forward step is skipped', RV,
   "\t\t\t\t\t} elseif ( 'planned' === $step['state'] && 'revert' !== $step['op'] ) {", "\t\t\t\t\t} elseif ( 'planned' === $step['state'] ) {", 'it', LED)
 e('revert-continue-pair', 'begin_same_run(): the pair of a step of the way back left begun is unclear', RV,
-  "\t\t\t\t\t\t$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run_id, $step ) : null;", "\t\t\t\t\t\t$pair_id = null;", 'it', LED)
+  "\t\t\t\t\t\t$pair_id = 'revert' === $step['op'] && ! is_wp_error( $settled ) ? AB_MCP_Sync_Run::pair_of_revert_step( $run, $step ) : null;", "\t\t\t\t\t\t$pair_id = null;", 'it', LED)
 e('run-close-checked-revert-pair', 'close_checked(): the pair of a step of the way back left begun is the pair of the step it took back', RU,
-  "\t\t\t$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : self::pair_of_revert_step( $run_id, $step );", "\t\t\t$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : null;", 'it', LED)
+  "\t\t\t$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ? $step['pair_id'] : self::pair_of_revert_step( $run, $step );", "\t\t\t$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ? $step['pair_id'] : null;", 'it', LED)
 LOG_IT = 'testTheErrorLogIsCountedFromTheMarkOfTheCheckAndALogRotatedSinceIsAFinding'
 e('engine-log-mark-empty', 'error_log_mark(): no log yet is marked at 0, so a log made since is new whole', EN,
   "\t\tif ( null === $path ) {\n\t\t\treturn array( 'bytes' => 0 );", "\t\tif ( null === $path ) {\n\t\t\treturn null;", 'it', LOG_IT)
@@ -704,8 +723,33 @@ e('engine-put-back-unknown', 'put_back(): a part of a name the engine does not k
   "\t\t\tif ( ! in_array( $i, $order, true ) ) {", "\t\t\tif ( false ) {", 'unit', BYTES_JOURNAL)
 e('engine-fresh-unread', 'fresh(): a run whose plan or booking does not read back is not changed', EN,
   "\t\tif ( isset( $now['unread'] ) ) {", "\t\tif ( false ) {", 'it', UNREAD_IT)
-e('revert-plan-unread', 'way_back(): no way back is planned on a journal that does not read back, with the way', RV,
-  "\t\t\tif ( isset( $step['unread'] ) && in_array( 'parts', $step['unread'], true ) ) {", "\t\t\tif ( false ) {", 'it', UNREAD_IT)
+e('revert-plan-unread', 'way_back(): no way back is planned on a journal that does not read back (through the one reader), with the way', RV,
+  "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step, false );\n\t\t\tif ( is_wp_error( $took ) ) {", "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step, false );\n\t\t\tif ( false ) {", 'it', UNREAD_IT)
+
+# ------------------------------- the reader of the way back (review before H, section 2; belege/z5r-leser-zettel.md S1 to S7, G2)
+WB = 'testAWayBackOnRecordsThatDoNotReadBackIsRefusedAndNoStepGoesBackTwice'
+e('l-genommen-ungelesen', 'Run::wrote(): the step a step of the way back takes back, read with it, is refused where it does not read back, never read as no journal (the reader, S6)', RU,
+  "\t\tif ( is_wp_error( $read ) || isset( $read['unread'] ) ) {", "\t\tif ( is_wp_error( $read ) ) {", 'it', WB)
+e('l-weg-zurueck', 'way_back(): a step of a way back whose entry does not read back refuses the plan, never counted as not taken back (the reader, S3)', RV,
+  "\t\t\t\t$took = AB_MCP_Sync_Run::wrote( $way, $step, false );\n\t\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\t\treturn $took;", "\t\t\t\t$took = AB_MCP_Sync_Run::wrote( $way, $step, false );\n\t\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\t\tcontinue;", 'it', WB)
+e('l-weg-laeufe', 'reverts_of(): a run of the way back whose plan does not read back refuses, never left out (the reader, S2)', RU,
+  "\t\t\t$took = self::wrote( $run, null, false );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\treturn $took;", "\t\t\t$took = self::wrote( $run, null, false );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\tcontinue;", 'it', WB)
+e('l-weg-juenger', 'reverts_of(): only the runs of the way back made after the run are asked, so an older one that does not read back stops no way back of a later run (the steering 16.11. 21:43, F4 B)', RU,
+  " AND run_id > %d ORDER BY", " AND run_id <> %d ORDER BY", 'it', WB)
+e('l-weg-klausel', 'way_back(): the way over steps is named only for a write step that does not read back, never for a run (the reader, S1, C3)', RV,
+  "return 'ab_mcp_sync_revert_unread' === $took->get_error_code() ? new WP_Error(", "return true ? new WP_Error(", 'it', WB)
+e('l-grenze-satz', 'revert_boundary(): what the reader refuses ends the step with its sentence, never with the sentence of no journal (the reader, S6)', EN,
+  "is_wp_error( $took ) ? $took->get_error_message() : __( 'The step of the way back names no written step", "__( 'The step of the way back names no written step", 'it', WB)
+e('l-grenze-fehlschlag', 'revert_boundary(): a refusal of the reader ends the step failed and the run goes on, only an error of the database is the answer (F2 B)', EN,
+  "return is_wp_error( $took ) && ! in_array( $took->get_error_code(), array( 'ab_mcp_sync_run_unread', 'ab_mcp_sync_revert_unread' ), true ) ? $took :", "return is_wp_error( $took ) ? $took :", 'it', WB)
+e('l-fortsetzung', 'continuation(): a step still to go whose entry does not read back refuses the continuation, never shown as empty (the reader, S5)', RV,
+  "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\treturn $took;\n\t\t\t}\n\t\t\t$forward = $took['record'];", "\t\t\t$took = AB_MCP_Sync_Run::wrote( $run, $step );\n\t\t\tif ( is_wp_error( $took ) ) {\n\t\t\t\t$took = array( 'seq' => null, 'record' => null );\n\t\t\t}\n\t\t\t$forward = $took['record'];", 'it', WB)
+e('l-weg-a-paar', 'close_checked_on(): the refusal of the reader for the pair of a step left begun leaves the run interrupted, never no pair (the reader, S7)', RU,
+  "\t\t\tif ( is_wp_error( $code ) || is_wp_error( $pair ) ) {", "\t\t\t$pair = is_wp_error( $pair ) ? null : $pair;\n\t\t\tif ( is_wp_error( $code ) ) {", 'it', WB)
+e('l-schluss-paar', 'closed_note(): the close of a way back names no pair as unclear; a failed step leaves its pair as it was (G2, the steering 16.11. 23:26)', EN,
+  "'Check those objects in wp-admin (each part left names its value before); remove a rest by hand where it should go.'", "'Check those objects in wp-admin (each part left names its value before; their pairs are unclear until wp_site_pairs confirms a new alignment); remove a rest by hand where it should go.'", 'it', WB)
+e('lb-weg-a-geplant', 'close_checked_on(): way (a) reads the pair of a step left begun only, so a step still planned whose entry does not read back closes with the run, and stays planned (G-5-23; skeptic over the reader, C3)', RU,
+  "$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ?", "$pair = ( 'begun' !== $step['state'] && 'revert' !== $step['op'] ) || null !== $step['pair_id'] ?", 'it', WB)
 
 # ------------------------------- GitHub Codex round 9 on free#137 (one P2)
 # Every checkpoint of the journal is checked; the boundary stops before any

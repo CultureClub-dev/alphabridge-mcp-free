@@ -103,7 +103,7 @@ final class AB_MCP_Sync_Run {
 	 * @return string
 	 */
 	public static function value_cut() {
-		return __( '(cut: an answer carries at most 16384 bytes of values before; the backup of this step in the protected store holds the object as it was before the step)', 'alphabridge-mcp' );
+		return __( '(cut: an answer carries at most 16384 bytes of values before)', 'alphabridge-mcp' );
 	}
 
 	/** The operations of a step. */
@@ -232,7 +232,12 @@ final class AB_MCP_Sync_Run {
 	 * run of the type revert made for the steps of that run once it was
 	 * closed (decision 15), whatever its state. The plan of a further way
 	 * back asks them, so that a step of the run goes back at most once
-	 * (GitHub Codex round 1 of branch 8).
+	 * (GitHub Codex round 1 of branch 8). Each is read through the one reader
+	 * (wrote()): one whose plan does not read back is refused, never left
+	 * out (skeptic E1b, B1). Only the runs made after it are asked: a run of
+	 * the way back is made for a run that is closed, so its number is the
+	 * greater, and one of an older run that does not read back stops no way
+	 * back of this one (the steering 16.11. 21:43, F4 B).
 	 *
 	 * @param int $run_id The run that wrote.
 	 * @return array[]|WP_Error
@@ -244,15 +249,18 @@ final class AB_MCP_Sync_Run {
 		}
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the table name is ours.
-		$rows = $wpdb->get_results( 'SELECT * FROM `' . AB_MCP_Sync_Schema::table( 'runs' ) . "` WHERE type = 'revert' ORDER BY run_id ASC", ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM `' . AB_MCP_Sync_Schema::table( 'runs' ) . "` WHERE type = 'revert' AND run_id > %d ORDER BY run_id ASC", (int) $run_id ), ARRAY_A );
 		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
 			return self::db_error();
 		}
 		$out = array();
 		foreach ( $rows as $row ) {
 			$run  = self::decode( $row );
-			$plan = is_array( $run['plan'] ) ? $run['plan'] : array();
-			if ( isset( $plan['reverts'] ) && is_array( $plan['reverts'] ) && in_array( (int) $run_id, array_map( 'intval', $plan['reverts'] ), true ) ) {
+			$took = self::wrote( $run, null, false );
+			if ( is_wp_error( $took ) ) {
+				return $took;
+			}
+			if ( (int) $run_id === $took['run'] ) {
 				$out[] = $run;
 			}
 		}
@@ -298,6 +306,84 @@ final class AB_MCP_Sync_Run {
 			return self::db_error();
 		}
 		return is_array( $row ) ? self::decode_step( $row ) : null;
+	}
+
+	/**
+	 * The one reader of the records a way back rests on (the reader of the
+	 * way back, belege/z5r-leser-zettel.md; skeptic E1b, B1): the run that
+	 * wrote (for a run of the way back of its own, type revert, the one its
+	 * plan names in reverts; else the run itself) and, for a step, the step
+	 * it takes back (a step of the way back: the forward_seq its entry names,
+	 * its forward_run that run or none; another step: its own). With $whole
+	 * also the record: without a step that of the run that wrote (read where
+	 * it is another run), with a step of the way back the step it names
+	 * (null where there is none: missing is not unread, the caller decides);
+	 * without $whole nothing is read from the database. What does not read
+	 * back (records()), a plan that is none, a run of the way back that names
+	 * no run (reverts[0] no whole number of 1 or more, as the clean-up reads
+	 * its plan; or, read as the run that wrote, is one of the way back itself),
+	 * an entry that names no step or another run: refused, never read as
+	 * empty, as not taken back or as a run of the contents (fail closed, as
+	 * AB_MCP_Sync_Engine::fresh()), a run with ab_mcp_sync_run_unread, a step
+	 * with ab_mcp_sync_revert_unread. An error of the database, tables that
+	 * are missing and a run that wrote that is gone are passed on.
+	 *
+	 * @param array      $run   The run, as read.
+	 * @param array|null $step  A step of it, as read; null for the run alone.
+	 * @param bool       $whole Whether the record is read too.
+	 * @return array{run:int,seq:int|null,record:array|null}|WP_Error
+	 */
+	public static function wrote( array $run, $step = null, $whole = true ) {
+		$back = 'revert' === $run['type'] ? ( $run['plan']['reverts'][0] ?? null ) : null;
+		$id   = is_int( $back ) && $back > 0 ? $back : (int) $run['run_id'];
+		$runs = array( $run );
+		if ( $whole && null === $step && $id !== (int) $run['run_id'] ) {
+			$runs[] = self::get( $id );
+			if ( ! is_array( $runs[1] ) ) {
+				return is_wp_error( $runs[1] ) ? $runs[1] : self::unknown( $id );
+			}
+		}
+		foreach ( $runs as $i => $of ) {
+			if ( isset( $of['unread'] ) || ! is_array( $of['plan'] ) || ( 'revert' === $of['type'] && ( $i > 0 || $id === (int) $of['run_id'] ) ) ) {
+				/* translators: 1: run number, 2: the fields of its record that do not read back, as the tools name them (plan, budget, …), separated by commas. */
+				return new WP_Error( 'ab_mcp_sync_run_unread', sprintf( __( 'The record of run %1$d (%2$s) does not read back as it was written, so nothing is decided on it: no way back that rests on it is planned, put back or closed as checked. Ask the host to check the table of the runs; where it swapped a plugin or theme, put the old version back by hand in wp-admin with the version of before.', 'alphabridge-mcp' ), (int) $of['run_id'], implode( ', ', $of['unread'] ?? array( 'plan' ) ) ) );
+			}
+		}
+		if ( null === $step ) {
+			return array(
+				'run'    => $id,
+				'seq'    => null,
+				'record' => $whole ? end( $runs ) : null,
+			);
+		}
+		$what = 'revert' === $step['op'] && is_array( $step['parts'] ) ? $step['parts'] : array();
+		$seq  = 'revert' === $step['op'] ? (int) ( $what['forward_seq'] ?? 0 ) : (int) $step['seq'];
+		if ( isset( $step['unread'] ) || $seq < 1 || (int) ( $what['forward_run'] ?? $id ) !== $id ) {
+			return self::step_unread( (int) $step['seq'], (int) $run['run_id'], $step['unread'] ?? array( 'parts' ) );
+		}
+		$read = $whole && 'revert' === $step['op'] ? self::step( $id, $seq ) : null;
+		if ( is_wp_error( $read ) || isset( $read['unread'] ) ) {
+			return is_wp_error( $read ) ? $read : self::step_unread( $seq, $id, $read['unread'] );
+		}
+		return array(
+			'run'    => $id,
+			'seq'    => $seq,
+			'record' => $read,
+		);
+	}
+
+	/**
+	 * The refusal of the reader (wrote()) for a step whose record does not
+	 * read back.
+	 *
+	 * @param int      $seq    Step.
+	 * @param int      $run_id Its run.
+	 * @param string[] $fields The fields that do not read back.
+	 * @return WP_Error
+	 */
+	private static function step_unread( $seq, $run_id, array $fields ) {
+		/* translators: 1: step number, 2: run number, 3: the fields of its record that do not read back, as the tools name them (parts, result, …), separated by commas. */
+		return new WP_Error( 'ab_mcp_sync_revert_unread', sprintf( __( 'The record of step %1$d of run %2$d (%3$s) does not read back as it was written, so nothing is decided on it: no way back that rests on it is planned or put back. Ask the host to check the table of the steps, and check its object by hand in wp-admin.', 'alphabridge-mcp' ), $seq, $run_id, implode( ', ', $fields ) ) );
 	}
 
 	/* ------------------------------------------------------------- write */
@@ -1014,6 +1100,9 @@ final class AB_MCP_Sync_Run {
 		// a request that ended left begun makes it interrupted here), and
 		// nothing of them read again before the close.
 		require_once __DIR__ . '/class-sync-shown.php';
+		// The one entrance of the way back of the code, asked for a step of the
+		// code left begun (close_checked_on()).
+		require_once __DIR__ . '/class-sync-revert.php';
 		return AB_MCP_Sync_Shown::done(
 			static function () use ( $run_id ) {
 				return self::interruption_read( (int) $run_id );
@@ -1078,7 +1167,12 @@ final class AB_MCP_Sync_Run {
 	/**
 	 * close_checked() on the one reading: each step left begun unclear (on
 	 * its state read, begun), the pair of each unclear, the run closed as
-	 * checked (on its state read, interrupted).
+	 * checked (on its state read, interrupted). A step of the code left
+	 * begun is asked first, before anything is written, through the one
+	 * entrance of the way back of the code (AB_MCP_Sync_Revert::code(),
+	 * checked; way (a), part E): its refusal, or none there, leaves the run
+	 * interrupted; so does the refusal of the one reader for the pair of a
+	 * step of the way back left begun (pair_of_revert_step()).
 	 *
 	 * @param array   $run     The run as read.
 	 * @param array[] $steps   Its steps as read.
@@ -1087,6 +1181,19 @@ final class AB_MCP_Sync_Run {
 	 */
 	private static function close_checked_on( array $run, array $steps, $user_id ) {
 		$run_id = (int) $run['run_id'];
+		$pairs  = array();
+		foreach ( $steps as $step ) {
+			$code = 'begun' === $step['state'] && in_array( $step['op'], array( 'write', 'revert' ), true ) ? AB_MCP_Sync_Revert::code( 'checked', $run, $step ) : null;
+			// The pair: the step's own, or, for a step of the way back (which
+			// gets its pair_id only as it ends), the pair of the step it was
+			// taking back (a run of the way back closed as checked, GitHub Codex
+			// round 4 on free#137), read before anything is written.
+			$pair = 'begun' !== $step['state'] || null !== $step['pair_id'] ? $step['pair_id'] : self::pair_of_revert_step( $run, $step );
+			if ( is_wp_error( $code ) || is_wp_error( $pair ) ) {
+				return is_wp_error( $code ) ? $code : $pair;
+			}
+			$pairs[ (int) $step['seq'] ] = $pair;
+		}
 		foreach ( $steps as $step ) {
 			if ( 'begun' !== $step['state'] ) {
 				continue;
@@ -1094,11 +1201,7 @@ final class AB_MCP_Sync_Run {
 			// The step stays what it was: unclear, its parts as the journal
 			// has them (a part written but not read back is unclear).
 			self::update_step( $run_id, (int) $step['seq'], array( 'state' => 'unclear', 'result' => array( 'closed_checked_by' => (int) $user_id ) ), 'begun' );
-			// The pair: the step's own, or, for a step of the way back (which
-			// gets its pair_id only as it ends), the pair of the step it was
-			// taking back (a run of the way back closed as checked, GitHub Codex
-			// round 4 on free#137).
-			$pair_id = null !== $step['pair_id'] ? (int) $step['pair_id'] : self::pair_of_revert_step( $run_id, $step );
+			$pair_id = $pairs[ (int) $step['seq'] ];
 			if ( null !== $pair_id ) {
 				$pair = AB_MCP_Sync_Pairs::get( $pair_id );
 				if ( is_array( $pair ) && 'active' === $pair['state'] ) {
@@ -1151,20 +1254,20 @@ final class AB_MCP_Sync_Run {
 
 	/**
 	 * The pair of a step of the way back: the pair of the step it takes back
-	 * (its own pair_id is set only as it ends). Null for another step, or
-	 * where the step taken back names none.
+	 * (its own pair_id is set only as it ends), read through the one reader
+	 * of the way back (wrote()): what does not read back is its refusal,
+	 * never no pair (belege/z5r-leser-zettel.md, S7). Null for another step,
+	 * or where the step taken back is gone or names none.
 	 *
-	 * @param int   $run_id Run.
-	 * @param array $step   Step (op revert; parts: forward_run, forward_seq).
-	 * @return int|null
+	 * @param array $run  Run.
+	 * @param array $step Step (op revert; parts: forward_run, forward_seq).
+	 * @return int|null|WP_Error
 	 */
-	public static function pair_of_revert_step( $run_id, array $step ) {
-		if ( 'revert' !== $step['op'] || ! is_array( $step['parts'] ) || ! isset( $step['parts']['forward_seq'] ) ) {
-			return null;
-		}
-		$forward = self::step( isset( $step['parts']['forward_run'] ) ? (int) $step['parts']['forward_run'] : (int) $run_id, (int) $step['parts']['forward_seq'] );
+	public static function pair_of_revert_step( array $run, array $step ) {
+		$took    = 'revert' === $step['op'] ? self::wrote( $run, $step ) : null;
+		$forward = is_array( $took ) ? $took['record'] : null;
 		if ( ! is_array( $forward ) ) {
-			return null;
+			return is_wp_error( $took ) ? $took : null;
 		}
 		if ( null !== $forward['pair_id'] ) {
 			return (int) $forward['pair_id'];

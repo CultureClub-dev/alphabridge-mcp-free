@@ -30,8 +30,11 @@ use AB_MCP_Store_Budget;
 use AB_MCP_Store_Inputs;
 use AB_MCP_Sync_Backup;
 use AB_MCP_Sync_Canon;
+use AB_MCP_Sync_Code_Ops;
 use AB_MCP_Sync_Code_Package;
 use AB_MCP_Sync_Code_Stage;
+use AB_MCP_Sync_Code_Swap;
+use AB_MCP_Sync_Deadline;
 use AB_MCP_Test_Seam;
 use AB_MCP_Sync_Run;
 use AB_MCP_Sync_Schema;
@@ -46,6 +49,7 @@ require_once __DIR__ . '/../includes/sync/class-sync-backup.php';
 require_once __DIR__ . '/../includes/sync/class-sync-import.php';
 require_once __DIR__ . '/../includes/sync/class-sync-code-package.php';
 require_once __DIR__ . '/../includes/sync/class-sync-code-stage.php';
+require_once __DIR__ . '/../includes/sync/class-sync-code-swap.php';
 require_once __DIR__ . '/integration/support/class-test-seam.php';
 
 /**
@@ -111,7 +115,7 @@ final class StoreInputsTest extends TestCase {
 		self::assertNotSame( array(), AB_MCP_Store_Inputs::TABLE );
 		foreach ( AB_MCP_Store_Inputs::TABLE as $id => $row ) {
 			self::assertSame( array( 'consumer', 'source', 'field', 'form' ), array_keys( $row ), $id );
-			self::assertContains( $row['consumer'], array( 'retention', 'period', 'sidecar', 'protection', 'file_time', 'budget', 'package', 'stage' ), $id );
+			self::assertContains( $row['consumer'], array( 'retention', 'period', 'sidecar', 'protection', 'file_time', 'budget', 'package', 'stage', 'code' ), $id );
 			self::assertNotSame( '', $row['source'], $id );
 			self::assertNotSame( '', $row['field'], $id );
 			self::assertTrue( AB_MCP_Shape::valid_form( $row['form'] ), "$id: its form names every property of its type and nothing else." );
@@ -325,6 +329,45 @@ final class StoreInputsTest extends TestCase {
 		);
 	}
 
+
+	/** What a swap is asked with, in the form of the row swap.prepare. */
+	private static function prepare_args(): array {
+		return array(
+			'run_id' => 1,
+			'unit'   => SyncCodeOpsTest::unit( array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2 ) ),
+			'env'    => array( str_repeat( 'e', 32 ) ),
+			'stage'  => SyncCodeOpsTest::journal()['stage'],
+			'until'  => 100.5,
+		);
+	}
+
+	/** The journal of a swap step as rename_marked() writes it, in the form of the row step.swap. */
+	private static function swap_journal(): array {
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
+		}
+		$tree = static fn( string $path, string $gid ): array => array(
+			'path' => $path,
+			'gid'  => $gid,
+			'name' => 'shop',
+			'hash' => str_repeat( 'c', 64 ),
+			'form' => 'folder',
+			'dev'  => 1,
+			'ino'  => 2,
+		);
+		return array(
+			'unit'   => array(
+				'kind' => 'plugin',
+				'ref'  => 'shop',
+				'op'   => 'swap',
+			),
+			'since'  => 1500,
+			'target' => WP_PLUGIN_DIR . '/shop',
+			'old'    => $tree( '/store/backups/' . str_repeat( 'd', 32 ) . '/shop', str_repeat( 'd', 32 ) ),
+			'new'    => $tree( '/store/stage/' . str_repeat( 'e', 32 ) . '/shop', str_repeat( 'e', 32 ) ),
+			'active' => array( 'shop/shop.php' ),
+		);
+	}
 
 	private static function drivers(): array {
 		$now     = self::NOW;
@@ -659,6 +702,164 @@ final class StoreInputsTest extends TestCase {
 				},
 				'unknown' => static fn( $got ): bool => 'code:org_unit' === $got,
 			),
+			'plan.code'                => array(
+				// With a package of code: the generator needs an element of
+				// every list to make its wrong forms of.
+				'base'    => SyncCodeOpsTest::code( array( 'packages' => array( str_repeat( 'f', 32 ) ) ) ),
+				'more'    => array(
+					'fixed: none'                => null,
+					'fixed: no environment'      => SyncCodeOpsTest::code( array( 'env' => array() ) ),
+					'fixed: a unit of no code'   => SyncCodeOpsTest::code( array( 'units' => array( SyncCodeOpsTest::unit( array( 'kind' => 'mu_plugin' ) ) ) ) ),
+					'fixed: an operation not of it' => SyncCodeOpsTest::code( array( 'units' => array( SyncCodeOpsTest::unit( array( 'op' => 'activate' ) ) ) ) ),
+				),
+				// Its consumer item(), the one entrance of a step of a run of
+				// the code (run_write(), written()): the unit of the step from a
+				// plan of its form; a plan not of it runs no step, never one of
+				// the contents (V18).
+				'valid'   => array(
+					array(
+						SyncCodeOpsTest::code(),
+						array(
+							'unit'     => SyncCodeOpsTest::code()['units'][0],
+							'env'      => SyncCodeOpsTest::code()['env'],
+							'packages' => SyncCodeOpsTest::code()['packages'],
+						),
+					),
+				),
+				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Ops::item( array( 'code' => $v ), SyncCodeOpsTest::code()['units'][0]['seq'] ),
+				'unknown' => $refused( 'ab_mcp_sync_code_plan' ),
+			),
+			/* ------------------------------------- the swap (Z8b branch 5, 2a) */
+			'swap.opcache'             => array(
+				'base'    => 'invalidated',
+				'more'    => array(
+					'fixed: none'                          => null,
+					'fixed: true, as wp_opcache_invalidate()' => true,
+				),
+				// Its consumer invalidate(), the one wrapper of OPcache in the
+				// swap (Z13): only invalidated and not_active go on.
+				'valid'   => array( array( 'invalidated', true ), array( 'not_active', true ), array( 'not_possible', 'code:opcache' ) ),
+				'run'     => static function ( $v ) {
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new StoreInputsSwapCalls( $v, false ) );
+					try {
+						$got = AB_MCP_Sync_Code_Swap::invalidate( '/site/wp-content/plugins/shop/shop.php' );
+					} finally {
+						AB_MCP_Test_Seam::restore_all();
+					}
+					return is_wp_error( $got ) ? $got->get_error_code() : $got;
+				},
+				'unknown' => static fn( $got ): bool => 'code:opcache_unknown' === $got,
+			),
+			'swap.probe'               => array(
+				'base'    => array(
+					'result'  => 'passed',
+					'targets' => array(
+						array(
+							'target' => 'home',
+							'url'    => 'https://site.test/',
+							'result' => 'ok',
+						),
+					),
+				),
+				'more'    => array(
+					'fixed: none'       => null,
+					'fixed: no targets' => array( 'targets' => array() ),
+				),
+				// Its consumer reached() (Z14): a target counts as reached only
+				// where every row of it is.
+				'valid'   => array(
+					array( array( 'targets' => array( array( 'target' => 'home', 'result' => 'stopped' ), array( 'target' => 'mcp', 'result' => 'not_probed' ) ) ), array( 'home' => true, 'mcp' => false ) ),
+					array( array( 'targets' => array( array( 'target' => 'home', 'result' => 'ok' ), array( 'target' => 'home', 'result' => 'unreachable' ) ) ), array( 'home' => false ) ),
+				),
+				'run'     => static fn( $v ) => AB_MCP_Sync_Code_Swap::reached( $v ),
+				'unknown' => $null,
+			),
+			'swap.lock'                => array(
+				'base'    => '1700000000',
+				'more'    => array(
+					'fixed: zero'           => '0',
+					'fixed: a leading zero' => '017',
+					'fixed: none'           => null,
+				),
+				// Its consumer lock_held() (V7): the row of the lock for changes
+				// is a time as WordPress writes it, or the lock is not held.
+				'valid'   => array( array( '1700000000', true ), array( 1700000000, true ) ),
+				'run'     => static function ( $v ) {
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', new StoreInputsSwapCalls( null, array( 'value' => $v ) ) );
+					try {
+						return AB_MCP_Sync_Code_Swap::lock_held();
+					} finally {
+						AB_MCP_Test_Seam::restore_all();
+					}
+				},
+				'unknown' => static fn( $got ): bool => false === $got,
+			),
+			'swap.prepare'             => array(
+				'base'    => self::prepare_args(),
+				'more'    => array(
+					'fixed: none'                     => null,
+					'fixed: a time of the call as text' => array( 'until' => '100' ) + self::prepare_args(),
+					'fixed: a time of the call below zero' => array( 'until' => -1.0 ) + self::prepare_args(),
+				),
+				// Its consumer prepare() (A2 of the round on 4881c0d, B2): what a
+				// swap is asked with, read in its form before any lock is taken;
+				// a value of its form goes on to the lock for changes (here
+				// refused by the stand-in), one not of it takes nothing.
+				'valid'   => array( array( self::prepare_args(), 'test:lock' ), array( array( 'until' => 0 ) + self::prepare_args(), 'test:lock' ) ),
+				'run'     => static function ( $v ) {
+					if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+						define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/ab-mcp-uninstall-test-' . getmypid() );
+					}
+					$calls = new StoreInputsPrepareCalls();
+					AB_MCP_Test_Seam::install( AB_MCP_Sync_Code_Swap::class, 'naht_sync_code_swap', $calls );
+					try {
+						$got = AB_MCP_Sync_Code_Swap::prepare( $v );
+					} finally {
+						AB_MCP_Test_Seam::restore_all();
+					}
+					return is_wp_error( $got ) ? $got->get_error_code() . ( $calls->taken > 1 ? ' twice' : '' ) : $got;
+				},
+				'unknown' => static fn( $got ): bool => 'code:swap_args' === $got,
+			),
+			'step.swap'                => array(
+				'base'    => self::swap_journal(),
+				'more'    => array(
+					'fixed: none'                     => null,
+					'fixed: a unit of another name'   => array( 'unit' => array( 'kind' => 'plugin', 'ref' => 'other', 'op' => 'swap' ) ) + self::swap_journal(),
+					'fixed: a unit of another kind'   => array( 'unit' => array( 'kind' => 'theme', 'ref' => 'shop', 'op' => 'swap' ) ) + self::swap_journal(),
+					'fixed: a target of another place' => array( 'target' => '/elsewhere/shop' ) + self::swap_journal(),
+				),
+				// Its consumer back() (part E of the rest): the journal of a swap
+				// step, read in its form and held against the unit of the plan
+				// and its target, before a way back is planned on it; a journal
+				// not of the form, or of another unit or target, is not known.
+				'valid'   => array( array( self::swap_journal(), 'a way back' ) ),
+				'run'     => static function ( $v ) {
+					$unit = SyncCodeOpsTest::unit( array( 'seq' => 3, 'op' => 'swap', 'stage_seq' => 2 ) );
+					$got  = AB_MCP_Sync_Code_Swap::back( 'plan', array( 'run_id' => 1 ), array( 'seq' => 3, 'state' => 'done' ), $unit, array( 'run_id' => 1, 'seq' => 3, 'parts' => $v ) );
+					return is_wp_error( $got ) ? $got->get_error_code() : 'a way back';
+				},
+				'unknown' => static fn( $got ): bool => 'code:journal_unknown' === $got,
+			),
+			'read.until'               => array(
+				'base'    => 1500.5,
+				'more'    => array(
+					'fixed: none (no deadline is not one)' => null,
+					'fixed: as text'                       => '1500.5',
+					'fixed: no end'                        => INF,
+					'fixed: no number'                     => NAN,
+					'fixed: true'                          => true,
+				),
+				// Its consumer at() (R12 of branch 5): a time of the clock of the
+				// budget is a deadline, a time before now too (it is over); a
+				// value not of the form is the refusal, never «no deadline».
+				'valid'   => array( array( 1500.5, 'a deadline' ), array( 0, 'a deadline' ), array( 7, 'a deadline' ) ),
+				'run'     => static function ( $v ) {
+					$got = AB_MCP_Sync_Deadline::at( $v );
+					return $got instanceof AB_MCP_Sync_Deadline ? 'a deadline' : $got->get_error_code();
+				},
+				'unknown' => static fn( $got ): bool => 'ab_mcp_read_deadline' === $got,
+			),
 			/* ------------------------------------------------------ budgets */
 			'budget.max_packages'      => array(
 				'base'    => 5,
@@ -716,10 +917,52 @@ final class StoreInputsTest extends TestCase {
 	}
 }
 
+/** The calls of the swap for the driver of swap.prepare: the lock for changes refused, nothing else. */
+final class StoreInputsPrepareCalls {
+
+	/** @var int */
+	public $taken = 0;
+
+	/** @return \WP_Error */
+	public function take_lock() {
+		++$this->taken;
+		return new \WP_Error( 'test:lock', 'The lock for changes is held elsewhere (stand-in).' );
+	}
+}
+
 /** The calls of the stage for the driver of stage.update_uri: a file system that is not direct, nothing else. */
 final class StoreInputsCodeCalls {
 
 	public function method(): string {
 		return 'ftpext';
+	}
+}
+
+/** The calls of the swap for the drivers of swap.opcache and swap.lock: the answer of OPcache and the row of the lock, nothing else. */
+final class StoreInputsSwapCalls {
+
+	/** @var mixed */
+	private $opcache;
+
+	/** @var mixed */
+	private $row;
+
+	/**
+	 * @param mixed $opcache What OPcache answers.
+	 * @param mixed $row     The row of the lock for changes.
+	 */
+	public function __construct( $opcache, $row ) {
+		$this->opcache = $opcache;
+		$this->row     = $row;
+	}
+
+	/** @return mixed */
+	public function opcache( $path ) {
+		return $this->opcache;
+	}
+
+	/** @return mixed */
+	public function lock_row() {
+		return $this->row;
 	}
 }
