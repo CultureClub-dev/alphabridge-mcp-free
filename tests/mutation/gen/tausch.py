@@ -326,6 +326,52 @@ e('ops-ended-planned', 'ended(): a step ends only from planned, never over the s
 e('ops-journal-checked', 'stage(): only a journal that reads back in its form is saved, an answer of the stage not of it fails the step (Fable check 2, B1)', CO,
   "\t\t\tif ( null === self::staged( $journal ) ) {", "\t\t\tif ( false ) {", 'coderun', 'testAStageWhoseAnswerDoesNotReadAsAJournalFailsTheStepAndSavesNoJournal')
 
+# ------------------------------------------- part H: G1 of GitHub Codex on #155 (a stage done with same: its swap skipped, the run closes)
+NOTSAME = 'testAStageDoneWithoutTheSameOfThisUnitStillRefusesItsSwap'
+COUNTS = 'testTheCheckOfARunTakesNoStageDoneAndNoSwapSkippedAsTheSameForAnObject'
+e('h-g1-same', 'run(): a swap whose stage step found the unit the same is skipped as nothing to swap, never refused for a journal it cannot have (G1 of GitHub Codex on #155)', CO,
+  "\t\tif ( self::same( $run_id, $step, $item['unit'] ) ) {", "\t\tif ( false ) {", 'coderun', SAME)
+e('h-g1-same-strict', 'same(): only a result same strictly true is the same, never a value that reads as true (G1 of GitHub Codex on #155)', CO,
+  "&& true === ( $stage['result']['same'] ?? null )", "&& ! empty( $stage['result']['same'] )", 'coderun', NOTSAME)
+e('h-g1-same-unit', 'same(): only the same of this very unit, of its kind and name, skips its swap (G1 of GitHub Codex on #155)', CO,
+  " && array( 'kind' => $unit['kind'], 'ref' => $unit['ref'] ) === ( $stage['result']['staged'] ?? null );", ';', 'coderun', NOTSAME)
+e('h-g1-same-journal', 'same(): a stage step with a journal is no stage that found the unit the same (G1 of GitHub Codex on #155)', CO,
+  " && null === $stage['parts'] && is_array( $stage['result'] )", " && is_array( $stage['result'] )", 'coderun', NOTSAME)
+e('h-g1-counts-skipped', 'counts(): a swap skipped as the same is no object written, so it is no finding of the check (G1 of GitHub Codex on #155)', CO,
+  "\t\treturn ! ( 'skipped' === $step['state'] && is_array( $step['result'] ) && true === ( $step['result']['same'] ?? null ) );", "\t\treturn true;", 'ops', COUNTS)
+e('h-g1-counts-stage', 'counts(): a stage done changed nothing of the site and is no object written (Fable check 2, C4; G1 of GitHub Codex on #155)', CO,
+  "\t\t\treturn 'done' !== $step['state'];", "\t\t\treturn true;", 'ops', COUNTS)
+e('h-g1-engine-counts', 'run_verify(): the check goes over the steps counts() takes for objects written, never every write step of a run of the code (G1 of GitHub Codex on #155)', EN,
+  "\t\t\tif ( AB_MCP_Sync_Code_Ops::counts( $run, $one ) ) {", "\t\t\tif ( 'write' === $one['op'] ) {", 'coderun', SAME)
+
+# Part H: G2 of GitHub Codex on #155 (a group of the backups for each swap)
+e('h-g2-group', 'plan_of(): each swap puts the old version into a group of the backups of its own, bound to the run, so a plugin and a theme of one name never meet at one place (G2 of GitHub Codex on #155)', CS,
+  "AB_MCP_Protected_Store::open( 'backups', array( 'run_id' => $in['run_id'], 'label' => 'swap-' . $in['run_id'] . '-' . $in['unit']['seq'] ) );",
+  "AB_MCP_Sync_Backup::group( $in['run_id'] );", 'coderun', 'testAPluginAndAThemeOfTheSameNameAreSwappedInOneRunEachIntoABackupOfItsOwnAndBothGoBack')
+
+# Part H: G3 of GitHub Codex on #155 (the check of a run reads each unit swapped) with Auflage c of the lead (23:26)
+CONF = 'testTheCheckOfARunConfirmsASwapDoneOnlyWhereItsUnitReadsWholeAsTheVersionItWrote'
+REST = 'testAUnitNotReadWithinTheRestOfACallIsLeftToTheNextAndAFindingOnlyAsItsFirstWork'
+CURSOR = 'testTheCheckOfARunReadsAUnitNotReadWithinTheRestOfACallInTheNextAndClosesDone'
+e('h-g3-journal', 'finding(): a swap whose journal does not read is a finding of its own, its target never judged (G3 of GitHub Codex on #155)', CO,
+  "\t\tif ( null === $journal ) {\n\t\t\t/* translators: 1: step number,", "\t\tif ( false ) {\n\t\t\t/* translators: 1: step number,", 'ops', CONF)
+e('h-g3-hash', 'finding(): a unit is confirmed only against the new version of its journal, never the old one (G3 of GitHub Codex on #155)', CO,
+  "hash_equals( $journal['new']['hash'], $read['hash'] )", "hash_equals( $journal['old']['hash'], $read['hash'] )", 'ops', CONF)
+e('h-g3-deadline', 'finding(): a reading that is not the first work of its call ends with the rest of the call (Auflage c of the lead on G3)', CO,
+  "null === $until ? AB_MCP_Sync_Code_Swap::until() : $until,", "null === $until ? AB_MCP_Sync_Code_Swap::until() : $until + 3600,", 'ops', REST)
+e('h-g3-full', 'finding(): the first work of a call has the time of a whole call from now, as the swap had (AB_MCP_Sync_Code_Swap::until(); Auflage c of the lead on G3)', CO,
+  "null === $until ? AB_MCP_Sync_Code_Swap::until() : $until,", "null === $until ? 1015.0 : $until,", 'ops', REST)
+e('h-g3-first', 'finding(): the first work of a call that does not end in time is too large, a finding, never stopped for the next call (Auflage c of the lead on G3)', CO,
+  ", null === $until, $unit['kind'] );", ", false, $unit['kind'] );", 'coderun', 'testAUnitNotReadWholeAsTheFirstWorkOfACallIsOneFindingAndTheNextIsReadAfterIt')
+e('h-g3-stopped', 'finding(): a reading stopped by the end of the rest of the call is no finding (Auflage c of the lead on G3)', CO,
+  "\t\tif ( true === $read['stopped'] ) {", "\t\tif ( false ) {", 'ops', REST)
+e('h-g3-written', 'written(): a step of the code whose reading stopped is left to the next call, never taken as checked (Auflage c of the lead on G3)', EN,
+  "return false === $found ? null : array(", "return false === $found ? array( 0, null ) : array(", 'ops', REST)
+e('h-g3-cursor', 'run_verify(): a step not checked within the rest of the call keeps the cursor on it, uncounted, for the next call (Auflage c of the lead on G3)', EN,
+  "\t\t\t\tif ( null === $seen ) {", "\t\t\t\tif ( $worked && $left() <= 0 ) {", 'coderun', CURSOR)
+e('h-g3-code-satz', 'closing(): a run of the code closes with its own sentence, the units read whole, no sample (G3 of GitHub Codex on #155)', EN,
+  "\t\tif ( is_array( $run['plan'] ) && array_key_exists( 'code', $run['plan'] ) ) {", "\t\tif ( false ) {", 'coderun', CURSOR)
+
 # The Behebung of part D1 after the Codex round on 2b28314: the new decision points of findings 2, 3 and 4 (T6);
 # round 2 (the lead after the Codex round on de8caba): the rename without a reservation and the backup proved only by in_backup().
 RIGHTS = 'testANewVersionThatCannotTakeTheRightsOfTheSiteIsNotSwappedAndItsStepStaysPlanned'
@@ -482,9 +528,9 @@ e('e-continuation', 'continuation(): a step of the way back of the code is shown
   "\t\t\tif ( false ) {\n\t\t\t\tif ( is_wp_error( $code ) ) {", 'coderun', E_NO)
 e('e-plan-schrieb', 'Ops::back(): a swap planned, skipped or failed wrote nothing and is no step of the way back (Teil E)', CO,
   "array( 'begun', 'unclear', 'done' )", "array( 'begun', 'unclear', 'done', 'failed' )", 'coderun', 'testASwapThatFailedWithNothingMovedIsNoStepOfTheWayBack')
-e('e-journal-einheit', 'Tausch::back(): a journal of the form of step.swap that names another unit is not known (Teil E)', CS,
+e('e-journal-einheit', 'Tausch::journal_of() for back() and finding(): a journal of the form of step.swap that names another unit is not known (Teil E)', CS,
   "$unit['kind'] !== $journal['unit']['kind'] || $unit['ref'] !== $journal['unit']['ref'] || ", '', 'inputs', E_ROW)
-e('e-journal-ziel', 'Tausch::back(): a journal of the form of step.swap that names another target than that of the unit here is not known (Teil E)', CS,
+e('e-journal-ziel', 'Tausch::journal_of() for back() and finding(): a journal of the form of step.swap that names another target than that of the unit here is not known (Teil E)', CS,
   " || AB_MCP_Sync_Code_Stage::target( $unit['kind'], $unit['ref'] ) !== $journal['target'] ) {", ' ) {', 'inputs', E_ROW)
 e('e-rechte', 'restore(): the rights of the operation of the unit before the first write of the way back; a refusal leaves the step planned (Z26, question 5 of Teil E)', CS,
   "\t\tif ( true !== $rights ) {\n\t\t\t$data = ",
@@ -494,8 +540,8 @@ e('e-ziel-fehlt', 'restored(): an empty target (place_empty()) takes no place, a
 e('e-eigene-neue', 'moved_back(): only the new version the swap left at the target, proved by at_target(), is moved aside (Z22; Teil E)', CS,
   "\t\tif ( true !== $new ) {", "\t\tif ( false ) {", 'coderun', E_F37)
 e('e-alt-am-ziel', 'moved_back(): the old version at the target already moves nothing, and close() with kept ends it done (question 4 of Teil E)', CS,
-  "return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => array() ) :",
-  "return false ? array( 'moved' => array() ) :", 'coderun', 'testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer')
+  "return true === self::at_target( $in, $plan, 'old' ) ? array( 'moved' => false ) :",
+  "return false ? array( 'moved' => false ) :", 'coderun', 'testAnOldVersionBackAtTheTargetWhoseProofOrMarkFailsEndsUnclearWithTheShortAnswer')
 e('e-sicherung', 'moved_back(): the old version is put back only where in_backup() proves it whole in the backup (Z22, F37; Teil E)', CS,
   "\t\tif ( true !== $intact ) {", "\t\tif ( false ) {", 'coderun', E_F37)
 E_REN = 'testARenameOfTheWayBackThatFailsEndsItsStepUnclearAndTheNewVersionIsWhereItsResultSays'
@@ -503,9 +549,20 @@ e('e-zurueck', 'moved_back(): where the old version does not reach the target, t
   "return self::move( $slot['path'], $plan['target'] ) ? $failed :", 'return false ? $failed :', 'coderun', E_REN)
 e('e-platz-genannt', 'moved_back(): where the new version cannot go back to the target either, the result of the step names the place where it stays (G-5-14; skeptic E1, B5)', CS,
   "? $failed : $failed + array( 'place' => $slot['path'] );", '? $failed : $failed;', 'coderun', E_REN)
-e('e-opcache', 'restored(): OPcache not cleared for a file put back or moved away ends the step of the way back unclear with the host (Z13; Teil E)', CS,
+e('e-opcache', 'restored(): OPcache not cleared for a file put back at the target ends the step of the way back unclear with the host (Z13; Teil E)', CS,
   "\t\tif ( is_wp_error( $opcache ) ) {\n\t\t\t$moved['fault']",
   "\t\tif ( false ) {\n\t\t\t$moved['fault']", 'coderun', 'testOpcacheNotClearedOnTheWayBackEndsItsStepUnclearWithTheHost')
+# Finding 4623266599, option A (Thomas 19.11.2026): OPcache only for the PHP files that lie at the target. Each probe
+# asks OPcache again for the paths of the version moved away, as before the fix; with OPcache itself a path that is
+# gone and was never loaded is refused, and the step ends unclear.
+OA = 'testWithOpcacheOnAStepEndsDoneWhereOneVersionHasPhpFilesTheOtherLacks'
+OA_AGAIN = "\t\tforeach ( (array) %s as $rel ) {\n\t\t\t$done    = is_wp_error( $opcache ) ? true : self::invalidate( $%s['target'] . '/' . $rel );\n\t\t\t$opcache = true === $done ? $opcache : $done;\n\t\t}\n"
+OA_SWAP = "\t\t$opcache = self::invalidated( $plan['target'], $in['until'] );\n"
+OA_BACK = "\t\t$opcache = isset( $moved['fault'] ) || ! $moved['moved'] ? array() : self::invalidated( $journal['target'], $in['until'] );\n"
+e('oa-ziel-vorwaerts', 'after_renames(): OPcache only for the PHP files at the target, none for a path of the old version that is gone from it (finding 4623266599, option A; G-5-26)', CS,
+  OA_SWAP, OA_SWAP + OA_AGAIN % ("self::php_paths( $plan['old']['path'], $in['until'] )", 'plan'), 'coderun', OA)
+e('oa-ziel-rueckweg', 'restored(): OPcache only for the PHP files at the target, none for a path of the new version moved to its place (finding 4623266599, option A; G-5-26)', CS,
+  OA_BACK, OA_BACK + OA_AGAIN % ("( isset( $moved['place'] ) ? self::php_paths( $moved['place'], $in['until'] ) : array() )", 'journal'), 'coderun', OA)
 # Since A1 the done of the way back is held twice: by close() and by the proof read again (proved_now()); without
 # close() the mark of the swap stays open, which the way back of a swap broken off between its renames shows.
 e('e-z20b', 'restored(): the step of the way back closes the mark of the swap only through close() with kept, which proves the old version at the target first; a way back done leaves no mark open (Z20b; Teil E; A1)', CS,
@@ -528,6 +585,11 @@ e('e-uhr', 'restored(): a clock that gives no time refuses the step of the way b
   "\t\tif ( 0.0 === $in['until'] ) {", "\t\tif ( false ) {", 'coderun', 'testTheWayBackWithoutTheLockOrTheTimeOfItsCallRefusesAndStaysPlanned')
 e('e-platz', 'restored(): the place of the new version not given (open() or put_tree() refuses) refuses the step of the way back before its journal begun; it stays planned, nothing moves (question 1 B of Teil E; skeptic E1, B1)', CS,
   "$begun = is_wp_error( $slot ) ? $slot :", '$begun = false ? $slot :', 'coderun', 'testTheWayBackWithoutAPlaceForTheNewVersionRefusesAndStaysPlanned')
+# Finding 4636576533 (R12): restored() decides the store before its journal begun, also where the target is empty.
+e('r12-rueckweg-entscheid', 'restored(): the store is decided before the journal begun, also where the target is empty, so that in_backup() reads the backup under the deadline of a call that decided it (R12; finding 4636576533)', CS,
+  "\t\tif ( ! AB_MCP_Protected_Store::available() ) {\n\t\t\treturn AB_MCP_Protected_Store::refusal();", "\t\tif ( false ) {\n\t\t\treturn AB_MCP_Protected_Store::refusal();", 'coderun', 'testASwapAbortedHardAtEachPointLeavesAStateItsWaysBackKnow')
+e('r12-rueckweg-ablehnung', 'restored(): without the store the step of the way back refuses with the refusal of the store before its journal begun; it stays planned, nothing moves (R12; finding 4636576533)', CS,
+  "\t\tif ( ! AB_MCP_Protected_Store::available() ) {", "\t\tif ( ! AB_MCP_Protected_Store::available() && false ) {", 'coderun', 'testTheWayBackOfAnEmptyTargetWithoutTheStoreRefusesAndStaysPlanned')
 # ------------------------------------------- the Behebung after the skeptic E1 (B3, B4, C2)
 e('e-plan-schritte', 'Tausch::back(): the way of the other steps (steps without the swap) only in a plan, never where the step of the way back, its continuation or way (a) take the same refusal again (skeptic E1, B3)', CS,
   "\t\t\tif ( 'plan' === $at ) {", "\t\t\tif ( true ) {", 'coderun', 'testAJournalThatNoLongerReadsAsASwapFailsItsStepOfTheWayBackWithNothingMoved')

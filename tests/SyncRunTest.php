@@ -3095,7 +3095,7 @@ final class SyncRunTest extends TestCase {
 		// never judged as an object.
 		$written = new ReflectionMethod( AB_MCP_Sync_Engine::class, 'written' );
 		foreach ( array( 'none' => null, 'false' => false, 'a text' => 'plan', 'a number' => 5 ) as $what => $plan ) {
-			$got = $written->invoke( null, array( 'plan' => $plan ), array( 'seq' => 4 ), array(), array() );
+			$got = $written->invoke( null, array( 'plan' => $plan ), array( 'seq' => 4, 'state' => 'done' ), array(), array(), null );
 			self::assertSame( 0, $got[0], $what );
 			self::assertSame( 4, $got[1]['seq'], $what );
 			self::assertStringContainsString( 'The plan of this run does not read back, so step 4 is judged neither as a step of the code nor as an object', $got[1]['message'], $what );

@@ -126,6 +126,14 @@ final class AB_MCP_Sync_Code_Ops {
 		if ( 'stage' === $item['unit']['op'] ) {
 			return self::stage( $run_id, $step, $item );
 		}
+		// A unit its stage step found as this site has it has nothing to swap
+		// (G1 of GitHub Codex on #155): skipped, before the release, which is
+		// asked only for code that is swapped.
+		if ( self::same( $run_id, $step, $item['unit'] ) ) {
+			/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: number of the step that was to stage it. */
+			$message = sprintf( __( 'Skipped: when step %3$d was to stage it, this site already had the %1$s %2$s as the staging site has it (the same files), so there is nothing to swap and nothing of it changed. Make a new report (wp_site_diff): where it still shows the unit as changed, confirm its pair anew (wp_site_pairs).', 'alphabridge-mcp' ), $item['unit']['kind'], $item['unit']['ref'], $item['unit']['stage_seq'] );
+			return self::ended( $run_id, $item['unit']['seq'], 'skipped', array( 'message' => $message, 'same' => true ), $message );
+		}
 		// The swap runs code of the unit (Z24): released or not, read now.
 		$released = self::released( $item['unit'] );
 		if ( is_wp_error( $released ) ) {
@@ -209,17 +217,40 @@ final class AB_MCP_Sync_Code_Ops {
 	/**
 	 * What the check of a run finds of a step of the code that is done
 	 * (AB_MCP_Sync_Engine::run_verify()): nothing of a step that staged a
-	 * unit, which changed nothing of the site (its stage is checked by its
-	 * swap, AB_MCP_Sync_Code_Swap). Null for no finding, else a whole
-	 * sentence.
+	 * unit, which counts() leaves out of the check (its stage is checked by its
+	 * swap, AB_MCP_Sync_Code_Swap). Of a swap, whether its unit is at its
+	 * target as the swap wrote it (G3 of GitHub Codex on #155): its journal
+	 * (AB_MCP_Sync_Code_Swap::journal_of()), the unit read whole now as the
+	 * swap read it at its end (AB_MCP_Sync_File_Manifest::unit()) and its
+	 * hash held against the new version of the journal; the same bytes at a
+	 * new inode are that version. A reading that is not the first work of
+	 * its call has the rest of the call ($until) and stops where it ends:
+	 * false, no finding, and the next call reads it as its first work, with
+	 * the time of a whole call (AB_MCP_Sync_Code_Swap::until()); a unit not
+	 * read whole then is a finding (GRENZEN-CODE.md, G-5-25). Null for no
+	 * finding, else a whole sentence.
 	 *
-	 * @param array $step The step.
-	 * @param array $item item() of it.
-	 * @return string|null
+	 * @param array      $step  The step.
+	 * @param array      $item  item() of it.
+	 * @param float|null $until The end of the rest of the call; null where this is the first work of the call.
+	 * @return string|null|false
 	 */
-	public static function finding( array $step, array $item ) {
-		unset( $step, $item );
-		return null;
+	public static function finding( array $step, array $item, $until ) {
+		$unit = $item['unit'];
+		$journal = AB_MCP_Sync_Code_Swap::journal_of( $unit, $step );
+		if ( null === $journal ) {
+			/* translators: 1: step number, 2: kind of the unit, as the tools name it (plugin, theme), 3: its name. */
+			return sprintf( __( 'Step %1$d swapped the %2$s %3$s, but its journal does not read back as the swap wrote it (its form, its unit or its target), so whether the unit is at its target as the swap wrote it is not checked. Check the unit by hand in wp-admin, and make a new report (wp_site_diff) before the next takeover.', 'alphabridge-mcp' ), (int) $step['seq'], $unit['kind'], $unit['ref'] );
+		}
+		$read = AB_MCP_Sync_File_Manifest::unit( dirname( $journal['target'] ), $unit['ref'], 'live', null === $until ? AB_MCP_Sync_Code_Swap::until() : $until, null === $until, $unit['kind'] );
+		if ( true === $read['complete'] && is_string( $read['hash'] ) && hash_equals( $journal['new']['hash'], $read['hash'] ) ) {
+			return null;
+		}
+		if ( true === $read['stopped'] ) {
+			return false;
+		}
+		/* translators: 1: kind of the unit, as the tools name it (plugin, theme), 2: its name, 3: the folder or file of the unit (absolute path), 4: step number. */
+		return sprintf( __( 'The %1$s %2$s at %3$s could not be confirmed as the version step %4$d swapped in: it is missing, changed since the swap, or not readable whole within the time of one call. Check it in wp-admin, and make a new report (wp_site_diff) before the next takeover.', 'alphabridge-mcp' ), $unit['kind'], $unit['ref'], $journal['target'], (int) $step['seq'] );
 	}
 
 	/* ------------------------------------------------------------ stage */
@@ -373,6 +404,48 @@ final class AB_MCP_Sync_Code_Ops {
 	}
 
 	/**
+	 * Whether a swap has nothing to swap (G1 of GitHub Codex on #155): it
+	 * holds no journal, and its stage step is done as stage() ends it where
+	 * this site has the unit as the staging site has it: no journal, every
+	 * field read, its result same, of this very unit. Anything else is not
+	 * that: the swap goes its way, which refuses a stage step that does not
+	 * read (journal_unknown()).
+	 *
+	 * @param int   $run_id The run (runs.run_id).
+	 * @param array $step   The swap step.
+	 * @param array $unit   Its unit (item()).
+	 * @return bool
+	 */
+	private static function same( $run_id, array $step, array $unit ) {
+		$stage = null === $unit['stage_seq'] || null !== ( $step['parts'] ?? null ) ? null : AB_MCP_Sync_Run::step( $run_id, $unit['stage_seq'] );
+		return is_array( $stage ) && 'done' === $stage['state'] && ( ! isset( $stage['unread'] ) || array() === $stage['unread'] ) && null === $stage['parts'] && is_array( $stage['result'] )
+			&& true === ( $stage['result']['same'] ?? null ) && array( 'kind' => $unit['kind'], 'ref' => $unit['ref'] ) === ( $stage['result']['staged'] ?? null );
+	}
+
+	/**
+	 * Whether the check of a run (AB_MCP_Sync_Engine::run_verify()) takes a
+	 * step for an object written: every write step of a run of the contents,
+	 * and one whose unit does not read (written() names that); of the code
+	 * neither a stage done, which changed nothing of the site, nor a swap
+	 * skipped as the same (same(); G1 of GitHub Codex on #155, Fable check
+	 * 2, C4).
+	 *
+	 * @param array $run  The run.
+	 * @param array $step A step of it.
+	 * @return bool
+	 */
+	public static function counts( array $run, array $step ) {
+		$item = 'write' === $step['op'] && is_array( $run['plan'] ) ? self::item( $run['plan'], $step['seq'] ) : null;
+		if ( ! is_array( $item ) ) {
+			return 'write' === $step['op'];
+		}
+		if ( 'stage' === $item['unit']['op'] ) {
+			return 'done' !== $step['state'];
+		}
+		return ! ( 'skipped' === $step['state'] && is_array( $step['result'] ) && true === ( $step['result']['same'] ?? null ) );
+	}
+
+	/**
 	 * The answer of AB_MCP_Sync_Code_Stage::complete() as this step takes it:
 	 * its state one of the three, how many PHP files are checked of how
 	 * many, its notes, and its refusal (a code and a message, a path and a
@@ -405,7 +478,7 @@ final class AB_MCP_Sync_Code_Ops {
 	 *
 	 * @param int    $run_id  Run.
 	 * @param int    $seq     Step.
-	 * @param string $state   done or failed.
+	 * @param string $state   done, failed or skipped.
 	 * @param array  $result  Its result.
 	 * @param string $message What the answer says.
 	 * @return array|WP_Error next.

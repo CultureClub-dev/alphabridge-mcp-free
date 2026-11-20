@@ -326,8 +326,10 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     `not_staged()` (`class-sync-code-ops.php`) beendet den Schritt mit `failed` und hängt «The run goes on
     with the next step (action=next).» an. Ein neuer Versuch für diese Einheit geht auch hier nur über einen neuen
     Lauf. Folgeposten für Teil 2: `run_verify()` hängt beim Schliessen eines Laufs «The way back for its pairs is
-    wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2823`), auch bei einem Code-Lauf, von
-    dem kein Schritt etwas geschrieben hat; für Code-Läufe trennen. Nach dem Code gelesen, ohne eigenen Test.
+    wp_site_revert (action=plan with this run_id).» an (`class-sync-engine.php:2812`), auch bei einem Code-Lauf, von
+    dem kein Schritt etwas geschrieben hat. Seit Teil H (G3 von GitHub Codex auf #155) hat ein Code-Lauf einen
+    eigenen Schlusssatz (`closing()`, ohne Stichprobe); der angehängte Satz zum Rückweg bleibt für beide Arten.
+    Nach dem Code gelesen, ohne eigenen Test.
     **Trifft Normalfall:** nein.
   - B (kein Normalfall, keine Kernzusage): `read_entry()` gibt auch für einen formgerechten Eintrag eines anderen
     Bereichs null (`sidecar()`, Zustand `other`: der Eintrag nennt selbst einen anderen Bereich als den, in dem er
@@ -707,8 +709,8 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   nicht leeren; die Kommandozeile von PHP hat einen eigenen. Der Handweg nennt darum das Leeren oder den Neustart von PHP
   beim Hoster als Satz, ohne Befehl. Bis dahin kann bei `opcache.validate_timestamps=0` der Code laufen, den PHP vor dem
   Zurücklegen gelesen hat. Nach einem harten Abbruch nach den Umbenennungen (P3, F58, G-5-17) lief kein
-  `invalidate()`: Bis Weg (b), der OPcache je bewegter PHP-Datei leert, oder bis zum Satz zu OPcache der Anleitung kann
-  PHP Code der alten Fassung aus OPcache ausführen.
+  `invalidate()`: Bis Weg (b), der OPcache je PHP-Datei am Ziel leert (G-5-26), oder bis zum Satz zu OPcache der
+  Anleitung kann PHP Code der alten Fassung aus OPcache ausführen.
 - **Trifft Normalfall:** nein. Im Normalfall braucht es den Handweg nicht.
 
 ### G-5-13 Z24: Eine Aktivierung nach der letzten Prüfung sieht der Tausch nicht
@@ -781,6 +783,12 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   - Nach einer gescheiterten Umbenennung sagt die Antwort nur, dass sie scheiterte (Option B), nicht, wo die neue
     Fassung liegt; das Ergebnis des Schritts nennt den Platz, wo er gefüllt blieb (auch wo die Rückkehr der neuen
     Fassung scheitert und das Ziel leer ist).
+  - Der Rückweg-Schritt entscheidet den Speicher vor dem Journal `begun`, auch bei leerem Ziel (R12, wie
+    `read_deadline()`; Befund 4636576533); ohne Speicher lehnt er mit dessen Ablehnung ab, nichts wird bewegt, und der
+    Schritt bleibt `planned`. Die Zeit des Entscheids geht vom Rest des Aufrufs ab; eine zusätzliche Fristprüfung vor
+    `begun` gibt es nicht (wie beim belegten Ziel). Läuft die Zeit danach ab, endet der Schritt `unclear`: bei
+    belegtem Ziel kann zuerst `at_target()` scheitern (Satz von `code:close_target`), bei leerem Ziel bzw. beim
+    Sicherungsnachweis gilt der Satz von `code:close_backup`.
   - Den Platz der neuen Fassung nimmt der Rückweg-Schritt vor dem Journal `begun` (wo das Ziel nicht leer ist);
     verweigert ihn der Speicher, bleibt der Schritt `planned`. Bewegt der Schritt danach nichts (die alte Fassung ist
     schon am Ziel, oder ein Nachweis scheitert), bleibt die Gruppe `back-<lauf>-<schritt>` leer stehen, so lange wie
@@ -910,15 +918,18 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
     Standard-Theme; der Tausch hält das nicht auf. Der Rückweg stellt den Wechsel nicht zurück (das Journal hält für
     ein Theme kein `active`, G-5-15); seine Antwort nennt ein Theme, das der Aufruf als nicht laufend liest, mit dem
     Weg in wp-admin, ohne einen Wechsel zu behaupten.
-  - **Plugin, kein Vergleich am Ende:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach, meldet der
-    Tausch es nicht; er vergleicht am Ende nichts. Die Deaktivierungshaken des Plugins laufen dabei nicht. Der nächste
+  - **Plugin, kein Aktivierungsvergleich am Ende:** Deaktiviert WordPress ein Plugin bei offenem Tausch oder danach,
+    meldet der Tausch es nicht; er vergleicht am Ende keine Aktivierung. Die Prüfung des Laufs liest seit Teil H (G3
+    von GitHub Codex auf #155) jede getauschte Einheit ganz und vergleicht ihren Hash mit der neuen Fassung des
+    Journals (`AB_MCP_Sync_Code_Ops::finding()`); ob sie aktiv ist, prüft sie nicht. Die Deaktivierungshaken des
+    Plugins laufen dabei nicht. Der nächste
     Bericht zeigt die Aktivierung als «live geändert». Eingeschaltet wird von Hand (wp-admin, `wp_activate_plugin`)
     oder, wo der Tausch zurückgeht, über den Rückweg mit `accept`. Die Grenze «Rennen nach dem Vergleich» aus E6
     entfällt mit dem Vergleich.
 - **Trifft Normalfall:** nein. Im Normalfall liegen beide Umbenennungen im selben Aufruf, ohne Aufruf von wp-admin
   dazwischen (Theme), und zwischen den zwei Umbenennungen öffnet niemand «Plugins» (Plugin).
 
-### G-5-19 Plugin bei offenem Tausch oder danach deaktiviert: kein Vergleich am Ende — in G-5-18
+### G-5-19 Plugin bei offenem Tausch oder danach deaktiviert: kein Aktivierungsvergleich am Ende — in G-5-18
 
 - **Grund:** Mit G-5-18 zusammengelegt (Qualitätsdurchsicht vor Teil H, `belege/z5r-q-liste.md` Nr. 20): Fundstelle,
   Quelle, Fall und Normalfall des Plugins stehen dort je unter «Plugin». Die Nummer bleibt, ohne Umnummerierung.
@@ -1217,6 +1228,52 @@ die dauerhafte Angabe), Quelle, «trifft Normalfall» und Begründung. Wo die Ei
   Zusage. Die Vorarbeit dazu liegt in `belege/sperre-posten-vorarbeit-a1-fassung2.md`.
 - **Trifft Normalfall:** nein. Es braucht einen Aufruf, der mit allem vor dem Tausch länger als 600 s dauert; das
   Budget eines Aufrufs liegt weit darunter (`until()`).
+
+### G-5-25 Prüfung des Laufs: eine Einheit, die als erste Arbeit eines Aufrufs nicht ganz gelesen wird, ist ein Befund
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Ops::finding()` (`includes/sync/class-sync-code-ops.php:238`, Lesung `:245`,
+  `stopped` `:249`); `AB_MCP_Sync_Engine::run_verify()` (`includes/sync/class-sync-engine.php:2616`, Schleife `:2660`)
+  und `written()` (`:2911`); die Frist der ersten Arbeit `AB_MCP_Sync_Code_Swap::until()` (`class-sync-code-swap.php:1134`).
+  Zeilen am Stand G3b-1 (`acc5b28`).
+- **Quelle:** G3 von GitHub Codex auf #155 (Kommentar 4621397353); Auflage c der Lead vom 18./19.11.2026 (23:26):
+  «Eine Einheit, die der Tausch in einem Aufruf ganz lesen konnte, darf in der Schlussprüfung nicht wegen der Frist
+  zum Befund werden.» Prüfung durch Astra auf `478b2ca` (`belege/codex-pr155-g3-wip-antwort.txt`, F2 und F4).
+- **Was:** Die Prüfung des Laufs liest jede getauschte Einheit ganz. Ist die Einheit nicht die erste Arbeit des
+  Aufrufs, hat die Lesung den Rest des Aufrufs (`$started + work`); endet er in der Lesung, bleibt der Cursor auf ihr,
+  ohne Befund und ohne Zählung, und der nächste Aufruf liest sie als erste Arbeit. Als erste Arbeit hat sie die Zeit
+  eines ganzen Aufrufs ab dem Beginn der Lesung (`until()`, `time_for_call()`, wie der Tausch); wird sie darin nicht
+  ganz gelesen (`too_large`), ist das ein Befund («could not be confirmed … not readable whole within the time of one
+  call»), und die folgenden Einheiten werden weiter geprüft. Die Schranke ist dieselbe wie im Tausch, aber nicht
+  enger als er: der Tausch las mit `min( until, jetzt + UNIT_BUDGET )` nach seinen Umbenennungen; eine Einheit, die er
+  so ganz lesen konnte, kann die erste Arbeit eines Aufrufs bei gleichen Bytes und gleicher Last ebenso lesen. Ein
+  langsameres Dateisystem zum Zeitpunkt der Prüfung kann sie trotzdem zum Befund machen; der Lauf schliesst dann mit
+  Befunden, die Einheit selbst bleibt, wie sie ist (nichts wird geändert).
+- **Trifft Normalfall:** nein. Im Normalfall liest ein Aufruf eine Einheit in Bruchteilen seines Budgets.
+
+### G-5-26 Einträge entfernter PHP-Dateien bleiben in OPcache bis zum Reset
+
+- **Fundstelle:** `AB_MCP_Sync_Code_Swap::invalidated()` (`includes/sync/class-sync-code-swap.php:1681`), gerufen aus
+  `after_renames()` (`:1607`) und `restored()` (`:2289`); `moved_back()` (`:2369`, `moved` false `:2372`, leeres Ziel
+  `:2380`). Zeilen am Stand der Behebung (`721f2d1`).
+- **Quelle:** Befund 4623266599 von GitHub Codex auf #155; Entscheid von Thomas vom 19.11.2026 («Option A»); Bericht
+  der Prüfstelle 5, Q4.
+- **Was:** Nach dem Tausch und nach seinem Rückweg leert der Schritt OPcache für jede PHP-Datei, die dann am Ziel
+  liegt, wie der Kern nach einem Update (`wp_opcache_invalidate_directory()`). Eine PHP-Datei, die nur die weggelegte
+  Fassung hat, bekommt keinen Aufruf. Bei `opcache.validate_timestamps=0` (und `opcache.revalidate_path=0`) bleibt ihr
+  Eintrag bis zum Reset von OPcache oder zum Neustart von PHP gültig. Er läuft nur, wenn etwas genau diesen Pfad
+  einbindet: `include` oder `require` ohne Existenzprüfung aus fremdem oder neuem Code; mit Existenzprüfung nur bei
+  `opcache.enable_file_override=1`. Vor PHP 8.1.25 und 8.2.12 liesse sich ein solcher Pfad nach dem Umbenennen gar
+  nicht leeren (`opcache_invalidate()` gibt für eine fehlende Datei false). Zwei Randfälle des Rückwegs:
+    - Leeres Ziel (nach einem Abbruch zwischen den Umbenennungen, oder die neue Fassung wurde von Hand entfernt): Der
+      Rückweg leert für die alte Fassung am Ziel. Lag die neue Fassung vorher am Ziel, bleiben die Einträge ihrer
+      Dateien, die die alte nicht hat, ohne Aufruf.
+    - Schon zurückgelegt (die alte Fassung liegt bewiesen am Ziel, etwa nach dem Handweg): Der Schritt bewegt nichts,
+      ruft OPcache nicht und endet `done` mit `opcache` 0. Das Leeren nach dem Handweg ist der Satz der Anleitung
+      (G-5-12).
+- **Trifft Normalfall:** nein, nach Einschätzung (nicht gemessen: wie verbreitet `opcache.validate_timestamps=0` ist
+  und wie oft ein Update PHP-Dateien entfernt). Die Einträge bleiben zwar, wo eine Fassung PHP-Dateien hat, die der
+  anderen fehlen; alter Code läuft aber nur, wenn die Zeitprüfung aus ist und dazu etwas genau den entfernten Pfad
+  einbindet. Der Weg ist der Reset von OPcache oder der Neustart von PHP beim Hoster.
 
 ## Übernommen aus Zweig 2 (`bericht-zweig-2.md`, Abschnitt Grenzkandidaten; G-M9 aus «Behebung 2»)
 

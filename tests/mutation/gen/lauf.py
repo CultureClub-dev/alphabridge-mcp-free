@@ -391,7 +391,7 @@ e('engine-sample-expected', 'sample_finding(): the title of the written object h
 e('engine-sample-200', 'sample_finding(): 200 (decision 33)', EN,
   "\t\tif ( 200 !== (int) $status ) {", "\t\tif ( false ) {", 'unit', 'testTheSampleOfAPublishedObjectNeedsTheTitleBesides200')
 e('engine-verify-budget', 'run_verify(): the hashes over calls where the budget runs out (B4)', EN,
-  "\t\t\t\tif ( $worked && $left() <= 0 ) {\n\t\t\t\t\t$result['cursor'] = $i;", "\t\t\t\tif ( false ) {\n\t\t\t\t\t$result['cursor'] = $i;", 'it', 'testTheCheckOfTheRunNeedsTheTitleBesides200AndGoesOnOverCalls')
+  "\t\t\t\t$seen = $worked && $left() <= 0 ? null : self::written(", "\t\t\t\t$seen = self::written(", 'it', 'testTheCheckOfTheRunNeedsTheTitleBesides200AndGoesOnOverCalls')
 e('revert-wrote', 'plan(): only a step with a journal and a backup wrote anything (B9)', RV,
   "\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true ) && is_array( $journal['backup'] ) && ( 'create' !== $journal['object']['op'] || null !== $journal['object']['live_ref'] );",
   "\t\t$wrote = null !== $journal && ! in_array( $step['state'], array( 'planned', 'skipped' ), true );", 'it', 'testAStepThatFailedBeforeItsBackupIsNoRestOnTheWayBack')
