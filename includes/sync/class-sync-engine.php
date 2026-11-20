@@ -1075,6 +1075,20 @@ final class AB_MCP_Sync_Engine {
 	}
 
 	/**
+	 * run_verify(): counts() of the entrance, else each write step (D5 of the seam).
+	 *
+	 * @param array $run The run.
+	 * @param array $one A step of it.
+	 * @return bool
+	 */
+	private static function code_counts( array $run, array $one ) {
+		if ( null !== self::$code ) {
+			return call_user_func( array( self::$code, 'counts' ), $run, $one );
+		}
+		return 'write' === $one['op'];
+	}
+
+	/**
 	 * Phase 5: one write boundary (decision 17), under the lock of the call
 	 * (next()); the takeover lock of the object given back in every way.
 	 *
@@ -2718,7 +2732,7 @@ final class AB_MCP_Sync_Engine {
 		$writes = array();
 		$last   = array();
 		foreach ( $steps as $one ) {
-			if ( null !== self::$code ? call_user_func( array( self::$code, 'counts' ), $run, $one ) : 'write' === $one['op'] ) {
+			if ( self::code_counts( $run, $one ) ) {
 				$writes[] = $one;
 				if ( 'done' === $one['state'] && is_array( $one['result'] ) && isset( $one['result']['live_ref'] ) ) {
 					// The last step that wrote an object holds its target: the

@@ -342,7 +342,7 @@ e('h-g1-counts-skipped', 'counts(): a swap skipped as the same is no object writ
 e('h-g1-counts-stage', 'counts(): a stage done changed nothing of the site and is no object written (Fable check 2, C4; G1 of GitHub Codex on #155)', CO,
   "\t\t\treturn 'done' !== $step['state'];", "\t\t\treturn true;", 'ops', COUNTS)
 e('h-g1-engine-counts', 'run_verify(): the check goes over the steps counts() takes for objects written, never every write step of a run of the code (G1 of GitHub Codex on #155)', EN,
-  "\t\t\tif ( null !== self::$code ? call_user_func( array( self::$code, 'counts' ), $run, $one ) : 'write' === $one['op'] ) {", "\t\t\tif ( 'write' === $one['op'] ) {", 'coderun', SAME)
+  "\t\t\tif ( self::code_counts( $run, $one ) ) {", "\t\t\tif ( 'write' === $one['op'] ) {", 'coderun', SAME)
 
 # Part H: G2 of GitHub Codex on #155 (a group of the backups for each swap)
 e('h-g2-group', 'plan_of(): each swap puts the old version into a group of the backups of its own, bound to the run, so a plugin and a theme of one name never meet at one place (G2 of GitHub Codex on #155)', CS,
